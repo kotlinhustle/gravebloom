@@ -3,19 +3,17 @@ extends Node2D
 const PlayerScene := preload("res://scenes/player.tscn")
 const EnemyScene := preload("res://scenes/enemy.tscn")
 const XPShardScene := preload("res://scenes/xp_shard.tscn")
+const LivingBladeScene := preload("res://scenes/living_blade.tscn")
 
 var player: Player
+var living_blade: Node2D
 var enemies: Array[Enemy] = []
 var shards: Array[XPShard] = []
 var elapsed := 0.0
 var spawn_timer := 0.0
-var attack_timer := 0.0
 var level := 1
 var xp := 0
 var xp_to_next := 8
-var attack_damage := 1
-var attack_cooldown := 0.62
-var attack_range := 145.0
 var shard_pull_range := 95.0
 var paused_for_upgrade := false
 
@@ -41,13 +39,10 @@ func _process(delta: float) -> void:
 		return
 	elapsed += delta
 	spawn_timer -= delta
-	attack_timer -= delta
 	if spawn_timer <= 0.0:
 		_spawn_enemy_wave()
 		spawn_timer = max(0.25, 1.25 - elapsed * 0.01)
-	if attack_timer <= 0.0:
-		_auto_attack()
-		attack_timer = attack_cooldown
+	living_blade.tick(delta, enemies)
 	_update_shards(delta)
 	_check_enemy_contact(delta)
 	_update_hud()
@@ -70,6 +65,9 @@ func _spawn_player() -> void:
 	player = PlayerScene.instantiate()
 	player.position = Vector2.ZERO
 	world.add_child(player)
+	living_blade = LivingBladeScene.instantiate()
+	living_blade.setup(player, fx_layer)
+	world.add_child(living_blade)
 
 func _build_ui() -> void:
 	add_child(ui_layer)
@@ -98,39 +96,6 @@ func _spawn_enemy_wave() -> void:
 		enemy.died.connect(_on_enemy_died)
 		enemies.append(enemy)
 		world.add_child(enemy)
-
-func _auto_attack() -> void:
-	var target := _nearest_enemy()
-	if target == null:
-		return
-	_show_slash(target.global_position)
-	target.take_damage(attack_damage)
-
-func _nearest_enemy() -> Enemy:
-	var best: Enemy = null
-	var best_distance := attack_range
-	for enemy in enemies:
-		if not is_instance_valid(enemy):
-			continue
-		var distance := player.global_position.distance_to(enemy.global_position)
-		if distance < best_distance:
-			best_distance = distance
-			best = enemy
-	return best
-
-func _show_slash(target_position: Vector2) -> void:
-	var slash := Line2D.new()
-	slash.width = 5.0
-	slash.default_color = Color(0.72, 1.0, 0.83, 0.95)
-	slash.points = PackedVector2Array([
-		player.global_position,
-		player.global_position.lerp(target_position, 0.45) + Vector2(0, -24),
-		target_position
-	])
-	fx_layer.add_child(slash)
-	var tween := create_tween()
-	tween.tween_property(slash, "modulate:a", 0.0, 0.16)
-	tween.tween_callback(slash.queue_free)
 
 func _on_enemy_died(enemy_position: Vector2) -> void:
 	var shard: XPShard = XPShardScene.instantiate()
@@ -201,22 +166,26 @@ func _add_upgrade_button(text: String, method_name: StringName) -> void:
 	var button := Button.new()
 	button.text = text
 	button.custom_minimum_size = Vector2(280, 48)
-	button.pressed.connect(func() -> void:
-		call(method_name)
-		upgrade_panel.visible = false
-		paused_for_upgrade = false
-		get_tree().paused = false
-	)
+	button.set_meta("upgrade_method", String(method_name))
+	button.pressed.connect(_on_upgrade_button_pressed.bind(button))
 	upgrade_list.add_child(button)
 
+func _on_upgrade_button_pressed(button: Button) -> void:
+	var method_name := String(button.get_meta("upgrade_method", ""))
+	if method_name != "":
+		call(method_name)
+	upgrade_panel.visible = false
+	paused_for_upgrade = false
+	get_tree().paused = false
+
 func _upgrade_damage() -> void:
-	attack_damage += 1
+	living_blade.increase_damage()
 
 func _upgrade_cooldown() -> void:
-	attack_cooldown = max(0.22, attack_cooldown - 0.08)
+	living_blade.quicken()
 
 func _upgrade_range() -> void:
-	attack_range += 35.0
+	living_blade.widen_reach()
 
 func _show_game_over() -> void:
 	get_tree().paused = true

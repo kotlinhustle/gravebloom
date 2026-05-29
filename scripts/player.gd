@@ -8,17 +8,51 @@ var is_dead := false
 var touch_start := Vector2.ZERO
 var touch_direction := Vector2.ZERO
 var touch_active := false
+var key_left := false
+var key_right := false
+var key_up := false
+var key_down := false
 
 func _physics_process(_delta: float) -> void:
 	if is_dead:
 		velocity = Vector2.ZERO
 		return
-	var keyboard_direction := Input.get_vector("move_left", "move_right", "move_up", "move_down")
+	var keyboard_direction := _get_keyboard_direction()
 	var direction := touch_direction
 	if keyboard_direction.length() > 0.0:
 		direction = keyboard_direction
 	velocity = direction * speed
 	move_and_slide()
+
+func _get_keyboard_direction() -> Vector2:
+	var direction := Vector2.ZERO
+	if key_left:
+		direction.x -= 1.0
+	if key_right:
+		direction.x += 1.0
+	if key_up:
+		direction.y -= 1.0
+	if key_down:
+		direction.y += 1.0
+	if direction.length() > 1.0:
+		return direction.normalized()
+	if direction.length() > 0.0:
+		return direction
+	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
+		direction.x -= 1.0
+	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
+		direction.x += 1.0
+	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
+		direction.y -= 1.0
+	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
+		direction.y += 1.0
+	if direction.length() > 1.0:
+		direction = direction.normalized()
+	return direction
+
+func _input(event: InputEvent) -> void:
+	if event is InputEventKey:
+		_update_key_state(event)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
@@ -40,6 +74,19 @@ func _update_touch_direction(pointer_position: Vector2) -> void:
 		touch_direction = drag_vector.normalized()
 	else:
 		touch_direction = Vector2.ZERO
+
+func _update_key_state(event: InputEventKey) -> void:
+	var pressed_now := event.pressed and not event.echo
+	var key := event.keycode
+	var physical_key := event.physical_keycode
+	if key == KEY_A or key == KEY_LEFT or physical_key == KEY_A or physical_key == KEY_LEFT:
+		key_left = pressed_now
+	elif key == KEY_D or key == KEY_RIGHT or physical_key == KEY_D or physical_key == KEY_RIGHT:
+		key_right = pressed_now
+	elif key == KEY_W or key == KEY_UP or physical_key == KEY_W or physical_key == KEY_UP:
+		key_up = pressed_now
+	elif key == KEY_S or key == KEY_DOWN or physical_key == KEY_S or physical_key == KEY_DOWN:
+		key_down = pressed_now
 
 func take_damage(amount: float) -> void:
 	if is_dead:
