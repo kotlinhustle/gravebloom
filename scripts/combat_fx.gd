@@ -21,12 +21,12 @@ static func burst(parent: Node, position: Vector2, color: Color, count: int = 10
 	for i in range(count):
 		var particle := Polygon2D.new()
 		particle.color = color
-		particle.polygon = PackedVector2Array([
-			Vector2(0, -3),
-			Vector2(3, 0),
-			Vector2(0, 3),
-			Vector2(-3, 0)
-		])
+		var particle_shape := PackedVector2Array()
+		particle_shape.append(Vector2(0, -3))
+		particle_shape.append(Vector2(3, 0))
+		particle_shape.append(Vector2(0, 3))
+		particle_shape.append(Vector2(-3, 0))
+		particle.polygon = particle_shape
 		particle.global_position = position
 		particle.rotation = randf() * TAU
 		parent.add_child(particle)
