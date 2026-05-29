@@ -1,5 +1,6 @@
 .godot/
 .vscode/
+.gh-pages-worktree/
 *.tmp
 *.import
 *.translation
