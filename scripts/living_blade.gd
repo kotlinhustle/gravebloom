@@ -7,6 +7,7 @@ var damage := 1
 var cooldown := 0.62
 var attack_range := 145.0
 var timer := 0.0
+var visual_angle := 0.0
 
 func setup(player: Node2D, effects_parent: Node2D) -> void:
 	owner_player = player
@@ -16,7 +17,9 @@ func _process(delta: float) -> void:
 	if owner_player == null or owner_player.get("is_dead"):
 		return
 	global_position = owner_player.global_position
-	rotation += delta * 5.5
+	visual_angle += delta * 3.2
+	position = Vector2.RIGHT.rotated(visual_angle) * 30.0
+	rotation = visual_angle + PI / 2.0
 
 func tick(delta: float, enemies: Array) -> void:
 	if owner_player == null or owner_player.get("is_dead"):
@@ -27,8 +30,8 @@ func tick(delta: float, enemies: Array) -> void:
 	var target := _nearest_enemy(enemies)
 	if target == null:
 		return
-	_show_slash(target.global_position)
-	target.take_damage(damage)
+	_show_dash_slash(target.global_position)
+	target.take_damage(damage, owner_player.global_position, 210.0)
 	timer = cooldown
 
 func increase_damage() -> void:
@@ -52,18 +55,36 @@ func _nearest_enemy(enemies: Array) -> Node2D:
 			best = enemy
 	return best
 
-func _show_slash(target_position: Vector2) -> void:
+func _show_dash_slash(target_position: Vector2) -> void:
 	if fx_layer == null:
 		return
+	var ghost := Polygon2D.new()
+	ghost.color = Color(0.72, 1.0, 0.84, 0.9)
+	ghost.polygon = PackedVector2Array([
+		Vector2(-4, -26),
+		Vector2(4, -26),
+		Vector2(5, 14),
+		Vector2(0, 28),
+		Vector2(-5, 14)
+	])
+	ghost.global_position = owner_player.global_position
+	ghost.rotation = owner_player.global_position.direction_to(target_position).angle() + PI / 2.0
+	fx_layer.add_child(ghost)
+	var ghost_tween := create_tween()
+	ghost_tween.set_parallel(true)
+	ghost_tween.tween_property(ghost, "global_position", target_position, 0.11)
+	ghost_tween.tween_property(ghost, "modulate:a", 0.0, 0.18)
+	ghost_tween.chain().tween_callback(ghost.queue_free)
+
 	var slash := Line2D.new()
-	slash.width = 5.0
+	slash.width = 7.0
 	slash.default_color = Color(0.72, 1.0, 0.83, 0.95)
 	slash.points = PackedVector2Array([
 		owner_player.global_position,
-		owner_player.global_position.lerp(target_position, 0.45) + Vector2(0, -24),
+		owner_player.global_position.lerp(target_position, 0.45) + Vector2.RIGHT.rotated(randf() * TAU) * 26.0,
 		target_position
 	])
 	fx_layer.add_child(slash)
 	var tween := create_tween()
-	tween.tween_property(slash, "modulate:a", 0.0, 0.16)
+	tween.tween_property(slash, "modulate:a", 0.0, 0.2)
 	tween.tween_callback(slash.queue_free)

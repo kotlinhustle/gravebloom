@@ -55,6 +55,7 @@ scenes/
   xp_shard.tscn
   living_blade.tscn
 scripts/
+  combat_fx.gd
   main.gd
   player.gd
   enemy.gd
@@ -85,7 +86,9 @@ scripts/
 - `CharacterBody2D`.
 - Chases `target`.
 - Rotates toward the player.
+- Flashes, squashes, and receives knockback on hit.
 - Emits `died(enemy_position)` on death.
+- Emits `damaged(enemy_position, amount)` for hit feedback.
 
 `LivingBlade`:
 
@@ -93,7 +96,13 @@ scripts/
 - Follows the player.
 - Spins visually around the player.
 - Automatically attacks nearest enemy inside range.
+- Dashes a ghost blade and draws a bright slash trail on attack.
 - Supports upgrades for damage, cooldown, and range.
+
+`CombatFx`:
+
+- Shared static helper for damage numbers, death bursts, and level-up rings.
+- Keep FX simple and procedural until the game loop settles.
 
 `XPShard`:
 
@@ -106,6 +115,7 @@ scripts/
 - Player controls only movement and positioning.
 - Mouse drag means: hold left mouse button, drag away from the starting point, release to stop.
 - The green object around the hero is the Living Blade.
+- Hits now show damage numbers, enemy flash/squash, knockback, and death bursts.
 
 ## Near-Term Roadmap
 

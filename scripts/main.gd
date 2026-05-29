@@ -4,6 +4,7 @@ const PlayerScene := preload("res://scenes/player.tscn")
 const EnemyScene := preload("res://scenes/enemy.tscn")
 const XPShardScene := preload("res://scenes/xp_shard.tscn")
 const LivingBladeScene := preload("res://scenes/living_blade.tscn")
+const CombatFxScript := preload("res://scripts/combat_fx.gd")
 
 var player: Player
 var living_blade: Node2D
@@ -41,7 +42,7 @@ func _process(delta: float) -> void:
 	spawn_timer -= delta
 	if spawn_timer <= 0.0:
 		_spawn_enemy_wave()
-		spawn_timer = max(0.25, 1.25 - elapsed * 0.01)
+		spawn_timer = max(0.18, 1.0 - elapsed * 0.008)
 	living_blade.tick(delta, enemies)
 	_update_shards(delta)
 	_check_enemy_contact(delta)
@@ -85,19 +86,30 @@ func _build_ui() -> void:
 	_update_hud()
 
 func _spawn_enemy_wave() -> void:
-	var count := 1 + int(elapsed / 25.0)
+	var count := 2 + int(elapsed / 20.0)
 	for i in range(count):
 		var enemy: Enemy = EnemyScene.instantiate()
+		var is_brute: bool = randf() < min(0.28, 0.04 + elapsed / 360.0)
 		enemy.max_health = 2 + int(elapsed / 45.0)
+		if is_brute:
+			enemy.max_health += 4
 		enemy.health = enemy.max_health
 		enemy.speed = randf_range(56.0, 86.0) + elapsed * 0.15
+		if is_brute:
+			enemy.speed *= 0.68
+			enemy.scale = Vector2.ONE * 1.45
 		enemy.position = player.position + Vector2.RIGHT.rotated(randf() * TAU) * randf_range(360.0, 520.0)
 		enemy.target = player
+		enemy.damaged.connect(_on_enemy_damaged)
 		enemy.died.connect(_on_enemy_died)
 		enemies.append(enemy)
 		world.add_child(enemy)
 
+func _on_enemy_damaged(enemy_position: Vector2, amount: int) -> void:
+	CombatFxScript.damage_number(fx_layer, enemy_position, amount)
+
 func _on_enemy_died(enemy_position: Vector2) -> void:
+	CombatFxScript.burst(fx_layer, enemy_position, Color(0.55, 1.0, 0.72, 0.9), 12)
 	var shard: XPShard = XPShardScene.instantiate()
 	shard.position = enemy_position
 	shards.append(shard)
@@ -145,6 +157,8 @@ func _level_up() -> void:
 	level += 1
 	xp -= xp_to_next
 	xp_to_next = int(xp_to_next * 1.35) + 4
+	CombatFxScript.ring(fx_layer, player.global_position, Color(0.7, 1.0, 0.84, 0.85), 170.0, 0.55)
+	CombatFxScript.burst(fx_layer, player.global_position, Color(0.78, 1.0, 0.9, 0.9), 24)
 	paused_for_upgrade = true
 	get_tree().paused = true
 	_show_upgrades()
