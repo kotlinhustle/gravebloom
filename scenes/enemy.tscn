@@ -1,0 +1,46 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/enemy.gd" id="1_enemy"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_enemy"]
+radius = 13.0
+
+[node name="Enemy" type="CharacterBody2D"]
+script = ExtResource("1_enemy")
+
+[node name="Shadow" type="Polygon2D" parent="."]
+z_index = -2
+color = Color(0.015, 0.012, 0.018, 0.65)
+polygon = PackedVector2Array(-18, 13, 0, 8, 18, 13, 11, 20, -11, 20)
+
+[node name="LegsLeft" type="Line2D" parent="."]
+z_index = -1
+points = PackedVector2Array(-9, -3, -22, -12, -10, 5, -25, 3, -8, 12, -20, 20)
+default_color = Color(0.13, 0.055, 0.105, 1)
+width = 4.0
+
+[node name="LegsRight" type="Line2D" parent="."]
+z_index = -1
+points = PackedVector2Array(9, -3, 22, -12, 10, 5, 25, 3, 8, 12, 20, 20)
+default_color = Color(0.13, 0.055, 0.105, 1)
+width = 4.0
+
+[node name="Body" type="Polygon2D" parent="."]
+color = Color(0.23, 0.08, 0.16, 1)
+polygon = PackedVector2Array(0, -22, 17, -9, 15, 14, 0, 24, -15, 14, -17, -9)
+
+[node name="Shell" type="Polygon2D" parent="."]
+color = Color(0.34, 0.13, 0.26, 1)
+polygon = PackedVector2Array(0, -15, 11, -6, 9, 9, 0, 15, -9, 9, -11, -6)
+
+[node name="Glow" type="Polygon2D" parent="."]
+color = Color(0.58, 0.98, 0.69, 0.55)
+polygon = PackedVector2Array(-6, -5, 0, -9, 6, -5, 6, 4, 0, 9, -6, 4)
+
+[node name="Eyes" type="Polygon2D" parent="."]
+z_index = 1
+color = Color(0.68, 1, 0.72, 0.95)
+polygon = PackedVector2Array(-8, -10, -3, -8, -8, -5, 3, -8, 8, -10, 8, -5)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_enemy")
