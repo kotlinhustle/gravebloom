@@ -14,7 +14,7 @@ Core fantasy:
 Core gameplay loop:
 
 ```text
-Move -> kite enemies -> auto-attack -> collect XP shards -> level up -> choose relic upgrades -> survive longer
+Start run -> move -> kite enemies -> auto-attack -> collect XP shards -> level up -> choose relic upgrades -> survive 3:00
 ```
 
 ## Tech
@@ -68,10 +68,12 @@ scripts/
 `Main`:
 
 - Builds a simple dark arena.
+- Manages run states: start, running, upgrade, game_over, victory.
 - Spawns the player.
 - Spawns enemy waves.
+- Spawns a miniboss near the end of the 3-minute run.
 - Owns enemy and XP shard lists.
-- Updates XP collection, level-ups, upgrade UI, HUD, and enemy contact damage.
+- Updates XP collection, level-ups, upgrade UI, HUD, XP bar, result screens, and enemy contact damage.
 
 `Player`:
 
@@ -87,6 +89,7 @@ scripts/
 - Chases `target`.
 - Rotates toward the player.
 - Flashes, squashes, and receives knockback on hit.
+- Supports normal, brute, and miniboss tuning from `Main`.
 - Emits `died(enemy_position)` on death.
 - Emits `damaged(enemy_position, amount)` for hit feedback.
 
@@ -116,11 +119,11 @@ scripts/
 - Mouse drag means: hold left mouse button, drag away from the starting point, release to stop.
 - The green object around the hero is the Living Blade; it now flies out to hunt enemies and returns.
 - Hits now show damage numbers, enemy flash/squash, knockback, and death bursts.
+- Runs now have a start screen, XP bar, 3:00 survival goal, miniboss event, victory screen, death screen, and restart button.
 
 ## Near-Term Roadmap
 
 - Add visible virtual joystick for TWA/mobile clarity.
-- Add a proper run objective: survive timer, death screen, and later a first boss/miniboss.
 - Split `Main` further into focused systems when complexity grows: spawner, upgrade manager, HUD, XP collector.
 - Add 2-3 more relic upgrades, including a first secondary weapon or spirit attack.
 - Improve visuals after the gameplay loop is clearer.

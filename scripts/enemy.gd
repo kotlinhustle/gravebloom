@@ -9,6 +9,8 @@ var speed := 70.0
 var max_health := 2
 var health := 2
 var is_dead := false
+var xp_value := 1
+var is_miniboss := false
 var knockback_velocity := Vector2.ZERO
 
 func _physics_process(delta: float) -> void:
