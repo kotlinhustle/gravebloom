@@ -93,10 +93,10 @@ scripts/
 `LivingBlade`:
 
 - Separate weapon scene and script.
-- Follows the player.
-- Spins visually around the player.
-- Automatically attacks nearest enemy inside range.
-- Dashes a ghost blade and draws a bright slash trail on attack.
+- Uses a hunting state machine: `orbit -> dash -> hit -> return -> cooldown`.
+- Orbits near the player while idle.
+- Automatically chooses the nearest enemy inside range.
+- Physically flies to the target, hits, leaves a trail, then returns to orbit.
 - Supports upgrades for damage, cooldown, and range.
 
 `CombatFx`:
@@ -114,7 +114,7 @@ scripts/
 - Attack is automatic; there is no manual shooting.
 - Player controls only movement and positioning.
 - Mouse drag means: hold left mouse button, drag away from the starting point, release to stop.
-- The green object around the hero is the Living Blade.
+- The green object around the hero is the Living Blade; it now flies out to hunt enemies and returns.
 - Hits now show damage numbers, enemy flash/squash, knockback, and death bursts.
 
 ## Near-Term Roadmap

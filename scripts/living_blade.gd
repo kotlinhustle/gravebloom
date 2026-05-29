@@ -4,10 +4,17 @@ extends Node2D
 var owner_player: Node2D
 var fx_layer: Node2D
 var damage := 1
-var cooldown := 0.62
-var attack_range := 145.0
+var cooldown := 0.72
+var attack_range := 230.0
+var dash_speed := 820.0
+var return_speed := 620.0
 var timer := 0.0
 var visual_angle := 0.0
+var target_enemy: Node2D
+var state := "orbit"
+var has_hit_target := false
+
+@onready var blade_sprite := $Blade
 
 func setup(player: Node2D, effects_parent: Node2D) -> void:
 	owner_player = player
@@ -16,13 +23,18 @@ func setup(player: Node2D, effects_parent: Node2D) -> void:
 func _process(delta: float) -> void:
 	if owner_player == null or owner_player.get("is_dead"):
 		return
-	global_position = owner_player.global_position
-	visual_angle += delta * 3.2
-	position = Vector2.RIGHT.rotated(visual_angle) * 30.0
-	rotation = visual_angle + PI / 2.0
+	match state:
+		"orbit":
+			_update_orbit(delta)
+		"dash":
+			_update_dash(delta)
+		"return":
+			_update_return(delta)
 
 func tick(delta: float, enemies: Array) -> void:
 	if owner_player == null or owner_player.get("is_dead"):
+		return
+	if state != "orbit":
 		return
 	timer -= delta
 	if timer > 0.0:
@@ -30,9 +42,9 @@ func tick(delta: float, enemies: Array) -> void:
 	var target := _nearest_enemy(enemies)
 	if target == null:
 		return
-	_show_dash_slash(target.global_position)
-	target.take_damage(damage, owner_player.global_position, 210.0)
-	timer = cooldown
+	target_enemy = target
+	has_hit_target = false
+	state = "dash"
 
 func increase_damage() -> void:
 	damage += 1
@@ -42,6 +54,50 @@ func quicken() -> void:
 
 func widen_reach() -> void:
 	attack_range += 35.0
+
+func _update_orbit(delta: float) -> void:
+	visual_angle += delta * 3.2
+	var orbit_offset := Vector2.RIGHT.rotated(visual_angle) * 34.0
+	global_position = owner_player.global_position + orbit_offset
+	rotation = visual_angle + PI / 2.0
+	blade_sprite.scale = blade_sprite.scale.move_toward(Vector2.ONE, delta * 8.0)
+
+func _update_dash(delta: float) -> void:
+	if not is_instance_valid(target_enemy):
+		_begin_return()
+		return
+	var target_position := target_enemy.global_position
+	_face_position(target_position)
+	_leave_trail()
+	global_position = global_position.move_toward(target_position, dash_speed * delta)
+	if global_position.distance_to(target_position) <= 18.0:
+		_hit_target()
+		_begin_return()
+
+func _update_return(delta: float) -> void:
+	var return_position := owner_player.global_position + Vector2.RIGHT.rotated(visual_angle) * 34.0
+	_face_position(return_position)
+	global_position = global_position.move_toward(return_position, return_speed * delta)
+	if global_position.distance_to(return_position) <= 8.0:
+		state = "orbit"
+		target_enemy = null
+		timer = cooldown
+
+func _hit_target() -> void:
+	if has_hit_target or not is_instance_valid(target_enemy):
+		return
+	has_hit_target = true
+	target_enemy.take_damage(damage, owner_player.global_position, 260.0)
+	_show_impact(target_enemy.global_position)
+	blade_sprite.scale = Vector2(1.45, 0.72)
+
+func _begin_return() -> void:
+	state = "return"
+
+func _face_position(target_position: Vector2) -> void:
+	var direction := global_position.direction_to(target_position)
+	if direction.length() > 0.0:
+		rotation = direction.angle() + PI / 2.0
 
 func _nearest_enemy(enemies: Array) -> Node2D:
 	var best: Node2D = null
@@ -55,36 +111,34 @@ func _nearest_enemy(enemies: Array) -> Node2D:
 			best = enemy
 	return best
 
-func _show_dash_slash(target_position: Vector2) -> void:
+func _leave_trail() -> void:
 	if fx_layer == null:
 		return
-	var ghost := Polygon2D.new()
-	ghost.color = Color(0.72, 1.0, 0.84, 0.9)
-	ghost.polygon = PackedVector2Array([
-		Vector2(-4, -26),
-		Vector2(4, -26),
-		Vector2(5, 14),
-		Vector2(0, 28),
-		Vector2(-5, 14)
-	])
-	ghost.global_position = owner_player.global_position
-	ghost.rotation = owner_player.global_position.direction_to(target_position).angle() + PI / 2.0
-	fx_layer.add_child(ghost)
-	var ghost_tween := create_tween()
-	ghost_tween.set_parallel(true)
-	ghost_tween.tween_property(ghost, "global_position", target_position, 0.11)
-	ghost_tween.tween_property(ghost, "modulate:a", 0.0, 0.18)
-	ghost_tween.chain().tween_callback(ghost.queue_free)
+	if randf() > 0.45:
+		return
+	var trail := Line2D.new()
+	trail.width = 3.0
+	trail.default_color = Color(0.72, 1.0, 0.84, 0.45)
+	var back := Vector2.UP.rotated(rotation) * 26.0
+	trail.points = PackedVector2Array([global_position - back, global_position])
+	fx_layer.add_child(trail)
+	var tween := create_tween()
+	tween.tween_property(trail, "modulate:a", 0.0, 0.16)
+	tween.tween_callback(trail.queue_free)
 
+func _show_impact(target_position: Vector2) -> void:
+	if fx_layer == null:
+		return
 	var slash := Line2D.new()
-	slash.width = 7.0
+	slash.width = 8.0
 	slash.default_color = Color(0.72, 1.0, 0.83, 0.95)
+	var slash_direction := Vector2.RIGHT.rotated(rotation)
 	slash.points = PackedVector2Array([
-		owner_player.global_position,
-		owner_player.global_position.lerp(target_position, 0.45) + Vector2.RIGHT.rotated(randf() * TAU) * 26.0,
-		target_position
+		target_position - slash_direction * 34.0,
+		target_position,
+		target_position + slash_direction * 34.0
 	])
 	fx_layer.add_child(slash)
 	var tween := create_tween()
-	tween.tween_property(slash, "modulate:a", 0.0, 0.2)
+	tween.tween_property(slash, "modulate:a", 0.0, 0.18)
 	tween.tween_callback(slash.queue_free)
