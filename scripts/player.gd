@@ -8,6 +8,8 @@ var is_dead := false
 var touch_start := Vector2.ZERO
 var touch_direction := Vector2.ZERO
 var touch_active := false
+var mouse_drag_active := false
+var mouse_drag_start := Vector2.ZERO
 var key_left := false
 var key_right := false
 var key_up := false
@@ -17,6 +19,7 @@ func _physics_process(_delta: float) -> void:
 	if is_dead:
 		velocity = Vector2.ZERO
 		return
+	_update_mouse_drag_direction()
 	var keyboard_direction := _get_keyboard_direction()
 	var direction := touch_direction
 	if keyboard_direction.length() > 0.0:
@@ -62,11 +65,20 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventScreenDrag and touch_active:
 		_update_touch_direction(event.position)
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		touch_active = event.pressed
+		mouse_drag_active = event.pressed
+		mouse_drag_start = event.position
 		touch_start = event.position
+		if not mouse_drag_active:
+			touch_direction = Vector2.ZERO
+
+func _update_mouse_drag_direction() -> void:
+	if not mouse_drag_active:
+		return
+	if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		mouse_drag_active = false
 		touch_direction = Vector2.ZERO
-	elif event is InputEventMouseMotion and touch_active and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-		_update_touch_direction(event.position)
+		return
+	_update_touch_direction(get_viewport().get_mouse_position())
 
 func _update_touch_direction(pointer_position: Vector2) -> void:
 	var drag_vector := pointer_position - touch_start
