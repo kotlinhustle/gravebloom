@@ -1,6 +1,11 @@
 class_name Player
 extends CharacterBody2D
 
+const SPRITE_FRAME_SIZE := Vector2i(257, 258)
+const SPRITE_FRAME_COUNT := 6
+const IDLE_ROW := 0
+const RUN_ROW := 1
+
 var speed := 225.0
 var max_health := 100.0
 var health := 100.0
@@ -16,15 +21,14 @@ var key_right := false
 var key_up := false
 var key_down := false
 var anim_time := 0.0
+var sprite_frame := 0
+var sprite_frame_timer := 0.0
+var facing_left := false
 
 @onready var art := $Art
-@onready var left_foot := $LeftFoot
-@onready var right_foot := $RightFoot
 @onready var shadow := $Shadow
 @onready var base_art_position: Vector2 = art.position
 @onready var base_art_scale: Vector2 = art.scale
-@onready var base_left_foot_position: Vector2 = left_foot.position
-@onready var base_right_foot_position: Vector2 = right_foot.position
 @onready var base_shadow_scale: Vector2 = shadow.scale
 
 func _physics_process(delta: float) -> void:
@@ -44,42 +48,28 @@ func _physics_process(delta: float) -> void:
 
 func _animate_art(delta: float, direction: Vector2) -> void:
 	var moving: bool = direction.length() > 0.0
-	anim_time += delta * (13.5 if moving else 3.0)
-	var bob := sin(anim_time) * (4.2 if moving else 1.4)
+	_update_sprite_frame(delta, direction, moving)
+	anim_time += delta * (9.0 if moving else 3.0)
+	var bob := sin(anim_time) * (2.4 if moving else 1.2)
 	art.position = base_art_position + Vector2(0, bob)
-	var lean: float = clamp(direction.x, -1.0, 1.0) * (0.1 if moving else 0.035)
+	var lean: float = clamp(direction.x, -1.0, 1.0) * (0.055 if moving else 0.025)
 	art.rotation = lerp(art.rotation, lean, delta * 10.0)
-	var pulse := 1.0 + sin(anim_time * 0.75) * (0.022 if moving else 0.015)
+	var pulse := 1.0 + sin(anim_time * 0.75) * (0.012 if moving else 0.01)
 	art.scale = base_art_scale * Vector2(pulse, 1.0 / pulse)
 	shadow.scale = base_shadow_scale * Vector2(1.0 + abs(bob) * 0.012, 1.0 - abs(bob) * 0.006)
-	_animate_feet(delta, direction, moving)
 
-func _animate_feet(delta: float, direction: Vector2, moving: bool) -> void:
-	var stride: float = sin(anim_time)
-	var lift: float = abs(cos(anim_time))
-	var forward: Vector2 = direction
-	if forward.length() <= 0.0:
-		forward = Vector2.DOWN
-	else:
-		forward = forward.normalized()
-	var side := Vector2(-forward.y, forward.x)
-	if moving:
-		var step_distance: float = 18.0
-		var side_distance: float = 8.0
-		var stomp: float = 3.5
-		left_foot.position = base_left_foot_position + forward * (stride * step_distance) - side * side_distance + Vector2(0.0, lift * stomp)
-		right_foot.position = base_right_foot_position - forward * (stride * step_distance) + side * side_distance + Vector2(0.0, (1.0 - lift) * stomp)
-		left_foot.rotation = lerp(left_foot.rotation, direction.x * 0.32 + stride * 0.36, delta * 18.0)
-		right_foot.rotation = lerp(right_foot.rotation, direction.x * 0.32 - stride * 0.36, delta * 18.0)
-		left_foot.scale = Vector2(0.95 + lift * 0.26, 1.12 - lift * 0.12)
-		right_foot.scale = Vector2(1.21 - lift * 0.26, 1.0 + lift * 0.12)
-	else:
-		left_foot.position = left_foot.position.lerp(base_left_foot_position, delta * 8.0)
-		right_foot.position = right_foot.position.lerp(base_right_foot_position, delta * 8.0)
-		left_foot.rotation = lerp(left_foot.rotation, 0.0, delta * 8.0)
-		right_foot.rotation = lerp(right_foot.rotation, 0.0, delta * 8.0)
-		left_foot.scale = left_foot.scale.lerp(Vector2.ONE, delta * 8.0)
-		right_foot.scale = right_foot.scale.lerp(Vector2.ONE, delta * 8.0)
+func _update_sprite_frame(delta: float, direction: Vector2, moving: bool) -> void:
+	if abs(direction.x) > 0.05:
+		facing_left = direction.x < 0.0
+	art.flip_h = facing_left
+	var row: int = RUN_ROW if moving else IDLE_ROW
+	var fps: float = 12.0 if moving else 6.0
+	sprite_frame_timer += delta
+	if sprite_frame_timer >= 1.0 / fps:
+		sprite_frame_timer = 0.0
+		sprite_frame = (sprite_frame + 1) % SPRITE_FRAME_COUNT
+	var rect_position := Vector2(SPRITE_FRAME_SIZE.x * sprite_frame, SPRITE_FRAME_SIZE.y * row)
+	art.region_rect = Rect2(rect_position, Vector2(SPRITE_FRAME_SIZE))
 
 func _get_keyboard_direction() -> Vector2:
 	var direction := Vector2.ZERO
