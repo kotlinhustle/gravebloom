@@ -21,6 +21,7 @@ Start run -> move -> kite enemies -> auto-attack -> collect XP shards -> level u
 
 - Engine: Godot 4.6.3.
 - Renderer target: Compatibility / GL Compatibility.
+- Primary layout target: Telegram mobile portrait, 540x960 viewport.
 - Language: GDScript only.
 - No AI gameplay code.
 - Repository: https://github.com/kotlinhustle/gravebloom
@@ -94,6 +95,7 @@ scripts/
 `Player`:
 
 - `CharacterBody2D`.
+- Camera zoom is tuned for mobile portrait readability.
 - Supports keyboard movement via WASD/arrows.
 - Supports mouse drag movement by polling left mouse button.
 - Has early touch input support for mobile-style movement.

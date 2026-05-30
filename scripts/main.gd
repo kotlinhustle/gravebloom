@@ -97,32 +97,32 @@ func _spawn_player() -> void:
 func _build_ui() -> void:
 	add_child(ui_layer)
 	ui_layer.process_mode = Node.PROCESS_MODE_ALWAYS
-	hud.position = Vector2(18, 14)
-	hud.add_theme_font_size_override("font_size", 18)
+	hud.position = Vector2(18, 18)
+	hud.add_theme_font_size_override("font_size", 20)
 	hud.add_theme_color_override("font_color", Color(0.88, 0.84, 0.73))
 	ui_layer.add_child(hud)
-	hp_bar.position = Vector2(18, 76)
-	hp_bar.size = Vector2(300, 18)
+	hp_bar.position = Vector2(18, 86)
+	hp_bar.size = Vector2(504, 24)
 	hp_bar.max_value = 100.0
 	hp_bar.value = 100.0
 	hp_bar.show_percentage = false
 	ui_layer.add_child(hp_bar)
-	xp_bar.position = Vector2(18, 102)
-	xp_bar.size = Vector2(300, 18)
+	xp_bar.position = Vector2(18, 118)
+	xp_bar.size = Vector2(504, 20)
 	xp_bar.max_value = xp_to_next
 	xp_bar.value = xp
 	xp_bar.show_percentage = false
 	ui_layer.add_child(xp_bar)
 	upgrade_panel.visible = false
 	upgrade_panel.process_mode = Node.PROCESS_MODE_ALWAYS
-	upgrade_panel.position = Vector2(260, 104)
-	upgrade_panel.custom_minimum_size = Vector2(440, 300)
+	upgrade_panel.position = Vector2(28, 220)
+	upgrade_panel.custom_minimum_size = Vector2(484, 460)
 	ui_layer.add_child(upgrade_panel)
 	upgrade_panel.add_child(upgrade_list)
 	overlay_panel.visible = false
 	overlay_panel.process_mode = Node.PROCESS_MODE_ALWAYS
-	overlay_panel.position = Vector2(280, 96)
-	overlay_panel.custom_minimum_size = Vector2(400, 310)
+	overlay_panel.position = Vector2(36, 250)
+	overlay_panel.custom_minimum_size = Vector2(468, 350)
 	ui_layer.add_child(overlay_panel)
 	overlay_panel.add_child(overlay_list)
 	_update_hud()
@@ -132,9 +132,9 @@ func _show_start_screen() -> void:
 	get_tree().paused = true
 	overlay_panel.visible = true
 	_clear_container(overlay_list)
-	_add_overlay_label("GRAVEBLOOM", 40)
-	_add_overlay_label("Survive 3:00 in the cursed ruins.", 20)
-	_add_overlay_label("The Living Blade hunts for you. Keep moving.", 15)
+	_add_overlay_label("GRAVEBLOOM", 42)
+	_add_overlay_label("Survive 3:00 in the cursed ruins.", 22)
+	_add_overlay_label("The Living Blade hunts for you. Keep moving.", 17)
 	_add_overlay_button("Start Run", _start_run)
 
 func _start_run() -> void:
@@ -295,7 +295,7 @@ func _show_upgrades() -> void:
 func _add_upgrade_button(text: String, description: String, method_name: StringName) -> void:
 	var button := Button.new()
 	button.text = "%s\n%s" % [text, description]
-	button.custom_minimum_size = Vector2(380, 58)
+	button.custom_minimum_size = Vector2(430, 70)
 	button.set_meta("upgrade_method", String(method_name))
 	button.pressed.connect(_on_upgrade_button_pressed.bind(button))
 	upgrade_list.add_child(button)
@@ -467,13 +467,13 @@ func _add_overlay_label(text: String, font_size: int) -> void:
 func _add_overlay_button(text: String, callback: Callable) -> void:
 	var button := Button.new()
 	button.text = text
-	button.custom_minimum_size = Vector2(320, 52)
+	button.custom_minimum_size = Vector2(360, 62)
 	button.pressed.connect(callback)
 	overlay_list.add_child(button)
 
 func _flash_overlay_text(text: String) -> void:
 	var label := _make_label(text, 26)
-	label.global_position = Vector2(325, 56)
+	label.global_position = Vector2(80, 164)
 	ui_layer.add_child(label)
 	var tween := create_tween()
 	tween.set_parallel(true)
