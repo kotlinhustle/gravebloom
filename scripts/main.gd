@@ -11,6 +11,9 @@ const GraveWardenTexture := preload("res://assets/sprites/grave_warden.png")
 
 const RUN_DURATION := 180.0
 const MINIBOSS_TIME := 150.0
+const ARENA_LIMIT_X := 1760.0
+const ARENA_LIMIT_Y := 1080.0
+const MAX_ENEMIES := 42
 
 var player: Player
 var living_blade: Node2D
@@ -75,11 +78,12 @@ func _process(delta: float) -> void:
 	spawn_timer -= delta
 	if spawn_timer <= 0.0:
 		_spawn_enemy_wave()
-		spawn_timer = max(0.18, 1.0 - elapsed * 0.008)
+		spawn_timer = max(0.42, 1.45 - elapsed * 0.005)
 	living_blade.tick(delta, enemies)
 	_update_shadow_spirit(delta)
 	_update_shards(delta)
 	_check_enemy_contact(delta)
+	_keep_player_inside_arena()
 	_update_hud()
 
 func _build_arena() -> void:
@@ -278,6 +282,7 @@ func _update_arena_ambience(delta: float) -> void:
 func _spawn_player() -> void:
 	player = PlayerScene.instantiate()
 	player.position = Vector2.ZERO
+	player.set_arena_limits(Vector2(ARENA_LIMIT_X, ARENA_LIMIT_Y))
 	world.add_child(player)
 	living_blade = LivingBladeScene.instantiate()
 	living_blade.setup(player, fx_layer)
@@ -355,15 +360,20 @@ func _reset_run() -> void:
 	_update_hud()
 
 func _spawn_enemy_wave() -> void:
-	var count := 2 + int(elapsed / 20.0)
+	_compact_enemies()
+	var available_slots: int = MAX_ENEMIES - enemies.size()
+	if available_slots <= 0:
+		return
+	var count: int = 1 + int(elapsed / 32.0)
+	count = min(count, available_slots)
 	for i in range(count):
-		var is_brute: bool = randf() < min(0.28, 0.04 + elapsed / 360.0)
+		var is_brute: bool = randf() < min(0.22, 0.02 + elapsed / 520.0)
 		_spawn_enemy(is_brute, false)
 
 func _spawn_enemy(is_brute: bool, is_miniboss: bool) -> void:
 	var enemy: Enemy = EnemyScene.instantiate()
-	enemy.max_health = 2 + int(elapsed / 45.0)
-	enemy.speed = randf_range(56.0, 86.0) + elapsed * 0.15
+	enemy.max_health = 2 + int(elapsed / 60.0)
+	enemy.speed = randf_range(48.0, 74.0) + elapsed * 0.11
 	enemy.xp_value = 1
 	if is_brute:
 		enemy.max_health += 4
@@ -379,7 +389,7 @@ func _spawn_enemy(is_brute: bool, is_miniboss: bool) -> void:
 	_set_enemy_art(enemy, is_brute, is_miniboss)
 	enemy.base_scale = enemy.scale
 	enemy.health = enemy.max_health
-	enemy.position = player.position + Vector2.RIGHT.rotated(randf() * TAU) * randf_range(360.0, 520.0)
+	enemy.position = _clamp_to_arena(player.position + Vector2.RIGHT.rotated(randf() * TAU) * randf_range(360.0, 520.0))
 	enemy.target = player
 	enemy.damaged.connect(_on_enemy_damaged)
 	enemy.died.connect(_on_enemy_died.bind(enemy.xp_value, enemy.is_miniboss))
@@ -463,6 +473,17 @@ func _check_enemy_contact(delta: float) -> void:
 			player.take_damage(damage * delta)
 			if player.is_dead:
 				_show_game_over()
+
+func _keep_player_inside_arena() -> void:
+	if player == null:
+		return
+	player.global_position = _clamp_to_arena(player.global_position)
+
+func _clamp_to_arena(position: Vector2) -> Vector2:
+	return Vector2(
+		clamp(position.x, -ARENA_LIMIT_X, ARENA_LIMIT_X),
+		clamp(position.y, -ARENA_LIMIT_Y, ARENA_LIMIT_Y)
+	)
 
 func _level_up() -> void:
 	level += 1

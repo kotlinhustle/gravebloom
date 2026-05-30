@@ -24,6 +24,7 @@ var anim_time := 0.0
 var sprite_frame := 0
 var sprite_frame_timer := 0.0
 var facing_left := false
+var arena_limits := Vector2.ZERO
 
 @onready var art := $Art
 @onready var shadow := $Shadow
@@ -44,6 +45,7 @@ func _physics_process(delta: float) -> void:
 		direction = keyboard_direction
 	velocity = direction * speed
 	move_and_slide()
+	_clamp_to_arena()
 	_animate_art(delta, direction)
 
 func _animate_art(delta: float, direction: Vector2) -> void:
@@ -151,6 +153,17 @@ func set_virtual_direction(direction: Vector2) -> void:
 		virtual_direction = direction.normalized()
 	else:
 		virtual_direction = direction
+
+func set_arena_limits(limits: Vector2) -> void:
+	arena_limits = limits
+
+func _clamp_to_arena() -> void:
+	if arena_limits == Vector2.ZERO:
+		return
+	global_position = Vector2(
+		clamp(global_position.x, -arena_limits.x, arena_limits.x),
+		clamp(global_position.y, -arena_limits.y, arena_limits.y)
+	)
 
 func take_damage(amount: float) -> void:
 	if is_dead:
