@@ -95,6 +95,7 @@ scripts/
 - Spawns the player.
 - Spawns enemy waves.
 - Keeps the player inside visible ruined arena bounds and caps live enemy pressure for early readability.
+- Visible UI text is Russian-first; keep menus, HUD, result screens, upgrade choices, and combat notices localized.
 - Spawns a miniboss near the end of the 3-minute run.
 - Owns enemy and XP shard lists.
 - Updates XP collection, level-ups, upgrade UI, HUD, XP bar, result screens, and enemy contact damage.
@@ -151,6 +152,7 @@ scripts/
 - Runs now have a start screen, XP bar, 3:00 survival goal, miniboss event, victory screen, death screen, and restart button.
 - Relics can unlock Shadow Spirit, a secondary auto-skill that cuts through enemies in a beam.
 - Gravebloom Nova is an ultimate: it charges over time, shows a visible `NOVA` button with percent progress, can be fired with the button or `Space`, and blasts nearby enemies.
+- XP pacing is intentionally slower after the ultimate was added: higher XP thresholds keep Nova kills from over-leveling too quickly.
 
 ## Near-Term Roadmap
 

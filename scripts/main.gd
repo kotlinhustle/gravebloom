@@ -13,10 +13,10 @@ const RUN_DURATION := 180.0
 const MINIBOSS_TIME := 150.0
 const ARENA_LIMIT_X := 2060.0
 const ARENA_LIMIT_Y := 1360.0
-const MAX_ENEMIES := 42
-const ULTIMATE_COOLDOWN := 22.0
-const ULTIMATE_RADIUS := 430.0
-const ULTIMATE_DAMAGE := 9
+const MAX_ENEMIES := 55
+const ULTIMATE_COOLDOWN := 30.0
+const ULTIMATE_RADIUS := 380.0
+const ULTIMATE_DAMAGE := 7
 
 var player: Player
 var living_blade: Node2D
@@ -26,7 +26,7 @@ var elapsed := 0.0
 var spawn_timer := 0.0
 var level := 1
 var xp := 0
-var xp_to_next := 8
+var xp_to_next := 14
 var shard_pull_range := 95.0
 var paused_for_upgrade := false
 var game_state := "start"
@@ -85,7 +85,7 @@ func _process(delta: float) -> void:
 	spawn_timer -= delta
 	if spawn_timer <= 0.0:
 		_spawn_enemy_wave()
-		spawn_timer = max(0.42, 1.45 - elapsed * 0.005)
+		spawn_timer = max(0.32, 1.18 - elapsed * 0.006)
 	living_blade.tick(delta, enemies)
 	_update_ultimate(delta)
 	_update_shadow_spirit(delta)
@@ -377,9 +377,9 @@ func _show_start_screen() -> void:
 	overlay_panel.visible = true
 	_clear_container(overlay_list)
 	_add_overlay_label("GRAVEBLOOM", 42)
-	_add_overlay_label("Survive 3:00 in the cursed ruins.", 22)
-	_add_overlay_label("The Living Blade hunts for you. Keep moving.", 17)
-	_add_overlay_button("Start Run", _start_run)
+	_add_overlay_label("Продержись 3:00 в проклятых руинах.", 22)
+	_add_overlay_label("Живой Клинок охотится сам. Твоя задача - двигаться.", 17)
+	_add_overlay_button("Начать забег", _start_run)
 
 func _start_run() -> void:
 	_reset_run()
@@ -396,7 +396,7 @@ func _reset_run() -> void:
 	spawn_timer = 0.0
 	level = 1
 	xp = 0
-	xp_to_next = 8
+	xp_to_next = 14
 	paused_for_upgrade = false
 	miniboss_spawned = false
 	last_run_result = ""
@@ -417,16 +417,16 @@ func _spawn_enemy_wave() -> void:
 	var available_slots: int = MAX_ENEMIES - enemies.size()
 	if available_slots <= 0:
 		return
-	var count: int = 1 + int(elapsed / 32.0)
+	var count: int = 1 + int(elapsed / 24.0)
 	count = min(count, available_slots)
 	for i in range(count):
-		var is_brute: bool = randf() < min(0.22, 0.02 + elapsed / 520.0)
+		var is_brute: bool = randf() < min(0.26, 0.04 + elapsed / 420.0)
 		_spawn_enemy(is_brute, false)
 
 func _spawn_enemy(is_brute: bool, is_miniboss: bool) -> void:
 	var enemy: Enemy = EnemyScene.instantiate()
-	enemy.max_health = 2 + int(elapsed / 60.0)
-	enemy.speed = randf_range(48.0, 74.0) + elapsed * 0.11
+	enemy.max_health = 2 + int(elapsed / 52.0)
+	enemy.speed = randf_range(56.0, 84.0) + elapsed * 0.14
 	enemy.xp_value = 1
 	if is_brute:
 		enemy.max_health += 4
@@ -467,7 +467,7 @@ func _spawn_miniboss() -> void:
 	miniboss_spawned = true
 	_spawn_enemy(false, true)
 	CombatFxScript.ring(fx_layer, player.global_position, Color(0.9, 0.55, 0.72, 0.9), 260.0, 0.7)
-	_flash_overlay_text("A Grave Warden wakes")
+	_flash_overlay_text("Могильный Страж пробудился")
 	_start_screen_shake(0.34, 8.0)
 
 func _on_enemy_damaged(enemy_position: Vector2, amount: int) -> void:
@@ -484,7 +484,7 @@ func _on_enemy_died(enemy_position: Vector2, xp_value: int = 1, was_miniboss: bo
 	shards.append(shard)
 	world.add_child(shard)
 	if was_miniboss:
-		_flash_overlay_text("Grave Warden broken")
+		_flash_overlay_text("Могильный Страж повержен")
 	_compact_enemies()
 
 func _update_shards(delta: float) -> void:
@@ -541,7 +541,7 @@ func _clamp_to_arena(position: Vector2) -> Vector2:
 func _level_up() -> void:
 	level += 1
 	xp -= xp_to_next
-	xp_to_next = int(xp_to_next * 1.35) + 4
+	xp_to_next = int(xp_to_next * 1.55) + 8
 	CombatFxScript.ring(fx_layer, player.global_position, Color(0.7, 1.0, 0.84, 0.85), 170.0, 0.55)
 	CombatFxScript.burst(fx_layer, player.global_position, Color(0.78, 1.0, 0.9, 0.9), 24)
 	paused_for_upgrade = true
@@ -555,12 +555,12 @@ func _level_up() -> void:
 
 func _show_upgrades() -> void:
 	_clear_container(upgrade_list)
-	var title := _make_label("Choose a relic", 26)
+	var title := _make_label("Выбери реликвию", 26)
 	upgrade_list.add_child(title)
-	_add_upgrade_button("Sharpen Living Blade", "More blade damage", "_upgrade_damage")
-	_add_upgrade_button("Quicken the Curse", "Shorter blade cooldown", "_upgrade_cooldown")
-	_add_upgrade_button("Widen Pale Reach", "Blade hunts farther", "_upgrade_range")
-	_add_upgrade_button("Call Shadow Spirit", "A spirit cuts through crowds", "_upgrade_shadow_spirit")
+	_add_upgrade_button("Заточить Живой Клинок", "Больше урона клинком", "_upgrade_damage")
+	_add_upgrade_button("Ускорить проклятие", "Клинок атакует чаще", "_upgrade_cooldown")
+	_add_upgrade_button("Расширить бледный радиус", "Клинок ищет врагов дальше", "_upgrade_range")
+	_add_upgrade_button("Призвать Тень", "Дух прорезает толпу лучом", "_upgrade_shadow_spirit")
 	upgrade_panel.visible = true
 
 func _add_upgrade_button(text: String, description: String, method_name: StringName) -> void:
@@ -599,13 +599,13 @@ func _upgrade_shadow_spirit() -> void:
 	else:
 		shadow_spirit_unlocked = true
 		shadow_spirit_timer = 0.35
-	_flash_overlay_text("Shadow Spirit awakened")
+	_flash_overlay_text("Тень пробудилась")
 
 func _show_game_over() -> void:
 	if game_state == "game_over":
 		return
 	game_state = "game_over"
-	last_run_result = "The Masked Wanderer fell"
+	last_run_result = "Странник в Маске пал"
 	joystick_base.visible = false
 	ultimate_button.visible = false
 	ultimate_bar.visible = false
@@ -615,7 +615,7 @@ func _show_game_over() -> void:
 
 func _show_victory() -> void:
 	game_state = "victory"
-	last_run_result = "The curse recedes"
+	last_run_result = "Проклятие отступает"
 	joystick_base.visible = false
 	ultimate_button.visible = false
 	ultimate_bar.visible = false
@@ -626,17 +626,17 @@ func _show_victory() -> void:
 func _show_result_screen(victory: bool) -> void:
 	overlay_panel.visible = true
 	_clear_container(overlay_list)
-	_add_overlay_label("Victory" if victory else "Run Ended", 32)
+	_add_overlay_label("Победа" if victory else "Забег окончен", 32)
 	_add_overlay_label(last_run_result, 20)
-	_add_overlay_label("Time: %s   Level: %d" % [_format_time(elapsed), level], 18)
-	_add_overlay_button("Restart", _start_run)
+	_add_overlay_label("Время: %s   Уровень: %d" % [_format_time(elapsed), level], 18)
+	_add_overlay_button("Заново", _start_run)
 
 func _update_hud() -> void:
 	var remaining: float = max(0.0, RUN_DURATION - elapsed)
 	var health_value := 0
 	if player != null:
 		health_value = int(ceil(player.health))
-	hud.text = "GRAVEBLOOM\nLV %d   TIME %s   LEFT %s" % [
+	hud.text = "GRAVEBLOOM\nУР %d   ВРЕМЯ %s   ОСТАЛОСЬ %s" % [
 		level,
 		_format_time(elapsed),
 		_format_time(remaining)
@@ -656,7 +656,7 @@ func _build_ultimate_ui() -> void:
 	ui_layer.add_child(ultimate_bar)
 	ultimate_button.position = Vector2(358, 786)
 	ultimate_button.size = Vector2(140, 84)
-	ultimate_button.text = "NOVA\n0%"
+	ultimate_button.text = "НОВА\n0%"
 	ultimate_button.disabled = false
 	ultimate_button.process_mode = Node.PROCESS_MODE_ALWAYS
 	ultimate_button.add_theme_font_size_override("font_size", 22)
@@ -669,7 +669,7 @@ func _update_ultimate(delta: float) -> void:
 	ultimate_charge = min(ULTIMATE_COOLDOWN, ultimate_charge + delta)
 	if ultimate_charge >= ULTIMATE_COOLDOWN:
 		ultimate_ready = true
-		_flash_overlay_text("Gravebloom Nova ready")
+		_flash_overlay_text("Нова готова")
 		CombatFxScript.ring(fx_layer, player.global_position, Color(0.58, 1.0, 0.72, 0.65), 130.0, 0.42)
 	_update_ultimate_ui()
 
@@ -678,7 +678,7 @@ func _update_ultimate_ui() -> void:
 		return
 	ultimate_bar.value = ultimate_charge
 	var charge_percent := int(floor((ultimate_charge / ULTIMATE_COOLDOWN) * 100.0))
-	ultimate_button.text = "NOVA\nREADY" if ultimate_ready else "NOVA\n%d%%" % charge_percent
+	ultimate_button.text = "НОВА\nГОТОВА" if ultimate_ready else "НОВА\n%d%%" % charge_percent
 	ultimate_button.disabled = game_state != "running"
 	ultimate_button.modulate = Color.WHITE if ultimate_ready else Color(0.78, 0.86, 0.78, 0.95)
 
@@ -686,12 +686,12 @@ func _cast_ultimate() -> void:
 	if game_state != "running" or player == null:
 		return
 	if not ultimate_ready:
-		_flash_overlay_text("Nova charging %d%%" % int(floor((ultimate_charge / ULTIMATE_COOLDOWN) * 100.0)))
+		_flash_overlay_text("Нова заряжается: %d%%" % int(floor((ultimate_charge / ULTIMATE_COOLDOWN) * 100.0)))
 		return
 	ultimate_ready = false
 	ultimate_charge = 0.0
 	var origin := player.global_position
-	_flash_overlay_text("GRAVEBLOOM NOVA")
+	_flash_overlay_text("НОВА GRAVEBLOOM")
 	_start_screen_shake(0.42, 13.0)
 	CombatFxScript.ring(fx_layer, origin, Color(0.78, 1.0, 0.72, 0.95), ULTIMATE_RADIUS, 0.55)
 	CombatFxScript.ring(fx_layer, origin, Color(0.95, 0.78, 1.0, 0.68), ULTIMATE_RADIUS * 0.62, 0.42)
