@@ -35,6 +35,9 @@ var shake_intensity := 0.0
 var joystick_active := false
 var joystick_direction := Vector2.ZERO
 var joystick_radius := 56.0
+var ambient_glows: Array[CanvasItem] = []
+var fog_wisps: Array[CanvasItem] = []
+var ambience_time := 0.0
 
 @onready var world := Node2D.new()
 @onready var fx_layer := Node2D.new()
@@ -60,6 +63,7 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	_update_screen_shake(delta)
 	_update_joystick_mouse()
+	_update_arena_ambience(delta)
 	if game_state != "running":
 		return
 	elapsed += delta
@@ -80,17 +84,196 @@ func _process(delta: float) -> void:
 
 func _build_arena() -> void:
 	var bg := ColorRect.new()
-	bg.color = Color(0.045, 0.04, 0.056)
-	bg.size = Vector2(4000, 4000)
-	bg.position = Vector2(-2000, -2000)
+	bg.color = Color(0.028, 0.031, 0.034)
+	bg.size = Vector2(4600, 4600)
+	bg.position = Vector2(-2300, -2300)
 	world.add_child(bg)
-	for i in range(36):
-		var stone := ColorRect.new()
-		stone.color = Color(0.095, 0.09, 0.115, randf_range(0.18, 0.38))
-		stone.size = Vector2(randf_range(38, 130), randf_range(8, 22))
-		stone.position = Vector2(randf_range(-1500, 1500), randf_range(-850, 850))
-		stone.rotation = randf_range(-0.7, 0.7)
-		world.add_child(stone)
+	_build_floor_tiles()
+	_build_cracks()
+	_build_ruins()
+	_build_graveblooms()
+	_build_cursed_runes()
+	_build_fog_wisps()
+	_build_screen_vignette()
+
+func _build_floor_tiles() -> void:
+	var tile_size := 176.0
+	for x in range(-11, 12):
+		for y in range(-7, 8):
+			var tile := ColorRect.new()
+			var shade := randf_range(-0.012, 0.016)
+			tile.color = Color(0.064 + shade, 0.065 + shade, 0.074 + shade, 0.92)
+			tile.size = Vector2(tile_size - 7.0, tile_size - 7.0)
+			tile.position = Vector2(x * tile_size, y * tile_size) + Vector2(randf_range(-3.0, 3.0), randf_range(-3.0, 3.0))
+			tile.rotation = randf_range(-0.012, 0.012)
+			world.add_child(tile)
+	for i in range(90):
+		var stain := _make_ellipse(randf_range(10.0, 34.0), randf_range(5.0, 18.0), Color(0.02, 0.025, 0.026, randf_range(0.16, 0.34)), 12)
+		stain.position = Vector2(randf_range(-1850.0, 1850.0), randf_range(-1200.0, 1200.0))
+		stain.rotation = randf() * TAU
+		world.add_child(stain)
+
+func _build_cracks() -> void:
+	for i in range(34):
+		var crack := Line2D.new()
+		crack.width = randf_range(2.0, 5.0)
+		crack.default_color = Color(0.012, 0.014, 0.018, randf_range(0.5, 0.82))
+		crack.points = _make_crack_points(randf_range(80.0, 250.0), randi_range(4, 8))
+		crack.position = Vector2(randf_range(-1750.0, 1750.0), randf_range(-1050.0, 1050.0))
+		crack.rotation = randf() * TAU
+		world.add_child(crack)
+
+func _make_crack_points(length: float, point_count: int) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	var current := Vector2.ZERO
+	points.append(current)
+	for i in range(1, point_count):
+		current += Vector2(length / float(point_count - 1), randf_range(-18.0, 18.0))
+		points.append(current)
+	return points
+
+func _build_ruins() -> void:
+	for i in range(22):
+		var base_position := Vector2(randf_range(-1750.0, 1750.0), randf_range(-1050.0, 1050.0))
+		if base_position.length() < 280.0:
+			base_position += base_position.normalized() * 320.0
+		if randf() < 0.48:
+			_add_broken_column(base_position)
+		else:
+			_add_gravestone(base_position, randf_range(0.8, 1.35))
+	for i in range(48):
+		var rubble := ColorRect.new()
+		rubble.color = Color(0.12, 0.12, 0.135, randf_range(0.35, 0.7))
+		rubble.size = Vector2(randf_range(12.0, 42.0), randf_range(7.0, 18.0))
+		rubble.position = Vector2(randf_range(-1900.0, 1900.0), randf_range(-1250.0, 1250.0))
+		rubble.rotation = randf() * TAU
+		world.add_child(rubble)
+
+func _add_broken_column(base_position: Vector2) -> void:
+	var shadow := _make_ellipse(58.0, 18.0, Color(0.0, 0.0, 0.0, 0.24), 16)
+	shadow.position = base_position + Vector2(8.0, 22.0)
+	world.add_child(shadow)
+	for piece_index in range(randi_range(2, 4)):
+		var piece := ColorRect.new()
+		piece.color = Color(0.16, 0.155, 0.17, randf_range(0.74, 0.94))
+		piece.size = Vector2(randf_range(34.0, 74.0), randf_range(18.0, 34.0))
+		piece.position = base_position + Vector2(piece_index * randf_range(18.0, 36.0), piece_index * randf_range(-5.0, 9.0))
+		piece.rotation = randf_range(-0.7, 0.7)
+		world.add_child(piece)
+
+func _add_gravestone(base_position: Vector2, scale_value: float) -> void:
+	var shadow := _make_ellipse(34.0 * scale_value, 10.0 * scale_value, Color(0.0, 0.0, 0.0, 0.28), 14)
+	shadow.position = base_position + Vector2(4.0, 26.0 * scale_value)
+	world.add_child(shadow)
+	var stone := Polygon2D.new()
+	stone.color = Color(0.13, 0.14, 0.15, 0.9)
+	var width := 34.0 * scale_value
+	var height := 58.0 * scale_value
+	var shape := PackedVector2Array()
+	shape.append(Vector2(-width * 0.5, height * 0.45))
+	shape.append(Vector2(-width * 0.5, -height * 0.12))
+	shape.append(Vector2(-width * 0.25, -height * 0.46))
+	shape.append(Vector2(0.0, -height * 0.58))
+	shape.append(Vector2(width * 0.25, -height * 0.46))
+	shape.append(Vector2(width * 0.5, -height * 0.12))
+	shape.append(Vector2(width * 0.5, height * 0.45))
+	stone.polygon = shape
+	stone.position = base_position
+	stone.rotation = randf_range(-0.18, 0.18)
+	world.add_child(stone)
+	var rune := ColorRect.new()
+	rune.color = Color(0.55, 1.0, 0.72, randf_range(0.22, 0.36))
+	rune.size = Vector2(4.0 * scale_value, 20.0 * scale_value)
+	rune.position = base_position + Vector2(-2.0 * scale_value, -8.0 * scale_value)
+	world.add_child(rune)
+	ambient_glows.append(rune)
+
+func _build_graveblooms() -> void:
+	for i in range(70):
+		var center := Vector2(randf_range(-1850.0, 1850.0), randf_range(-1200.0, 1200.0))
+		var stem := ColorRect.new()
+		stem.color = Color(0.16, 0.36, 0.24, randf_range(0.44, 0.72))
+		stem.size = Vector2(3.0, randf_range(10.0, 20.0))
+		stem.position = center + Vector2(-1.5, -2.0)
+		world.add_child(stem)
+		var bloom := _make_ellipse(randf_range(5.0, 9.0), randf_range(4.0, 7.0), Color(0.62, 1.0, 0.72, randf_range(0.48, 0.82)), 8)
+		bloom.position = center + Vector2(0.0, -7.0)
+		world.add_child(bloom)
+		ambient_glows.append(bloom)
+
+func _build_cursed_runes() -> void:
+	for i in range(9):
+		var rune := Line2D.new()
+		rune.width = 3.0
+		rune.closed = true
+		rune.default_color = Color(0.48, 1.0, 0.75, randf_range(0.28, 0.48))
+		var radius := randf_range(18.0, 42.0)
+		var points := PackedVector2Array()
+		for point_index in range(6):
+			points.append(Vector2.RIGHT.rotated(TAU * float(point_index) / 6.0) * radius)
+		rune.points = points
+		rune.position = Vector2(randf_range(-1600.0, 1600.0), randf_range(-950.0, 950.0))
+		rune.rotation = randf() * TAU
+		world.add_child(rune)
+		ambient_glows.append(rune)
+
+func _build_fog_wisps() -> void:
+	for i in range(18):
+		var wisp := Line2D.new()
+		wisp.width = randf_range(12.0, 24.0)
+		wisp.default_color = Color(0.45, 0.56, 0.52, randf_range(0.06, 0.13))
+		var points := PackedVector2Array()
+		for point_index in range(6):
+			points.append(Vector2(point_index * randf_range(36.0, 58.0), sin(point_index * 1.7) * randf_range(10.0, 22.0)))
+		wisp.points = points
+		wisp.position = Vector2(randf_range(-1800.0, 1500.0), randf_range(-1100.0, 1100.0))
+		wisp.rotation = randf_range(-0.35, 0.35)
+		world.add_child(wisp)
+		fog_wisps.append(wisp)
+
+func _build_screen_vignette() -> void:
+	var vignette := Control.new()
+	vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vignette.process_mode = Node.PROCESS_MODE_ALWAYS
+	vignette.set_anchors_preset(Control.PRESET_FULL_RECT)
+	ui_layer.add_child(vignette)
+	_add_vignette_rect(vignette, Vector2.ZERO, Vector2(540.0, 120.0), Color(0.0, 0.0, 0.0, 0.28))
+	_add_vignette_rect(vignette, Vector2(0.0, 820.0), Vector2(540.0, 140.0), Color(0.0, 0.0, 0.0, 0.32))
+	_add_vignette_rect(vignette, Vector2.ZERO, Vector2(54.0, 960.0), Color(0.0, 0.0, 0.0, 0.24))
+	_add_vignette_rect(vignette, Vector2(486.0, 0.0), Vector2(54.0, 960.0), Color(0.0, 0.0, 0.0, 0.24))
+
+func _add_vignette_rect(parent: Node, position: Vector2, size: Vector2, color: Color) -> void:
+	var rect := ColorRect.new()
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rect.position = position
+	rect.size = size
+	rect.color = color
+	parent.add_child(rect)
+
+func _make_ellipse(radius_x: float, radius_y: float, color: Color, point_count: int) -> Polygon2D:
+	var polygon := Polygon2D.new()
+	polygon.color = color
+	var points := PackedVector2Array()
+	for i in range(point_count):
+		points.append(Vector2(cos(TAU * float(i) / float(point_count)) * radius_x, sin(TAU * float(i) / float(point_count)) * radius_y))
+	polygon.polygon = points
+	return polygon
+
+func _update_arena_ambience(delta: float) -> void:
+	ambience_time += delta
+	for i in range(ambient_glows.size()):
+		var item := ambient_glows[i]
+		if not is_instance_valid(item):
+			continue
+		item.modulate.a = 0.7 + sin(ambience_time * 1.6 + float(i) * 0.73) * 0.25
+	for i in range(fog_wisps.size()):
+		var wisp := fog_wisps[i]
+		if not is_instance_valid(wisp):
+			continue
+		wisp.position.x += delta * (10.0 + float(i % 4) * 3.0)
+		wisp.modulate.a = 0.72 + sin(ambience_time * 0.8 + float(i)) * 0.18
+		if wisp.position.x > 1900.0:
+			wisp.position.x = -1900.0
 
 func _spawn_player() -> void:
 	player = PlayerScene.instantiate()

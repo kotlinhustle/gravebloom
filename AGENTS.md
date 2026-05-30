@@ -86,7 +86,7 @@ scripts/
 
 `Main`:
 
-- Builds a simple dark arena.
+- Builds a procedural ruined arena: stone floor tiles, cracks, rubble, gravestones, broken columns, graveblooms, cursed runes, drifting fog, and screen vignette.
 - Manages run states: start, running, upgrade, game_over, victory.
 - Spawns the player.
 - Spawns enemy waves.
