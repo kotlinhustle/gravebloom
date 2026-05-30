@@ -94,7 +94,7 @@ scripts/
 - Manages run states: start, running, upgrade, game_over, victory.
 - Spawns the player.
 - Spawns enemy waves.
-- Keeps the player inside the ruined arena bounds and caps live enemy pressure for early readability.
+- Keeps the player inside visible ruined arena bounds and caps live enemy pressure for early readability.
 - Spawns a miniboss near the end of the 3-minute run.
 - Owns enemy and XP shard lists.
 - Updates XP collection, level-ups, upgrade UI, HUD, XP bar, result screens, and enemy contact damage.
@@ -143,7 +143,7 @@ scripts/
 
 - Attack is automatic; there is no manual shooting.
 - Player controls only movement and positioning.
-- Player cannot leave the arena bounds.
+- Player cannot leave the arena bounds; boundaries should be visually marked to avoid invisible-wall feel.
 - Mouse drag means: hold left mouse button, drag away from the starting point, release to stop.
 - The green object around the hero is the Living Blade; it now flies out to hunt enemies and returns.
 - Hits now show damage numbers, enemy flash/squash, knockback, and death bursts.

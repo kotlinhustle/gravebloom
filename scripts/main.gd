@@ -11,8 +11,8 @@ const GraveWardenTexture := preload("res://assets/sprites/grave_warden.png")
 
 const RUN_DURATION := 180.0
 const MINIBOSS_TIME := 150.0
-const ARENA_LIMIT_X := 1760.0
-const ARENA_LIMIT_Y := 1080.0
+const ARENA_LIMIT_X := 2060.0
+const ARENA_LIMIT_Y := 1360.0
 const MAX_ENEMIES := 42
 
 var player: Player
@@ -97,6 +97,7 @@ func _build_arena() -> void:
 	_build_ruins()
 	_build_graveblooms()
 	_build_cursed_runes()
+	_build_boundary_markers()
 	_build_fog_wisps()
 	_build_screen_vignette()
 
@@ -220,6 +221,37 @@ func _build_cursed_runes() -> void:
 		rune.rotation = randf() * TAU
 		world.add_child(rune)
 		ambient_glows.append(rune)
+
+func _build_boundary_markers() -> void:
+	var border_color := Color(0.11, 0.105, 0.12, 0.86)
+	var glow_color := Color(0.48, 1.0, 0.72, 0.28)
+	for x in range(-10, 11):
+		_add_boundary_stone(Vector2(x * 205.0, -ARENA_LIMIT_Y - 36.0), randf_range(-0.12, 0.12), border_color)
+		_add_boundary_stone(Vector2(x * 205.0, ARENA_LIMIT_Y + 36.0), randf_range(-0.12, 0.12), border_color)
+	for y in range(-6, 7):
+		_add_boundary_stone(Vector2(-ARENA_LIMIT_X - 42.0, y * 205.0), randf_range(1.42, 1.72), border_color)
+		_add_boundary_stone(Vector2(ARENA_LIMIT_X + 42.0, y * 205.0), randf_range(1.42, 1.72), border_color)
+	for i in range(14):
+		var marker := Line2D.new()
+		marker.width = 4.0
+		marker.default_color = glow_color
+		marker.points = PackedVector2Array([Vector2(-18, 0), Vector2(18, 0)])
+		var on_horizontal_edge := i < 8
+		if on_horizontal_edge:
+			marker.position = Vector2(randf_range(-1850.0, 1850.0), (-ARENA_LIMIT_Y if i % 2 == 0 else ARENA_LIMIT_Y) + randf_range(-8.0, 8.0))
+		else:
+			marker.position = Vector2((-ARENA_LIMIT_X if i % 2 == 0 else ARENA_LIMIT_X) + randf_range(-8.0, 8.0), randf_range(-1180.0, 1180.0))
+			marker.rotation = PI * 0.5
+		world.add_child(marker)
+		ambient_glows.append(marker)
+
+func _add_boundary_stone(position: Vector2, rotation: float, color: Color) -> void:
+	var stone := ColorRect.new()
+	stone.color = color
+	stone.size = Vector2(randf_range(86.0, 150.0), randf_range(18.0, 34.0))
+	stone.position = position
+	stone.rotation = rotation
+	world.add_child(stone)
 
 func _build_fog_wisps() -> void:
 	for i in range(18):
