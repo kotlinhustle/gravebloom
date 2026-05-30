@@ -1,11 +1,11 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/living_blade.gd" id="1_blade"]
+[ext_resource type="Texture2D" path="res://assets/sprites/living_blade.png" id="2_blade_sprite"]
 
 [node name="LivingBlade" type="Node2D"]
 script = ExtResource("1_blade")
 
-[node name="Blade" type="Polygon2D" parent="."]
-rotation = 0.65
-color = Color(0.72, 1, 0.84, 1)
-polygon = PackedVector2Array(-3, -26, 3, -26, 4, 14, 0, 24, -4, 14)
+[node name="Blade" type="Sprite2D" parent="."]
+texture = ExtResource("2_blade_sprite")
+scale = Vector2(0.12, 0.12)

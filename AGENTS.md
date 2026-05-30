@@ -48,6 +48,14 @@ C:\Users\user\Downloads\Godot_v4.6.3-stable_win64.exe\Godot_v4.6.3-stable_win64_
 
 ```text
 project.godot
+assets/
+  sprites/
+    player_masked_wanderer.png
+    enemy_crawler.png
+    enemy_brute.png
+    grave_warden.png
+    living_blade.png
+    xp_shard.png
 scenes/
   main.tscn
   player.tscn
@@ -64,6 +72,12 @@ scripts/
 ```
 
 ## Current Systems
+
+`Assets`:
+
+- Core sprites are generated bitmap assets with transparent backgrounds.
+- Keep generated originals outside the repo; commit only cropped project-ready PNG files in `assets/sprites/`.
+- Sprite scenes use `Sprite2D`; older polygon placeholders are hidden, not deleted yet, so we can tune scale/collisions safely.
 
 `Main`:
 

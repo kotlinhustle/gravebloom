@@ -5,6 +5,9 @@ const EnemyScene := preload("res://scenes/enemy.tscn")
 const XPShardScene := preload("res://scenes/xp_shard.tscn")
 const LivingBladeScene := preload("res://scenes/living_blade.tscn")
 const CombatFxScript := preload("res://scripts/combat_fx.gd")
+const EnemyCrawlerTexture := preload("res://assets/sprites/enemy_crawler.png")
+const EnemyBruteTexture := preload("res://assets/sprites/enemy_brute.png")
+const GraveWardenTexture := preload("res://assets/sprites/grave_warden.png")
 
 const RUN_DURATION := 180.0
 const MINIBOSS_TIME := 150.0
@@ -180,6 +183,7 @@ func _spawn_enemy(is_brute: bool, is_miniboss: bool) -> void:
 		enemy.speed = 46.0
 		enemy.scale = Vector2.ONE * 2.25
 		enemy.xp_value = 12
+	_set_enemy_art(enemy, is_brute, is_miniboss)
 	enemy.health = enemy.max_health
 	enemy.position = player.position + Vector2.RIGHT.rotated(randf() * TAU) * randf_range(360.0, 520.0)
 	enemy.target = player
@@ -187,6 +191,20 @@ func _spawn_enemy(is_brute: bool, is_miniboss: bool) -> void:
 	enemy.died.connect(_on_enemy_died.bind(enemy.xp_value, enemy.is_miniboss))
 	enemies.append(enemy)
 	world.add_child(enemy)
+
+func _set_enemy_art(enemy: Enemy, is_brute: bool, is_miniboss: bool) -> void:
+	var art := enemy.get_node_or_null("Art")
+	if art == null:
+		return
+	if is_miniboss:
+		art.texture = GraveWardenTexture
+		art.scale = Vector2(0.12, 0.12)
+	elif is_brute:
+		art.texture = EnemyBruteTexture
+		art.scale = Vector2(0.11, 0.11)
+	else:
+		art.texture = EnemyCrawlerTexture
+		art.scale = Vector2(0.16, 0.16)
 
 func _spawn_miniboss() -> void:
 	miniboss_spawned = true
