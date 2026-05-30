@@ -102,6 +102,7 @@ scripts/
 - Supports keyboard movement via WASD/arrows.
 - Supports mouse drag movement by polling left mouse button.
 - Has early touch input support for mobile-style movement.
+- Uses a visible virtual joystick on the running screen for TWA/mobile clarity.
 - Takes damage and dies.
 
 `Enemy`:
@@ -145,7 +146,7 @@ scripts/
 
 ## Near-Term Roadmap
 
-- Add visible virtual joystick for TWA/mobile clarity.
+- Add touch-friendly pause/options and Telegram-specific restart polish.
 - Split `Main` further into focused systems when complexity grows: spawner, upgrade manager, HUD, XP collector.
 - Add 2-3 more relic upgrades, including a first secondary weapon or spirit attack.
 - Improve visuals after the gameplay loop is clearer.

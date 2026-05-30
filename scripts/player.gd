@@ -10,6 +10,7 @@ var touch_direction := Vector2.ZERO
 var touch_active := false
 var mouse_drag_active := false
 var mouse_drag_start := Vector2.ZERO
+var virtual_direction := Vector2.ZERO
 var key_left := false
 var key_right := false
 var key_up := false
@@ -27,6 +28,8 @@ func _physics_process(delta: float) -> void:
 	_update_mouse_drag_direction()
 	var keyboard_direction := _get_keyboard_direction()
 	var direction := touch_direction
+	if virtual_direction.length() > 0.0:
+		direction = virtual_direction
 	if keyboard_direction.length() > 0.0:
 		direction = keyboard_direction
 	velocity = direction * speed
@@ -116,6 +119,12 @@ func _update_key_state(event: InputEventKey) -> void:
 		key_up = pressed_now
 	elif key == KEY_S or key == KEY_DOWN or physical_key == KEY_S or physical_key == KEY_DOWN:
 		key_down = pressed_now
+
+func set_virtual_direction(direction: Vector2) -> void:
+	if direction.length() > 1.0:
+		virtual_direction = direction.normalized()
+	else:
+		virtual_direction = direction
 
 func take_damage(amount: float) -> void:
 	if is_dead:

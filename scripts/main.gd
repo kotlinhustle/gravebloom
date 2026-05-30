@@ -32,6 +32,9 @@ var shadow_spirit_cooldown := 5.5
 var shadow_spirit_damage := 2
 var shake_time := 0.0
 var shake_intensity := 0.0
+var joystick_active := false
+var joystick_direction := Vector2.ZERO
+var joystick_radius := 56.0
 
 @onready var world := Node2D.new()
 @onready var fx_layer := Node2D.new()
@@ -39,6 +42,8 @@ var shake_intensity := 0.0
 @onready var hud := Label.new()
 @onready var hp_bar := ProgressBar.new()
 @onready var xp_bar := ProgressBar.new()
+@onready var joystick_base := Panel.new()
+@onready var joystick_knob := Panel.new()
 @onready var upgrade_panel := PanelContainer.new()
 @onready var upgrade_list := VBoxContainer.new()
 @onready var overlay_panel := PanelContainer.new()
@@ -54,6 +59,7 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_update_screen_shake(delta)
+	_update_joystick_mouse()
 	if game_state != "running":
 		return
 	elapsed += delta
@@ -113,6 +119,7 @@ func _build_ui() -> void:
 	xp_bar.value = xp
 	xp_bar.show_percentage = false
 	ui_layer.add_child(xp_bar)
+	_build_joystick()
 	upgrade_panel.visible = false
 	upgrade_panel.process_mode = Node.PROCESS_MODE_ALWAYS
 	upgrade_panel.position = Vector2(28, 220)
@@ -130,6 +137,7 @@ func _build_ui() -> void:
 func _show_start_screen() -> void:
 	game_state = "start"
 	get_tree().paused = true
+	joystick_base.visible = false
 	overlay_panel.visible = true
 	_clear_container(overlay_list)
 	_add_overlay_label("GRAVEBLOOM", 42)
@@ -140,6 +148,7 @@ func _show_start_screen() -> void:
 func _start_run() -> void:
 	_reset_run()
 	overlay_panel.visible = false
+	joystick_base.visible = true
 	game_state = "running"
 	get_tree().paused = false
 
@@ -157,6 +166,7 @@ func _reset_run() -> void:
 	shadow_spirit_timer = 3.0
 	shadow_spirit_cooldown = 5.5
 	shadow_spirit_damage = 2
+	_reset_joystick()
 	_stop_screen_shake()
 	_spawn_player()
 	_update_hud()
@@ -279,6 +289,8 @@ func _level_up() -> void:
 	CombatFxScript.burst(fx_layer, player.global_position, Color(0.78, 1.0, 0.9, 0.9), 24)
 	paused_for_upgrade = true
 	game_state = "upgrade"
+	joystick_base.visible = false
+	_reset_joystick()
 	get_tree().paused = true
 	_show_upgrades()
 
@@ -305,6 +317,7 @@ func _on_upgrade_button_pressed(button: Button) -> void:
 	if method_name != "":
 		call(method_name)
 	upgrade_panel.visible = false
+	joystick_base.visible = true
 	paused_for_upgrade = false
 	game_state = "running"
 	get_tree().paused = false
@@ -332,12 +345,16 @@ func _show_game_over() -> void:
 		return
 	game_state = "game_over"
 	last_run_result = "The Masked Wanderer fell"
+	joystick_base.visible = false
+	_reset_joystick()
 	get_tree().paused = true
 	_show_result_screen(false)
 
 func _show_victory() -> void:
 	game_state = "victory"
 	last_run_result = "The curse recedes"
+	joystick_base.visible = false
+	_reset_joystick()
 	get_tree().paused = true
 	_show_result_screen(true)
 
@@ -362,6 +379,87 @@ func _update_hud() -> void:
 	hp_bar.value = health_value
 	xp_bar.max_value = xp_to_next
 	xp_bar.value = xp
+
+func _build_joystick() -> void:
+	joystick_base.position = Vector2(30, 770)
+	joystick_base.custom_minimum_size = Vector2(142, 142)
+	joystick_base.size = Vector2(142, 142)
+	joystick_base.visible = false
+	joystick_base.mouse_filter = Control.MOUSE_FILTER_STOP
+	joystick_base.process_mode = Node.PROCESS_MODE_ALWAYS
+	joystick_base.add_theme_stylebox_override("panel", _make_round_style(Color(0.18, 0.22, 0.2, 0.42), 70, Color(0.62, 1.0, 0.77, 0.42), 3))
+	joystick_base.gui_input.connect(_on_joystick_input)
+	ui_layer.add_child(joystick_base)
+
+	joystick_knob.position = Vector2(43, 43)
+	joystick_knob.custom_minimum_size = Vector2(56, 56)
+	joystick_knob.size = Vector2(56, 56)
+	joystick_knob.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	joystick_knob.add_theme_stylebox_override("panel", _make_round_style(Color(0.58, 1.0, 0.72, 0.76), 28, Color(0.9, 1.0, 0.86, 0.55), 2))
+	joystick_base.add_child(joystick_knob)
+
+func _make_round_style(fill: Color, radius: int, border_color: Color, border_width: int) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = fill
+	style.border_color = border_color
+	style.border_width_left = border_width
+	style.border_width_top = border_width
+	style.border_width_right = border_width
+	style.border_width_bottom = border_width
+	style.corner_radius_top_left = radius
+	style.corner_radius_top_right = radius
+	style.corner_radius_bottom_left = radius
+	style.corner_radius_bottom_right = radius
+	return style
+
+func _on_joystick_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		joystick_active = event.pressed
+		if joystick_active:
+			_update_joystick(event.position)
+		else:
+			_reset_joystick()
+		joystick_base.accept_event()
+	elif event is InputEventMouseMotion and joystick_active:
+		_update_joystick(event.position)
+		joystick_base.accept_event()
+	elif event is InputEventScreenTouch:
+		joystick_active = event.pressed
+		if joystick_active:
+			_update_joystick(event.position)
+		else:
+			_reset_joystick()
+		joystick_base.accept_event()
+	elif event is InputEventScreenDrag and joystick_active:
+		_update_joystick(event.position)
+		joystick_base.accept_event()
+
+func _update_joystick_mouse() -> void:
+	if not joystick_active:
+		return
+	if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		_reset_joystick()
+		return
+	var local_position := joystick_base.get_local_mouse_position()
+	_update_joystick(local_position)
+
+func _update_joystick(local_position: Vector2) -> void:
+	var center := joystick_base.size * 0.5
+	var offset := local_position - center
+	if offset.length() > joystick_radius:
+		offset = offset.normalized() * joystick_radius
+	joystick_direction = offset / joystick_radius
+	joystick_knob.position = center + offset - joystick_knob.size * 0.5
+	if player != null:
+		player.set_virtual_direction(joystick_direction)
+
+func _reset_joystick() -> void:
+	joystick_active = false
+	joystick_direction = Vector2.ZERO
+	if joystick_base != null and joystick_knob != null:
+		joystick_knob.position = joystick_base.size * 0.5 - joystick_knob.size * 0.5
+	if player != null:
+		player.set_virtual_direction(Vector2.ZERO)
 
 func _update_shadow_spirit(delta: float) -> void:
 	if not shadow_spirit_unlocked:
