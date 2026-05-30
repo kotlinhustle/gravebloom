@@ -18,8 +18,12 @@ var key_down := false
 var anim_time := 0.0
 
 @onready var art := $Art
+@onready var left_foot := $LeftFoot
+@onready var right_foot := $RightFoot
 @onready var base_art_position: Vector2 = art.position
 @onready var base_art_scale: Vector2 = art.scale
+@onready var base_left_foot_position: Vector2 = left_foot.position
+@onready var base_right_foot_position: Vector2 = right_foot.position
 
 func _physics_process(delta: float) -> void:
 	if is_dead:
@@ -37,13 +41,41 @@ func _physics_process(delta: float) -> void:
 	_animate_art(delta, direction)
 
 func _animate_art(delta: float, direction: Vector2) -> void:
-	anim_time += delta * (8.0 if direction.length() > 0.0 else 3.0)
-	var bob := sin(anim_time) * (3.0 if direction.length() > 0.0 else 1.4)
+	var moving: bool = direction.length() > 0.0
+	anim_time += delta * (13.5 if moving else 3.0)
+	var bob := sin(anim_time) * (4.2 if moving else 1.4)
 	art.position = base_art_position + Vector2(0, bob)
-	var lean: float = clamp(direction.x, -1.0, 1.0) * 0.05
-	art.rotation = lerp(art.rotation, lean, delta * 8.0)
-	var pulse := 1.0 + sin(anim_time * 0.75) * 0.015
+	var lean: float = clamp(direction.x, -1.0, 1.0) * (0.1 if moving else 0.035)
+	art.rotation = lerp(art.rotation, lean, delta * 10.0)
+	var pulse := 1.0 + sin(anim_time * 0.75) * (0.022 if moving else 0.015)
 	art.scale = base_art_scale * Vector2(pulse, 1.0 / pulse)
+	_animate_feet(delta, direction, moving)
+
+func _animate_feet(delta: float, direction: Vector2, moving: bool) -> void:
+	var stride: float = sin(anim_time)
+	var lift: float = abs(cos(anim_time))
+	var forward: Vector2 = direction
+	if forward.length() <= 0.0:
+		forward = Vector2.DOWN
+	else:
+		forward = forward.normalized()
+	var side := Vector2(-forward.y, forward.x)
+	if moving:
+		var step_distance: float = 9.0
+		var side_distance: float = 5.0
+		left_foot.position = base_left_foot_position + forward * (stride * step_distance) - side * side_distance + Vector2(0.0, -lift * 2.0)
+		right_foot.position = base_right_foot_position - forward * (stride * step_distance) + side * side_distance + Vector2(0.0, -(1.0 - lift) * 2.0)
+		left_foot.rotation = lerp(left_foot.rotation, direction.x * 0.22 + stride * 0.18, delta * 14.0)
+		right_foot.rotation = lerp(right_foot.rotation, direction.x * 0.22 - stride * 0.18, delta * 14.0)
+		left_foot.scale = Vector2.ONE * (0.94 + lift * 0.12)
+		right_foot.scale = Vector2.ONE * (1.06 - lift * 0.12)
+	else:
+		left_foot.position = left_foot.position.lerp(base_left_foot_position, delta * 8.0)
+		right_foot.position = right_foot.position.lerp(base_right_foot_position, delta * 8.0)
+		left_foot.rotation = lerp(left_foot.rotation, 0.0, delta * 8.0)
+		right_foot.rotation = lerp(right_foot.rotation, 0.0, delta * 8.0)
+		left_foot.scale = left_foot.scale.lerp(Vector2.ONE, delta * 8.0)
+		right_foot.scale = right_foot.scale.lerp(Vector2.ONE, delta * 8.0)
 
 func _get_keyboard_direction() -> Vector2:
 	var direction := Vector2.ZERO
