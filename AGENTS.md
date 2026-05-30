@@ -78,10 +78,9 @@ scripts/
 `Assets`:
 
 - Core sprites are generated bitmap assets with transparent backgrounds.
-- The current hero sprite was regenerated to avoid Hollow Knight-like horned-mask resemblance.
 - Keep generated originals outside the repo; commit only cropped project-ready PNG files in `assets/sprites/`.
 - Sprite scenes use `Sprite2D`; older polygon placeholders are hidden, not deleted yet, so we can tune scale/collisions safely.
-- Sprite juice is script-driven: player bob/lean without scale-pulsing, enemy crawl wobble, hit squash, and blade pulse all preserve each sprite's base scale.
+- Sprite juice is script-driven: player bob/lean, enemy crawl wobble, hit squash, and blade pulse all preserve each sprite's base scale.
 
 `Main`:
 

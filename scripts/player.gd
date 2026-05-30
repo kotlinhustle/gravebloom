@@ -1,7 +1,7 @@
 class_name Player
 extends CharacterBody2D
 
-var speed := 305.0
+var speed := 225.0
 var max_health := 100.0
 var health := 100.0
 var is_dead := false
@@ -34,12 +34,13 @@ func _physics_process(delta: float) -> void:
 	_animate_art(delta, direction)
 
 func _animate_art(delta: float, direction: Vector2) -> void:
-	anim_time += delta * (11.0 if direction.length() > 0.0 else 3.0)
-	var bob := sin(anim_time) * (4.0 if direction.length() > 0.0 else 1.4)
+	anim_time += delta * (8.0 if direction.length() > 0.0 else 3.0)
+	var bob := sin(anim_time) * (3.0 if direction.length() > 0.0 else 1.4)
 	art.position = base_art_position + Vector2(0, bob)
 	var lean: float = clamp(direction.x, -1.0, 1.0) * 0.05
 	art.rotation = lerp(art.rotation, lean, delta * 8.0)
-	art.scale = base_art_scale
+	var pulse := 1.0 + sin(anim_time * 0.75) * 0.015
+	art.scale = base_art_scale * Vector2(pulse, 1.0 / pulse)
 
 func _get_keyboard_direction() -> Vector2:
 	var direction := Vector2.ZERO
