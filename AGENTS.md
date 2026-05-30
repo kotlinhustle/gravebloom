@@ -99,6 +99,7 @@ scripts/
 - Owns enemy and XP shard lists.
 - Updates XP collection, level-ups, upgrade UI, HUD, XP bar, result screens, and enemy contact damage.
 - Handles screen shake, XP sparkles, and Shadow Spirit secondary weapon.
+- Handles Gravebloom Nova ultimate charge, UI button, keyboard trigger, radial damage, knockback, and burst FX.
 
 `Player`:
 
@@ -149,6 +150,7 @@ scripts/
 - Hits now show damage numbers, enemy flash/squash, knockback, and death bursts.
 - Runs now have a start screen, XP bar, 3:00 survival goal, miniboss event, victory screen, death screen, and restart button.
 - Relics can unlock Shadow Spirit, a secondary auto-skill that cuts through enemies in a beam.
+- Gravebloom Nova is an ultimate: it charges over time, can be fired with the `NOVA` button or `Space`, and blasts nearby enemies.
 
 ## Near-Term Roadmap
 

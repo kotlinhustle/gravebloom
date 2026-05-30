@@ -14,6 +14,9 @@ const MINIBOSS_TIME := 150.0
 const ARENA_LIMIT_X := 2060.0
 const ARENA_LIMIT_Y := 1360.0
 const MAX_ENEMIES := 42
+const ULTIMATE_COOLDOWN := 22.0
+const ULTIMATE_RADIUS := 430.0
+const ULTIMATE_DAMAGE := 9
 
 var player: Player
 var living_blade: Node2D
@@ -41,6 +44,8 @@ var joystick_radius := 56.0
 var ambient_glows: Array[CanvasItem] = []
 var fog_wisps: Array[CanvasItem] = []
 var ambience_time := 0.0
+var ultimate_charge := 0.0
+var ultimate_ready := false
 
 @onready var world := Node2D.new()
 @onready var fx_layer := Node2D.new()
@@ -48,6 +53,8 @@ var ambience_time := 0.0
 @onready var hud := Label.new()
 @onready var hp_bar := ProgressBar.new()
 @onready var xp_bar := ProgressBar.new()
+@onready var ultimate_bar := ProgressBar.new()
+@onready var ultimate_button := Button.new()
 @onready var joystick_base := Panel.new()
 @onready var joystick_knob := Panel.new()
 @onready var upgrade_panel := PanelContainer.new()
@@ -80,11 +87,17 @@ func _process(delta: float) -> void:
 		_spawn_enemy_wave()
 		spawn_timer = max(0.42, 1.45 - elapsed * 0.005)
 	living_blade.tick(delta, enemies)
+	_update_ultimate(delta)
 	_update_shadow_spirit(delta)
 	_update_shards(delta)
 	_check_enemy_contact(delta)
 	_keep_player_inside_arena()
 	_update_hud()
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_SPACE or event.physical_keycode == KEY_SPACE:
+			_cast_ultimate()
 
 func _build_arena() -> void:
 	var bg := ColorRect.new()
@@ -339,6 +352,7 @@ func _build_ui() -> void:
 	xp_bar.value = xp
 	xp_bar.show_percentage = false
 	ui_layer.add_child(xp_bar)
+	_build_ultimate_ui()
 	_build_joystick()
 	upgrade_panel.visible = false
 	upgrade_panel.process_mode = Node.PROCESS_MODE_ALWAYS
@@ -358,6 +372,8 @@ func _show_start_screen() -> void:
 	game_state = "start"
 	get_tree().paused = true
 	joystick_base.visible = false
+	ultimate_button.visible = false
+	ultimate_bar.visible = false
 	overlay_panel.visible = true
 	_clear_container(overlay_list)
 	_add_overlay_label("GRAVEBLOOM", 42)
@@ -369,6 +385,8 @@ func _start_run() -> void:
 	_reset_run()
 	overlay_panel.visible = false
 	joystick_base.visible = true
+	ultimate_button.visible = true
+	ultimate_bar.visible = true
 	game_state = "running"
 	get_tree().paused = false
 
@@ -386,6 +404,9 @@ func _reset_run() -> void:
 	shadow_spirit_timer = 3.0
 	shadow_spirit_cooldown = 5.5
 	shadow_spirit_damage = 2
+	ultimate_charge = 0.0
+	ultimate_ready = false
+	_update_ultimate_ui()
 	_reset_joystick()
 	_stop_screen_shake()
 	_spawn_player()
@@ -526,6 +547,8 @@ func _level_up() -> void:
 	paused_for_upgrade = true
 	game_state = "upgrade"
 	joystick_base.visible = false
+	ultimate_button.visible = false
+	ultimate_bar.visible = false
 	_reset_joystick()
 	get_tree().paused = true
 	_show_upgrades()
@@ -554,6 +577,8 @@ func _on_upgrade_button_pressed(button: Button) -> void:
 		call(method_name)
 	upgrade_panel.visible = false
 	joystick_base.visible = true
+	ultimate_button.visible = true
+	ultimate_bar.visible = true
 	paused_for_upgrade = false
 	game_state = "running"
 	get_tree().paused = false
@@ -582,6 +607,8 @@ func _show_game_over() -> void:
 	game_state = "game_over"
 	last_run_result = "The Masked Wanderer fell"
 	joystick_base.visible = false
+	ultimate_button.visible = false
+	ultimate_bar.visible = false
 	_reset_joystick()
 	get_tree().paused = true
 	_show_result_screen(false)
@@ -590,6 +617,8 @@ func _show_victory() -> void:
 	game_state = "victory"
 	last_run_result = "The curse recedes"
 	joystick_base.visible = false
+	ultimate_button.visible = false
+	ultimate_bar.visible = false
 	_reset_joystick()
 	get_tree().paused = true
 	_show_result_screen(true)
@@ -615,6 +644,77 @@ func _update_hud() -> void:
 	hp_bar.value = health_value
 	xp_bar.max_value = xp_to_next
 	xp_bar.value = xp
+	_update_ultimate_ui()
+
+func _build_ultimate_ui() -> void:
+	ultimate_bar.position = Vector2(350, 850)
+	ultimate_bar.size = Vector2(154, 16)
+	ultimate_bar.max_value = ULTIMATE_COOLDOWN
+	ultimate_bar.value = 0.0
+	ultimate_bar.show_percentage = false
+	ui_layer.add_child(ultimate_bar)
+	ultimate_button.position = Vector2(378, 766)
+	ultimate_button.size = Vector2(104, 72)
+	ultimate_button.text = "NOVA"
+	ultimate_button.disabled = true
+	ultimate_button.process_mode = Node.PROCESS_MODE_ALWAYS
+	ultimate_button.pressed.connect(_cast_ultimate)
+	ui_layer.add_child(ultimate_button)
+
+func _update_ultimate(delta: float) -> void:
+	if ultimate_ready:
+		return
+	ultimate_charge = min(ULTIMATE_COOLDOWN, ultimate_charge + delta)
+	if ultimate_charge >= ULTIMATE_COOLDOWN:
+		ultimate_ready = true
+		_flash_overlay_text("Gravebloom Nova ready")
+		CombatFxScript.ring(fx_layer, player.global_position, Color(0.58, 1.0, 0.72, 0.65), 130.0, 0.42)
+	_update_ultimate_ui()
+
+func _update_ultimate_ui() -> void:
+	if ultimate_bar == null or ultimate_button == null:
+		return
+	ultimate_bar.value = ultimate_charge
+	ultimate_button.disabled = not ultimate_ready or game_state != "running"
+	ultimate_button.modulate = Color.WHITE if ultimate_ready else Color(0.62, 0.66, 0.62, 0.82)
+
+func _cast_ultimate() -> void:
+	if game_state != "running" or not ultimate_ready or player == null:
+		return
+	ultimate_ready = false
+	ultimate_charge = 0.0
+	var origin := player.global_position
+	_flash_overlay_text("GRAVEBLOOM NOVA")
+	_start_screen_shake(0.42, 13.0)
+	CombatFxScript.ring(fx_layer, origin, Color(0.78, 1.0, 0.72, 0.95), ULTIMATE_RADIUS, 0.55)
+	CombatFxScript.ring(fx_layer, origin, Color(0.95, 0.78, 1.0, 0.68), ULTIMATE_RADIUS * 0.62, 0.42)
+	CombatFxScript.burst(fx_layer, origin, Color(0.72, 1.0, 0.78, 0.92), 42)
+	_add_ultimate_lashes(origin)
+	var targets := enemies.duplicate()
+	for enemy in targets:
+		if not is_instance_valid(enemy):
+			continue
+		var distance := origin.distance_to(enemy.global_position)
+		if distance <= ULTIMATE_RADIUS:
+			var damage := ULTIMATE_DAMAGE
+			if enemy.is_miniboss:
+				damage = int(ceil(float(ULTIMATE_DAMAGE) * 0.65))
+			enemy.take_damage(damage, origin, 520.0)
+	_update_ultimate_ui()
+
+func _add_ultimate_lashes(origin: Vector2) -> void:
+	for i in range(18):
+		var lash := Line2D.new()
+		lash.width = randf_range(3.0, 7.0)
+		lash.default_color = Color(0.56, 1.0, 0.75, randf_range(0.5, 0.86))
+		var angle := TAU * float(i) / 18.0 + randf_range(-0.08, 0.08)
+		var start := Vector2.RIGHT.rotated(angle) * randf_range(26.0, 70.0)
+		var end := Vector2.RIGHT.rotated(angle + randf_range(-0.18, 0.18)) * randf_range(210.0, ULTIMATE_RADIUS)
+		lash.points = PackedVector2Array([origin + start, origin + (start + end) * 0.52, origin + end])
+		fx_layer.add_child(lash)
+		var tween := create_tween()
+		tween.tween_property(lash, "modulate:a", 0.0, 0.36)
+		tween.tween_callback(lash.queue_free)
 
 func _build_joystick() -> void:
 	joystick_base.position = Vector2(30, 770)
