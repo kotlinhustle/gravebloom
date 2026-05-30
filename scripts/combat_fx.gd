@@ -55,3 +55,20 @@ static func ring(parent: Node, position: Vector2, color: Color, radius: float, d
 	tween.tween_property(ring_line, "scale", Vector2.ONE * (radius / 8.0), duration)
 	tween.tween_property(ring_line, "modulate:a", 0.0, duration)
 	tween.chain().tween_callback(ring_line.queue_free)
+
+static func sparkle(parent: Node, position: Vector2, color: Color, duration: float = 0.22) -> void:
+	var dot := Polygon2D.new()
+	dot.color = color
+	var shape := PackedVector2Array()
+	shape.append(Vector2(0, -2))
+	shape.append(Vector2(2, 0))
+	shape.append(Vector2(0, 2))
+	shape.append(Vector2(-2, 0))
+	dot.polygon = shape
+	dot.global_position = position
+	parent.add_child(dot)
+	var tween := parent.create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(dot, "scale", Vector2.ZERO, duration)
+	tween.tween_property(dot, "modulate:a", 0.0, duration)
+	tween.chain().tween_callback(dot.queue_free)

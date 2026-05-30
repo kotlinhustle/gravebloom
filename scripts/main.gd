@@ -23,11 +23,18 @@ var paused_for_upgrade := false
 var game_state := "start"
 var miniboss_spawned := false
 var last_run_result := ""
+var shadow_spirit_unlocked := false
+var shadow_spirit_timer := 3.0
+var shadow_spirit_cooldown := 5.5
+var shadow_spirit_damage := 2
+var shake_time := 0.0
+var shake_intensity := 0.0
 
 @onready var world := Node2D.new()
 @onready var fx_layer := Node2D.new()
 @onready var ui_layer := CanvasLayer.new()
 @onready var hud := Label.new()
+@onready var hp_bar := ProgressBar.new()
 @onready var xp_bar := ProgressBar.new()
 @onready var upgrade_panel := PanelContainer.new()
 @onready var upgrade_list := VBoxContainer.new()
@@ -43,6 +50,7 @@ func _ready() -> void:
 	_show_start_screen()
 
 func _process(delta: float) -> void:
+	_update_screen_shake(delta)
 	if game_state != "running":
 		return
 	elapsed += delta
@@ -56,6 +64,7 @@ func _process(delta: float) -> void:
 		_spawn_enemy_wave()
 		spawn_timer = max(0.18, 1.0 - elapsed * 0.008)
 	living_blade.tick(delta, enemies)
+	_update_shadow_spirit(delta)
 	_update_shards(delta)
 	_check_enemy_contact(delta)
 	_update_hud()
@@ -89,8 +98,14 @@ func _build_ui() -> void:
 	hud.add_theme_font_size_override("font_size", 18)
 	hud.add_theme_color_override("font_color", Color(0.88, 0.84, 0.73))
 	ui_layer.add_child(hud)
-	xp_bar.position = Vector2(18, 86)
-	xp_bar.size = Vector2(280, 18)
+	hp_bar.position = Vector2(18, 76)
+	hp_bar.size = Vector2(300, 18)
+	hp_bar.max_value = 100.0
+	hp_bar.value = 100.0
+	hp_bar.show_percentage = false
+	ui_layer.add_child(hp_bar)
+	xp_bar.position = Vector2(18, 102)
+	xp_bar.size = Vector2(300, 18)
 	xp_bar.max_value = xp_to_next
 	xp_bar.value = xp
 	xp_bar.show_percentage = false
@@ -114,9 +129,9 @@ func _show_start_screen() -> void:
 	get_tree().paused = true
 	overlay_panel.visible = true
 	_clear_container(overlay_list)
-	_add_overlay_label("Gravebloom", 34)
-	_add_overlay_label("Survive 3:00 in the cursed ruins.", 18)
-	_add_overlay_label("Move with WASD, arrows, or mouse drag. The Living Blade hunts by itself.", 14)
+	_add_overlay_label("GRAVEBLOOM", 40)
+	_add_overlay_label("Survive 3:00 in the cursed ruins.", 20)
+	_add_overlay_label("The Living Blade hunts for you. Keep moving.", 15)
 	_add_overlay_button("Start Run", _start_run)
 
 func _start_run() -> void:
@@ -135,6 +150,11 @@ func _reset_run() -> void:
 	paused_for_upgrade = false
 	miniboss_spawned = false
 	last_run_result = ""
+	shadow_spirit_unlocked = false
+	shadow_spirit_timer = 3.0
+	shadow_spirit_cooldown = 5.5
+	shadow_spirit_damage = 2
+	_stop_screen_shake()
 	_spawn_player()
 	_update_hud()
 
@@ -173,12 +193,14 @@ func _spawn_miniboss() -> void:
 	_spawn_enemy(false, true)
 	CombatFxScript.ring(fx_layer, player.global_position, Color(0.9, 0.55, 0.72, 0.9), 260.0, 0.7)
 	_flash_overlay_text("A Grave Warden wakes")
+	_start_screen_shake(0.34, 8.0)
 
 func _on_enemy_damaged(enemy_position: Vector2, amount: int) -> void:
 	CombatFxScript.damage_number(fx_layer, enemy_position, amount)
 
 func _on_enemy_died(enemy_position: Vector2, xp_value: int = 1, was_miniboss: bool = false) -> void:
 	CombatFxScript.burst(fx_layer, enemy_position, Color(0.55, 1.0, 0.72, 0.9), 18 if was_miniboss else 12)
+	_start_screen_shake(0.18 if was_miniboss else 0.06, 7.0 if was_miniboss else 2.5)
 	var shard: XPShard = XPShardScene.instantiate()
 	shard.position = enemy_position
 	shard.value = xp_value
@@ -197,6 +219,8 @@ func _update_shards(delta: float) -> void:
 		var distance := shard.global_position.distance_to(player.global_position)
 		if distance < shard_pull_range:
 			shard.global_position = shard.global_position.move_toward(player.global_position, 320.0 * delta)
+			if randf() < 0.28:
+				CombatFxScript.sparkle(fx_layer, shard.global_position, Color(0.58, 1.0, 0.78, 0.72), 0.2)
 		if distance < 22.0:
 			xp += shard.value
 			shard.queue_free()
@@ -243,15 +267,16 @@ func _show_upgrades() -> void:
 	_clear_container(upgrade_list)
 	var title := _make_label("Choose a relic", 26)
 	upgrade_list.add_child(title)
-	_add_upgrade_button("Sharpen Living Blade", "_upgrade_damage")
-	_add_upgrade_button("Quicken the Curse", "_upgrade_cooldown")
-	_add_upgrade_button("Widen Pale Reach", "_upgrade_range")
+	_add_upgrade_button("Sharpen Living Blade", "More blade damage", "_upgrade_damage")
+	_add_upgrade_button("Quicken the Curse", "Shorter blade cooldown", "_upgrade_cooldown")
+	_add_upgrade_button("Widen Pale Reach", "Blade hunts farther", "_upgrade_range")
+	_add_upgrade_button("Call Shadow Spirit", "A spirit cuts through crowds", "_upgrade_shadow_spirit")
 	upgrade_panel.visible = true
 
-func _add_upgrade_button(text: String, method_name: StringName) -> void:
+func _add_upgrade_button(text: String, description: String, method_name: StringName) -> void:
 	var button := Button.new()
-	button.text = text
-	button.custom_minimum_size = Vector2(280, 48)
+	button.text = "%s\n%s" % [text, description]
+	button.custom_minimum_size = Vector2(380, 58)
 	button.set_meta("upgrade_method", String(method_name))
 	button.pressed.connect(_on_upgrade_button_pressed.bind(button))
 	upgrade_list.add_child(button)
@@ -273,6 +298,15 @@ func _upgrade_cooldown() -> void:
 
 func _upgrade_range() -> void:
 	living_blade.widen_reach()
+
+func _upgrade_shadow_spirit() -> void:
+	if shadow_spirit_unlocked:
+		shadow_spirit_damage += 1
+		shadow_spirit_cooldown = max(2.5, shadow_spirit_cooldown - 0.45)
+	else:
+		shadow_spirit_unlocked = true
+		shadow_spirit_timer = 0.35
+	_flash_overlay_text("Shadow Spirit awakened")
 
 func _show_game_over() -> void:
 	if game_state == "game_over":
@@ -301,14 +335,93 @@ func _update_hud() -> void:
 	var health_value := 0
 	if player != null:
 		health_value = int(ceil(player.health))
-	hud.text = "Gravebloom\nHP: %d  Level: %d  Time: %s\nSurvive: %s" % [
-		health_value,
+	hud.text = "GRAVEBLOOM\nLV %d   TIME %s   LEFT %s" % [
 		level,
 		_format_time(elapsed),
 		_format_time(remaining)
 	]
+	hp_bar.value = health_value
 	xp_bar.max_value = xp_to_next
 	xp_bar.value = xp
+
+func _update_shadow_spirit(delta: float) -> void:
+	if not shadow_spirit_unlocked:
+		return
+	shadow_spirit_timer -= delta
+	if shadow_spirit_timer > 0.0:
+		return
+	var target := _nearest_enemy_for_spirit()
+	if target == null:
+		shadow_spirit_timer = 0.4
+		return
+	_cast_shadow_spirit(target.global_position)
+	shadow_spirit_timer = shadow_spirit_cooldown
+
+func _nearest_enemy_for_spirit() -> Node2D:
+	var best: Node2D = null
+	var best_distance := 420.0
+	for enemy in enemies:
+		if not is_instance_valid(enemy):
+			continue
+		var distance := player.global_position.distance_to(enemy.global_position)
+		if distance < best_distance:
+			best_distance = distance
+			best = enemy
+	return best
+
+func _cast_shadow_spirit(target_position: Vector2) -> void:
+	var start := player.global_position
+	var direction := start.direction_to(target_position)
+	if direction.length() <= 0.0:
+		return
+	var end := start + direction * 520.0
+	var spirit := Line2D.new()
+	spirit.width = 14.0
+	spirit.default_color = Color(0.44, 1.0, 0.78, 0.72)
+	spirit.points = PackedVector2Array([start, end])
+	fx_layer.add_child(spirit)
+	var tween := create_tween()
+	tween.tween_property(spirit, "modulate:a", 0.0, 0.34)
+	tween.tween_callback(spirit.queue_free)
+	CombatFxScript.ring(fx_layer, start, Color(0.45, 1.0, 0.76, 0.55), 90.0, 0.28)
+	for enemy in enemies:
+		if not is_instance_valid(enemy):
+			continue
+		var distance_to_beam := _distance_to_segment(enemy.global_position, start, end)
+		if distance_to_beam <= 34.0:
+			enemy.take_damage(shadow_spirit_damage, start, 180.0)
+	_start_screen_shake(0.1, 3.5)
+
+func _distance_to_segment(point: Vector2, start: Vector2, end: Vector2) -> float:
+	var segment := end - start
+	var length_squared := segment.length_squared()
+	if length_squared <= 0.0:
+		return point.distance_to(start)
+	var t: float = clamp((point - start).dot(segment) / length_squared, 0.0, 1.0)
+	var projection := start + segment * t
+	return point.distance_to(projection)
+
+func _start_screen_shake(duration: float, intensity: float) -> void:
+	shake_time = max(shake_time, duration)
+	shake_intensity = max(shake_intensity, intensity)
+
+func _stop_screen_shake() -> void:
+	shake_time = 0.0
+	shake_intensity = 0.0
+	world.position = Vector2.ZERO
+	fx_layer.position = Vector2.ZERO
+
+func _update_screen_shake(delta: float) -> void:
+	if shake_time <= 0.0:
+		if world.position != Vector2.ZERO:
+			world.position = Vector2.ZERO
+			fx_layer.position = Vector2.ZERO
+		return
+	shake_time -= delta
+	var offset := Vector2(randf_range(-shake_intensity, shake_intensity), randf_range(-shake_intensity, shake_intensity))
+	world.position = offset
+	fx_layer.position = offset
+	shake_intensity = max(0.0, shake_intensity - delta * 18.0)
 
 func _format_time(time_value: float) -> String:
 	var total_seconds: int = int(max(0.0, floor(time_value)))

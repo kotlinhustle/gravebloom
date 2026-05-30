@@ -74,6 +74,7 @@ scripts/
 - Spawns a miniboss near the end of the 3-minute run.
 - Owns enemy and XP shard lists.
 - Updates XP collection, level-ups, upgrade UI, HUD, XP bar, result screens, and enemy contact damage.
+- Handles screen shake, XP sparkles, and Shadow Spirit secondary weapon.
 
 `Player`:
 
@@ -104,7 +105,7 @@ scripts/
 
 `CombatFx`:
 
-- Shared static helper for damage numbers, death bursts, and level-up rings.
+- Shared static helper for damage numbers, death bursts, level-up rings, and small sparkles.
 - Keep FX simple and procedural until the game loop settles.
 
 `XPShard`:
@@ -120,6 +121,7 @@ scripts/
 - The green object around the hero is the Living Blade; it now flies out to hunt enemies and returns.
 - Hits now show damage numbers, enemy flash/squash, knockback, and death bursts.
 - Runs now have a start screen, XP bar, 3:00 survival goal, miniboss event, victory screen, death screen, and restart button.
+- Relics can unlock Shadow Spirit, a secondary auto-skill that cuts through enemies in a beam.
 
 ## Near-Term Roadmap
 
