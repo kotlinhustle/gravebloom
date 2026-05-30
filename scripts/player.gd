@@ -14,8 +14,13 @@ var key_left := false
 var key_right := false
 var key_up := false
 var key_down := false
+var anim_time := 0.0
 
-func _physics_process(_delta: float) -> void:
+@onready var art := $Art
+@onready var base_art_position: Vector2 = art.position
+@onready var base_art_scale: Vector2 = art.scale
+
+func _physics_process(delta: float) -> void:
 	if is_dead:
 		velocity = Vector2.ZERO
 		return
@@ -26,6 +31,16 @@ func _physics_process(_delta: float) -> void:
 		direction = keyboard_direction
 	velocity = direction * speed
 	move_and_slide()
+	_animate_art(delta, direction)
+
+func _animate_art(delta: float, direction: Vector2) -> void:
+	anim_time += delta * (8.0 if direction.length() > 0.0 else 3.0)
+	var bob := sin(anim_time) * (3.0 if direction.length() > 0.0 else 1.4)
+	art.position = base_art_position + Vector2(0, bob)
+	var lean: float = clamp(direction.x, -1.0, 1.0) * 0.05
+	art.rotation = lerp(art.rotation, lean, delta * 8.0)
+	var pulse := 1.0 + sin(anim_time * 0.75) * 0.015
+	art.scale = base_art_scale * Vector2(pulse, 1.0 / pulse)
 
 func _get_keyboard_direction() -> Vector2:
 	var direction := Vector2.ZERO
@@ -108,6 +123,9 @@ func take_damage(amount: float) -> void:
 	health = max(0.0, health - amount)
 	modulate = Color(1.0, 0.55, 0.55)
 	var tween := create_tween()
+	tween.set_parallel(true)
 	tween.tween_property(self, "modulate", Color.WHITE, 0.12)
+	tween.tween_property(art, "scale", base_art_scale * Vector2(1.15, 0.86), 0.06)
+	tween.chain().tween_property(art, "scale", base_art_scale, 0.1)
 	if health <= 0.0:
 		is_dead = true

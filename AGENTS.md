@@ -78,6 +78,7 @@ scripts/
 - Core sprites are generated bitmap assets with transparent backgrounds.
 - Keep generated originals outside the repo; commit only cropped project-ready PNG files in `assets/sprites/`.
 - Sprite scenes use `Sprite2D`; older polygon placeholders are hidden, not deleted yet, so we can tune scale/collisions safely.
+- Sprite juice is script-driven: player bob/lean, enemy crawl wobble, hit squash, and blade pulse all preserve each sprite's base scale.
 
 `Main`:
 

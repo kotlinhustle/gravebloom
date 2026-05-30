@@ -15,6 +15,7 @@ var state := "orbit"
 var has_hit_target := false
 
 @onready var blade_sprite := $Blade
+@onready var base_blade_scale: Vector2 = blade_sprite.scale
 
 func setup(player: Node2D, effects_parent: Node2D) -> void:
 	owner_player = player
@@ -60,7 +61,8 @@ func _update_orbit(delta: float) -> void:
 	var orbit_offset := Vector2.RIGHT.rotated(visual_angle) * 34.0
 	global_position = owner_player.global_position + orbit_offset
 	rotation = visual_angle + PI / 2.0
-	blade_sprite.scale = blade_sprite.scale.move_toward(Vector2.ONE, delta * 8.0)
+	var pulse := 1.0 + sin(visual_angle * 2.0) * 0.08
+	blade_sprite.scale = blade_sprite.scale.move_toward(base_blade_scale * Vector2(pulse, 1.0 / pulse), delta * 8.0)
 
 func _update_dash(delta: float) -> void:
 	if not is_instance_valid(target_enemy):
@@ -89,7 +91,7 @@ func _hit_target() -> void:
 	has_hit_target = true
 	target_enemy.take_damage(damage, owner_player.global_position, 260.0)
 	_show_impact(target_enemy.global_position)
-	blade_sprite.scale = Vector2(1.45, 0.72)
+	blade_sprite.scale = base_blade_scale * Vector2(1.55, 0.7)
 
 func _begin_return() -> void:
 	state = "return"

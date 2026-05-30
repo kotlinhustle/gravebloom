@@ -184,6 +184,7 @@ func _spawn_enemy(is_brute: bool, is_miniboss: bool) -> void:
 		enemy.scale = Vector2.ONE * 2.25
 		enemy.xp_value = 12
 	_set_enemy_art(enemy, is_brute, is_miniboss)
+	enemy.base_scale = enemy.scale
 	enemy.health = enemy.max_health
 	enemy.position = player.position + Vector2.RIGHT.rotated(randf() * TAU) * randf_range(360.0, 520.0)
 	enemy.target = player
