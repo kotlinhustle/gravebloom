@@ -22,6 +22,7 @@ Start run -> move -> kite enemies -> auto-attack -> collect XP shards -> level u
 - Engine: Godot 4.6.3.
 - Renderer target: Compatibility / GL Compatibility.
 - Primary layout target: Telegram mobile portrait, 540x960 viewport.
+- Mobile readability currently uses enlarged sprite scales and larger HP/XP bars; keep Telegram as the truth over desktop sizing.
 - Language: GDScript only.
 - No AI gameplay code.
 - Repository: https://github.com/kotlinhustle/gravebloom

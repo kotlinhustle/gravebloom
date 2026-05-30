@@ -9,7 +9,7 @@ script = ExtResource("1_xp")
 [node name="Art" type="Sprite2D" parent="."]
 z_index = 2
 texture = ExtResource("2_xp_sprite")
-scale = Vector2(0.09, 0.09)
+scale = Vector2(0.17, 0.17)
 
 [node name="Glow" type="Polygon2D" parent="."]
 visible = false

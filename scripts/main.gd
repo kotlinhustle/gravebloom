@@ -98,17 +98,17 @@ func _build_ui() -> void:
 	add_child(ui_layer)
 	ui_layer.process_mode = Node.PROCESS_MODE_ALWAYS
 	hud.position = Vector2(18, 18)
-	hud.add_theme_font_size_override("font_size", 20)
+	hud.add_theme_font_size_override("font_size", 24)
 	hud.add_theme_color_override("font_color", Color(0.88, 0.84, 0.73))
 	ui_layer.add_child(hud)
-	hp_bar.position = Vector2(18, 86)
-	hp_bar.size = Vector2(504, 24)
+	hp_bar.position = Vector2(18, 96)
+	hp_bar.size = Vector2(504, 32)
 	hp_bar.max_value = 100.0
 	hp_bar.value = 100.0
 	hp_bar.show_percentage = false
 	ui_layer.add_child(hp_bar)
-	xp_bar.position = Vector2(18, 118)
-	xp_bar.size = Vector2(504, 20)
+	xp_bar.position = Vector2(18, 138)
+	xp_bar.size = Vector2(504, 26)
 	xp_bar.max_value = xp_to_next
 	xp_bar.value = xp
 	xp_bar.show_percentage = false
@@ -199,13 +199,13 @@ func _set_enemy_art(enemy: Enemy, is_brute: bool, is_miniboss: bool) -> void:
 		return
 	if is_miniboss:
 		art.texture = GraveWardenTexture
-		art.scale = Vector2(0.12, 0.12)
+		art.scale = Vector2(0.2, 0.2)
 	elif is_brute:
 		art.texture = EnemyBruteTexture
-		art.scale = Vector2(0.11, 0.11)
+		art.scale = Vector2(0.19, 0.19)
 	else:
 		art.texture = EnemyCrawlerTexture
-		art.scale = Vector2(0.16, 0.16)
+		art.scale = Vector2(0.28, 0.28)
 
 func _spawn_miniboss() -> void:
 	miniboss_spawned = true
@@ -265,7 +265,7 @@ func _check_enemy_contact(delta: float) -> void:
 	for enemy in enemies:
 		if not is_instance_valid(enemy):
 			continue
-		if enemy.global_position.distance_to(player.global_position) < 30.0:
+		if enemy.global_position.distance_to(player.global_position) < 42.0:
 			var damage := 32.0 if enemy.is_miniboss else 18.0
 			player.take_damage(damage * delta)
 			if player.is_dead:
