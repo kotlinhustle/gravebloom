@@ -47,6 +47,8 @@ C:\Users\user\Downloads\Godot_v4.6.3-stable_win64.exe\Godot_v4.6.3-stable_win64_
 - Do not commit `.godot/`, `.vscode/`, `.import`, export builds, or local editor settings.
 - For Telegram/WebView cache problems, deploy versioned Pages payload filenames on `gh-pages`
   (for example `game-<commit>.js/.pck/.wasm`) and point `index.html` `executable` to that prefix.
+- If Telegram appears stuck on an older cached `index.html`, also overwrite previous `game-*.pck`
+  payloads on `gh-pages` with the latest exported `.pck` so cached HTML still loads current gameplay.
 
 ## Current Structure
 
