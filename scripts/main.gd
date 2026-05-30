@@ -647,17 +647,19 @@ func _update_hud() -> void:
 	_update_ultimate_ui()
 
 func _build_ultimate_ui() -> void:
-	ultimate_bar.position = Vector2(350, 850)
-	ultimate_bar.size = Vector2(154, 16)
+	ultimate_bar.position = Vector2(348, 878)
+	ultimate_bar.size = Vector2(160, 18)
 	ultimate_bar.max_value = ULTIMATE_COOLDOWN
 	ultimate_bar.value = 0.0
 	ultimate_bar.show_percentage = false
+	ultimate_bar.process_mode = Node.PROCESS_MODE_ALWAYS
 	ui_layer.add_child(ultimate_bar)
-	ultimate_button.position = Vector2(378, 766)
-	ultimate_button.size = Vector2(104, 72)
-	ultimate_button.text = "NOVA"
-	ultimate_button.disabled = true
+	ultimate_button.position = Vector2(358, 786)
+	ultimate_button.size = Vector2(140, 84)
+	ultimate_button.text = "NOVA\n0%"
+	ultimate_button.disabled = false
 	ultimate_button.process_mode = Node.PROCESS_MODE_ALWAYS
+	ultimate_button.add_theme_font_size_override("font_size", 22)
 	ultimate_button.pressed.connect(_cast_ultimate)
 	ui_layer.add_child(ultimate_button)
 
@@ -675,11 +677,16 @@ func _update_ultimate_ui() -> void:
 	if ultimate_bar == null or ultimate_button == null:
 		return
 	ultimate_bar.value = ultimate_charge
-	ultimate_button.disabled = not ultimate_ready or game_state != "running"
-	ultimate_button.modulate = Color.WHITE if ultimate_ready else Color(0.62, 0.66, 0.62, 0.82)
+	var charge_percent := int(floor((ultimate_charge / ULTIMATE_COOLDOWN) * 100.0))
+	ultimate_button.text = "NOVA\nREADY" if ultimate_ready else "NOVA\n%d%%" % charge_percent
+	ultimate_button.disabled = game_state != "running"
+	ultimate_button.modulate = Color.WHITE if ultimate_ready else Color(0.78, 0.86, 0.78, 0.95)
 
 func _cast_ultimate() -> void:
-	if game_state != "running" or not ultimate_ready or player == null:
+	if game_state != "running" or player == null:
+		return
+	if not ultimate_ready:
+		_flash_overlay_text("Nova charging %d%%" % int(floor((ultimate_charge / ULTIMATE_COOLDOWN) * 100.0)))
 		return
 	ultimate_ready = false
 	ultimate_charge = 0.0

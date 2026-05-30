@@ -150,7 +150,7 @@ scripts/
 - Hits now show damage numbers, enemy flash/squash, knockback, and death bursts.
 - Runs now have a start screen, XP bar, 3:00 survival goal, miniboss event, victory screen, death screen, and restart button.
 - Relics can unlock Shadow Spirit, a secondary auto-skill that cuts through enemies in a beam.
-- Gravebloom Nova is an ultimate: it charges over time, can be fired with the `NOVA` button or `Space`, and blasts nearby enemies.
+- Gravebloom Nova is an ultimate: it charges over time, shows a visible `NOVA` button with percent progress, can be fired with the button or `Space`, and blasts nearby enemies.
 
 ## Near-Term Roadmap
 
