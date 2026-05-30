@@ -45,6 +45,8 @@ C:\Users\user\Downloads\Godot_v4.6.3-stable_win64.exe\Godot_v4.6.3-stable_win64_
 
 - Push successful milestones to GitHub.
 - Do not commit `.godot/`, `.vscode/`, `.import`, export builds, or local editor settings.
+- For Telegram/WebView cache problems, deploy versioned Pages payload filenames on `gh-pages`
+  (for example `game-<commit>.js/.pck/.wasm`) and point `index.html` `executable` to that prefix.
 
 ## Current Structure
 
