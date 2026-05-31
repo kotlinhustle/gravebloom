@@ -55,6 +55,7 @@ var thorn_bloom_unlocked := false
 var thorn_bloom_cooldown := 0.0
 var vampirism_unlocked := false
 var kill_count := 0
+var ultimate_pointer_active := false
 
 @onready var world := Node2D.new()
 @onready var fx_layer := Node2D.new()
@@ -109,6 +110,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_SPACE or event.physical_keycode == KEY_SPACE:
 			_cast_ultimate()
+
+func _input(event: InputEvent) -> void:
+	if _consume_ultimate_pointer(event):
+		get_viewport().set_input_as_handled()
 
 func _build_arena() -> void:
 	var bg := ColorRect.new()
@@ -918,13 +923,33 @@ func _build_ultimate_ui() -> void:
 	ultimate_button.mouse_filter = Control.MOUSE_FILTER_STOP
 	ultimate_button.focus_mode = Control.FOCUS_NONE
 	ultimate_button.add_theme_font_size_override("font_size", 22)
-	ultimate_button.gui_input.connect(_on_ultimate_button_input)
 	ui_layer.add_child(ultimate_button)
 
-func _on_ultimate_button_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
-		_cast_ultimate()
-		ultimate_button.accept_event()
+func _consume_ultimate_pointer(event: InputEvent) -> bool:
+	if ultimate_button == null or not ultimate_button.visible:
+		return false
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if not _ultimate_hit_rect().has_point(event.position):
+			return false
+		ultimate_pointer_active = event.pressed
+		if event.pressed:
+			_cast_ultimate()
+		return true
+	if event is InputEventScreenTouch:
+		if not _ultimate_hit_rect().has_point(event.position):
+			return false
+		ultimate_pointer_active = event.pressed
+		if event.pressed:
+			_cast_ultimate()
+		return true
+	if event is InputEventMouseMotion and ultimate_pointer_active:
+		return true
+	if event is InputEventScreenDrag and ultimate_pointer_active:
+		return true
+	return false
+
+func _ultimate_hit_rect() -> Rect2:
+	return ultimate_button.get_global_rect().grow(18.0)
 
 func _update_ultimate(delta: float) -> void:
 	if ultimate_ready:
@@ -943,7 +968,7 @@ func _update_ultimate_ui() -> void:
 	ultimate_bar.value = ultimate_charge
 	var charge_percent := int(floor((ultimate_charge / ultimate_cooldown) * 100.0))
 	ultimate_button.text = "НОВА\nГОТОВА" if ultimate_ready else "НОВА\n%d%%" % charge_percent
-	ultimate_button.disabled = game_state != "running"
+	ultimate_button.disabled = false
 	ultimate_button.modulate = Color.WHITE if ultimate_ready else Color(0.78, 0.86, 0.78, 0.95)
 
 func _cast_ultimate() -> void:
