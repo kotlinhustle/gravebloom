@@ -17,11 +17,13 @@ const MAX_ENEMIES := 55
 const ULTIMATE_COOLDOWN := 30.0
 const ULTIMATE_RADIUS := 380.0
 const ULTIMATE_DAMAGE := 7
+const MAX_RELIC_CHOICES := 3
 
 var player: Player
 var living_blade: Node2D
 var enemies: Array[Enemy] = []
 var shards: Array[XPShard] = []
+var enemy_projectiles: Array[Node2D] = []
 var elapsed := 0.0
 var spawn_timer := 0.0
 var level := 1
@@ -46,6 +48,13 @@ var fog_wisps: Array[CanvasItem] = []
 var ambience_time := 0.0
 var ultimate_charge := 0.0
 var ultimate_ready := false
+var ultimate_cooldown := ULTIMATE_COOLDOWN
+var ultimate_radius := ULTIMATE_RADIUS
+var ultimate_damage := ULTIMATE_DAMAGE
+var thorn_bloom_unlocked := false
+var thorn_bloom_cooldown := 0.0
+var vampirism_unlocked := false
+var kill_count := 0
 
 @onready var world := Node2D.new()
 @onready var fx_layer := Node2D.new()
@@ -77,6 +86,7 @@ func _process(delta: float) -> void:
 	if game_state != "running":
 		return
 	elapsed += delta
+	thorn_bloom_cooldown = max(0.0, thorn_bloom_cooldown - delta)
 	if elapsed >= RUN_DURATION:
 		_show_victory()
 		return
@@ -89,6 +99,7 @@ func _process(delta: float) -> void:
 	living_blade.tick(delta, enemies)
 	_update_ultimate(delta)
 	_update_shadow_spirit(delta)
+	_update_enemy_projectiles(delta)
 	_update_shards(delta)
 	_check_enemy_contact(delta)
 	_keep_player_inside_arena()
@@ -406,6 +417,13 @@ func _reset_run() -> void:
 	shadow_spirit_damage = 2
 	ultimate_charge = 0.0
 	ultimate_ready = false
+	ultimate_cooldown = ULTIMATE_COOLDOWN
+	ultimate_radius = ULTIMATE_RADIUS
+	ultimate_damage = ULTIMATE_DAMAGE
+	thorn_bloom_unlocked = false
+	thorn_bloom_cooldown = 0.0
+	vampirism_unlocked = false
+	kill_count = 0
 	_update_ultimate_ui()
 	_reset_joystick()
 	_stop_screen_shake()
@@ -420,52 +438,98 @@ func _spawn_enemy_wave() -> void:
 	var count: int = 1 + int(elapsed / 24.0)
 	count = min(count, available_slots)
 	for i in range(count):
-		var is_brute: bool = randf() < min(0.26, 0.04 + elapsed / 420.0)
-		_spawn_enemy(is_brute, false)
+		_spawn_enemy(_pick_enemy_kind(), false)
 
-func _spawn_enemy(is_brute: bool, is_miniboss: bool) -> void:
+func _pick_enemy_kind() -> String:
+	if elapsed > 70.0 and randf() < 0.08:
+		return "exploder"
+	if elapsed > 46.0 and randf() < min(0.16, 0.04 + elapsed / 650.0):
+		return "spitter"
+	if elapsed > 28.0 and randf() < min(0.18, 0.05 + elapsed / 620.0):
+		return "runner"
+	if randf() < min(0.26, 0.04 + elapsed / 420.0):
+		return "brute"
+	return "crawler"
+
+func _spawn_enemy(enemy_kind: String, is_miniboss: bool) -> void:
 	var enemy: Enemy = EnemyScene.instantiate()
+	enemy.enemy_kind = enemy_kind
 	enemy.max_health = 2 + int(elapsed / 52.0)
 	enemy.speed = randf_range(56.0, 84.0) + elapsed * 0.14
 	enemy.xp_value = 1
-	if is_brute:
+	enemy.contact_damage = 18.0
+	if enemy_kind == "brute":
 		enemy.max_health += 4
 		enemy.speed *= 0.68
 		enemy.scale = Vector2.ONE * 1.45
 		enemy.xp_value = 2
+		enemy.contact_damage = 22.0
+	elif enemy_kind == "runner":
+		enemy.max_health += 1
+		enemy.speed *= 1.48
+		enemy.scale = Vector2.ONE * 0.82
+		enemy.contact_damage = 14.0
+	elif enemy_kind == "spitter":
+		enemy.max_health += 2
+		enemy.speed *= 0.82
+		enemy.xp_value = 2
+		enemy.contact_damage = 10.0
+		enemy.spit_cooldown = randf_range(2.2, 3.0)
+		enemy.spit_timer = randf_range(0.8, 1.7)
+	elif enemy_kind == "exploder":
+		enemy.max_health += 1
+		enemy.speed *= 1.18
+		enemy.scale = Vector2.ONE * 1.05
+		enemy.contact_damage = 30.0
+		enemy.xp_value = 2
 	if is_miniboss:
 		enemy.is_miniboss = true
+		enemy.enemy_kind = "miniboss"
 		enemy.max_health = 34 + int(elapsed / 10.0)
 		enemy.speed = 46.0
 		enemy.scale = Vector2.ONE * 2.25
 		enemy.xp_value = 12
-	_set_enemy_art(enemy, is_brute, is_miniboss)
+		enemy.contact_damage = 32.0
+	_set_enemy_art(enemy, enemy.enemy_kind, is_miniboss)
 	enemy.base_scale = enemy.scale
 	enemy.health = enemy.max_health
 	enemy.position = _clamp_to_arena(player.position + Vector2.RIGHT.rotated(randf() * TAU) * randf_range(360.0, 520.0))
 	enemy.target = player
 	enemy.damaged.connect(_on_enemy_damaged)
+	enemy.spitting.connect(_on_enemy_spitting)
 	enemy.died.connect(_on_enemy_died.bind(enemy.xp_value, enemy.is_miniboss))
 	enemies.append(enemy)
 	world.add_child(enemy)
 
-func _set_enemy_art(enemy: Enemy, is_brute: bool, is_miniboss: bool) -> void:
+func _set_enemy_art(enemy: Enemy, enemy_kind: String, is_miniboss: bool) -> void:
 	var art := enemy.get_node_or_null("Art")
 	if art == null:
 		return
 	if is_miniboss:
 		art.texture = GraveWardenTexture
 		art.scale = Vector2(0.2, 0.2)
-	elif is_brute:
+	elif enemy_kind == "brute":
 		art.texture = EnemyBruteTexture
 		art.scale = Vector2(0.19, 0.19)
+	elif enemy_kind == "runner":
+		art.texture = EnemyCrawlerTexture
+		art.scale = Vector2(0.23, 0.23)
+		art.modulate = Color(0.78, 1.0, 0.88)
+	elif enemy_kind == "spitter":
+		art.texture = EnemyCrawlerTexture
+		art.scale = Vector2(0.27, 0.27)
+		art.modulate = Color(0.86, 0.72, 1.0)
+	elif enemy_kind == "exploder":
+		art.texture = EnemyBruteTexture
+		art.scale = Vector2(0.15, 0.15)
+		art.modulate = Color(1.0, 0.78, 0.58)
 	else:
 		art.texture = EnemyCrawlerTexture
 		art.scale = Vector2(0.28, 0.28)
 
 func _spawn_miniboss() -> void:
 	miniboss_spawned = true
-	_spawn_enemy(false, true)
+	_spawn_enemy("miniboss", true)
 	CombatFxScript.ring(fx_layer, player.global_position, Color(0.9, 0.55, 0.72, 0.9), 260.0, 0.7)
 	_flash_overlay_text("Могильный Страж пробудился")
 	_start_screen_shake(0.34, 8.0)
@@ -473,9 +537,24 @@ func _spawn_miniboss() -> void:
 func _on_enemy_damaged(enemy_position: Vector2, amount: int) -> void:
 	CombatFxScript.damage_number(fx_layer, enemy_position, amount)
 
+func _on_enemy_spitting(enemy_position: Vector2, direction: Vector2) -> void:
+	var projectile := _make_ellipse(9.0, 9.0, Color(0.78, 0.48, 1.0, 0.92), 10)
+	projectile.position = enemy_position + direction * 32.0
+	projectile.set_meta("velocity", direction * 270.0)
+	projectile.set_meta("damage", 18.0)
+	projectile.set_meta("ttl", 2.2)
+	projectile.z_index = 6
+	enemy_projectiles.append(projectile)
+	world.add_child(projectile)
+	CombatFxScript.sparkle(fx_layer, enemy_position, Color(0.82, 0.55, 1.0, 0.72), 0.22)
+
 func _on_enemy_died(enemy_position: Vector2, xp_value: int = 1, was_miniboss: bool = false) -> void:
+	kill_count += 1
 	CombatFxScript.burst(fx_layer, enemy_position, Color(0.55, 1.0, 0.72, 0.9), 18 if was_miniboss else 12)
 	_start_screen_shake(0.18 if was_miniboss else 0.06, 7.0 if was_miniboss else 2.5)
+	if vampirism_unlocked and player != null and kill_count % 9 == 0:
+		player.health = min(player.max_health, player.health + 5.0)
+		CombatFxScript.sparkle(fx_layer, player.global_position, Color(1.0, 0.45, 0.62, 0.9), 0.36)
 	var shard: XPShard = XPShardScene.instantiate()
 	shard.position = enemy_position
 	shard.value = xp_value
@@ -486,6 +565,32 @@ func _on_enemy_died(enemy_position: Vector2, xp_value: int = 1, was_miniboss: bo
 	if was_miniboss:
 		_flash_overlay_text("Могильный Страж повержен")
 	_compact_enemies()
+
+func _update_enemy_projectiles(delta: float) -> void:
+	var alive_projectiles: Array[Node2D] = []
+	for projectile in enemy_projectiles:
+		if not is_instance_valid(projectile):
+			continue
+		var ttl := float(projectile.get_meta("ttl", 0.0)) - delta
+		if ttl <= 0.0:
+			projectile.queue_free()
+			continue
+		projectile.set_meta("ttl", ttl)
+		var velocity := projectile.get_meta("velocity", Vector2.ZERO) as Vector2
+		projectile.position += velocity * delta
+		projectile.rotation += delta * 8.0
+		if player != null and projectile.global_position.distance_to(player.global_position) < 28.0:
+			player.take_damage(float(projectile.get_meta("damage", 16.0)))
+			CombatFxScript.burst(fx_layer, projectile.global_position, Color(0.85, 0.48, 1.0, 0.84), 8)
+			projectile.queue_free()
+			if player.is_dead:
+				_show_game_over()
+			continue
+		if abs(projectile.position.x) > ARENA_LIMIT_X + 180.0 or abs(projectile.position.y) > ARENA_LIMIT_Y + 180.0:
+			projectile.queue_free()
+			continue
+		alive_projectiles.append(projectile)
+	enemy_projectiles = alive_projectiles
 
 func _update_shards(delta: float) -> void:
 	for shard in shards:
@@ -517,13 +622,42 @@ func _compact_shards() -> void:
 			alive_shards.append(shard)
 	shards = alive_shards
 
+func _explode_enemy(enemy: Enemy) -> void:
+	if not is_instance_valid(enemy) or enemy.is_dead:
+		return
+	var origin := enemy.global_position
+	CombatFxScript.ring(fx_layer, origin, Color(1.0, 0.66, 0.42, 0.86), 115.0, 0.32)
+	CombatFxScript.burst(fx_layer, origin, Color(1.0, 0.78, 0.5, 0.9), 18)
+	_start_screen_shake(0.12, 5.0)
+	for other in enemies:
+		if not is_instance_valid(other) or other == enemy:
+			continue
+		if other.global_position.distance_to(origin) < 112.0:
+			other.take_damage(2, origin, 240.0)
+	enemy.die()
+
+func _trigger_thorn_bloom(origin: Vector2) -> void:
+	if thorn_bloom_cooldown > 0.0:
+		return
+	thorn_bloom_cooldown = 0.8
+	CombatFxScript.ring(fx_layer, player.global_position, Color(0.65, 1.0, 0.72, 0.68), 92.0, 0.22)
+	for enemy in enemies:
+		if not is_instance_valid(enemy):
+			continue
+		if enemy.global_position.distance_to(player.global_position) < 96.0:
+			enemy.take_damage(1, origin, 190.0)
+
 func _check_enemy_contact(delta: float) -> void:
 	for enemy in enemies:
 		if not is_instance_valid(enemy):
 			continue
 		if enemy.global_position.distance_to(player.global_position) < 42.0:
-			var damage := 32.0 if enemy.is_miniboss else 18.0
+			var damage := enemy.contact_damage
 			player.take_damage(damage * delta)
+			if thorn_bloom_unlocked:
+				_trigger_thorn_bloom(enemy.global_position)
+			if enemy.enemy_kind == "exploder":
+				_explode_enemy(enemy)
 			if player.is_dead:
 				_show_game_over()
 
@@ -557,13 +691,26 @@ func _show_upgrades() -> void:
 	_clear_container(upgrade_list)
 	var title := _make_label("Выбери реликвию", 26)
 	upgrade_list.add_child(title)
-	_add_upgrade_button("Заточить Живой Клинок", "Больше урона клинком", "_upgrade_damage")
-	_add_upgrade_button("Ускорить проклятие", "Клинок атакует чаще", "_upgrade_cooldown")
-	_add_upgrade_button("Расширить бледный радиус", "Клинок ищет врагов дальше", "_upgrade_range")
-	_add_upgrade_button("Призвать Тень", "Дух прорезает толпу лучом", "_upgrade_shadow_spirit")
+	var relics := _roll_relics()
+	for relic in relics:
+		_add_upgrade_button(relic["name"], relic["description"], relic["method"])
 	upgrade_panel.visible = true
 
-func _add_upgrade_button(text: String, description: String, method_name: StringName) -> void:
+func _roll_relics() -> Array:
+	var relics := [
+		{"name": "Заточить Живой Клинок", "description": "Больше урона клинком", "method": "_upgrade_damage"},
+		{"name": "Ускорить проклятие", "description": "Клинок атакует чаще", "method": "_upgrade_cooldown"},
+		{"name": "Расширить бледный радиус", "description": "Клинок ищет врагов дальше", "method": "_upgrade_range"},
+		{"name": "Призвать Тень", "description": "Дух прорезает толпу лучом", "method": "_upgrade_shadow_spirit"},
+		{"name": "Могильный Магнит", "description": "Опыт тянется к тебе дальше", "method": "_upgrade_magnet"},
+		{"name": "Кровавый Цветок", "description": "Каждое 9-е убийство лечит", "method": "_upgrade_vampirism"},
+		{"name": "Сердце Новы", "description": "Ульта заряжается быстрее и бьет шире", "method": "_upgrade_nova"},
+		{"name": "Шипастый Венец", "description": "Ближние враги получают ответный удар", "method": "_upgrade_thorns"},
+	]
+	relics.shuffle()
+	return relics.slice(0, MAX_RELIC_CHOICES)
+
+func _add_upgrade_button(text: String, description: String, method_name: String) -> void:
 	var button := Button.new()
 	button.text = "%s\n%s" % [text, description]
 	button.custom_minimum_size = Vector2(430, 70)
@@ -600,6 +747,26 @@ func _upgrade_shadow_spirit() -> void:
 		shadow_spirit_unlocked = true
 		shadow_spirit_timer = 0.35
 	_flash_overlay_text("Тень пробудилась")
+
+func _upgrade_magnet() -> void:
+	shard_pull_range += 70.0
+	_flash_overlay_text("Магнит опыта усилен")
+
+func _upgrade_vampirism() -> void:
+	vampirism_unlocked = true
+	player.health = min(player.max_health, player.health + 12.0)
+	_flash_overlay_text("Кровавый Цветок расцвел")
+
+func _upgrade_nova() -> void:
+	ultimate_cooldown = max(20.0, ultimate_cooldown - 3.5)
+	ultimate_radius += 28.0
+	ultimate_damage += 1
+	_update_ultimate_ui()
+	_flash_overlay_text("Нова стала ярче")
+
+func _upgrade_thorns() -> void:
+	thorn_bloom_unlocked = true
+	_flash_overlay_text("Шипастый Венец пробудился")
 
 func _show_game_over() -> void:
 	if game_state == "game_over":
@@ -666,8 +833,8 @@ func _build_ultimate_ui() -> void:
 func _update_ultimate(delta: float) -> void:
 	if ultimate_ready:
 		return
-	ultimate_charge = min(ULTIMATE_COOLDOWN, ultimate_charge + delta)
-	if ultimate_charge >= ULTIMATE_COOLDOWN:
+	ultimate_charge = min(ultimate_cooldown, ultimate_charge + delta)
+	if ultimate_charge >= ultimate_cooldown:
 		ultimate_ready = true
 		_flash_overlay_text("Нова готова")
 		CombatFxScript.ring(fx_layer, player.global_position, Color(0.58, 1.0, 0.72, 0.65), 130.0, 0.42)
@@ -676,8 +843,9 @@ func _update_ultimate(delta: float) -> void:
 func _update_ultimate_ui() -> void:
 	if ultimate_bar == null or ultimate_button == null:
 		return
+	ultimate_bar.max_value = ultimate_cooldown
 	ultimate_bar.value = ultimate_charge
-	var charge_percent := int(floor((ultimate_charge / ULTIMATE_COOLDOWN) * 100.0))
+	var charge_percent := int(floor((ultimate_charge / ultimate_cooldown) * 100.0))
 	ultimate_button.text = "НОВА\nГОТОВА" if ultimate_ready else "НОВА\n%d%%" % charge_percent
 	ultimate_button.disabled = game_state != "running"
 	ultimate_button.modulate = Color.WHITE if ultimate_ready else Color(0.78, 0.86, 0.78, 0.95)
@@ -686,15 +854,15 @@ func _cast_ultimate() -> void:
 	if game_state != "running" or player == null:
 		return
 	if not ultimate_ready:
-		_flash_overlay_text("Нова заряжается: %d%%" % int(floor((ultimate_charge / ULTIMATE_COOLDOWN) * 100.0)))
+		_flash_overlay_text("Нова заряжается: %d%%" % int(floor((ultimate_charge / ultimate_cooldown) * 100.0)))
 		return
 	ultimate_ready = false
 	ultimate_charge = 0.0
 	var origin := player.global_position
 	_flash_overlay_text("НОВА GRAVEBLOOM")
 	_start_screen_shake(0.42, 13.0)
-	CombatFxScript.ring(fx_layer, origin, Color(0.78, 1.0, 0.72, 0.95), ULTIMATE_RADIUS, 0.55)
-	CombatFxScript.ring(fx_layer, origin, Color(0.95, 0.78, 1.0, 0.68), ULTIMATE_RADIUS * 0.62, 0.42)
+	CombatFxScript.ring(fx_layer, origin, Color(0.78, 1.0, 0.72, 0.95), ultimate_radius, 0.55)
+	CombatFxScript.ring(fx_layer, origin, Color(0.95, 0.78, 1.0, 0.68), ultimate_radius * 0.62, 0.42)
 	CombatFxScript.burst(fx_layer, origin, Color(0.72, 1.0, 0.78, 0.92), 42)
 	_add_ultimate_lashes(origin)
 	var targets := enemies.duplicate()
@@ -702,10 +870,10 @@ func _cast_ultimate() -> void:
 		if not is_instance_valid(enemy):
 			continue
 		var distance := origin.distance_to(enemy.global_position)
-		if distance <= ULTIMATE_RADIUS:
-			var damage := ULTIMATE_DAMAGE
+		if distance <= ultimate_radius:
+			var damage := ultimate_damage
 			if enemy.is_miniboss:
-				damage = int(ceil(float(ULTIMATE_DAMAGE) * 0.65))
+				damage = int(ceil(float(ultimate_damage) * 0.65))
 			enemy.take_damage(damage, origin, 520.0)
 	_update_ultimate_ui()
 
@@ -716,7 +884,7 @@ func _add_ultimate_lashes(origin: Vector2) -> void:
 		lash.default_color = Color(0.56, 1.0, 0.75, randf_range(0.5, 0.86))
 		var angle := TAU * float(i) / 18.0 + randf_range(-0.08, 0.08)
 		var start := Vector2.RIGHT.rotated(angle) * randf_range(26.0, 70.0)
-		var end := Vector2.RIGHT.rotated(angle + randf_range(-0.18, 0.18)) * randf_range(210.0, ULTIMATE_RADIUS)
+		var end := Vector2.RIGHT.rotated(angle + randf_range(-0.18, 0.18)) * randf_range(210.0, ultimate_radius)
 		lash.points = PackedVector2Array([origin + start, origin + (start + end) * 0.52, origin + end])
 		fx_layer.add_child(lash)
 		var tween := create_tween()
@@ -929,11 +1097,15 @@ func _clear_world_entities() -> void:
 	for shard in shards:
 		if is_instance_valid(shard):
 			shard.queue_free()
+	for projectile in enemy_projectiles:
+		if is_instance_valid(projectile):
+			projectile.queue_free()
 	if is_instance_valid(player):
 		player.queue_free()
 	if is_instance_valid(living_blade):
 		living_blade.queue_free()
 	enemies.clear()
 	shards.clear()
+	enemy_projectiles.clear()
 	player = null
 	living_blade = null

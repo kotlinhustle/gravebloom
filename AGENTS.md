@@ -96,13 +96,15 @@ scripts/
 - Manages run states: start, running, upgrade, game_over, victory.
 - Spawns the player.
 - Spawns enemy waves.
+- Enemy waves now mix roles: crawler, brute, fast runner, ranged spitter, explosive enemy, and miniboss.
 - Keeps the player inside visible ruined arena bounds and caps live enemy pressure for early readability.
 - Visible UI text is Russian-first; keep menus, HUD, result screens, upgrade choices, and combat notices localized.
 - Spawns a miniboss near the end of the 3-minute run.
 - Owns enemy and XP shard lists.
-- Updates XP collection, level-ups, upgrade UI, HUD, XP bar, result screens, and enemy contact damage.
+- Updates XP collection, level-ups, randomized relic choices, HUD, XP bar, result screens, enemy contact damage, and enemy projectiles.
 - Handles screen shake, XP sparkles, and Shadow Spirit secondary weapon.
 - Handles Gravebloom Nova ultimate charge, UI button, keyboard trigger, radial damage, knockback, and burst FX.
+- Relics currently include blade damage/cooldown/range, Shadow Spirit, XP magnet, vampiric healing, Nova upgrades, and thorn retaliation.
 
 `Player`:
 
@@ -121,8 +123,10 @@ scripts/
 - Rotates toward the player.
 - Flashes, squashes, and receives knockback on hit.
 - Supports normal, brute, and miniboss tuning from `Main`.
+- Supports role behavior: runners move faster, spitters keep distance and fire projectiles, exploders burst on contact.
 - Emits `died(enemy_position)` on death.
 - Emits `damaged(enemy_position, amount)` for hit feedback.
+- Emits `spitting(enemy_position, direction)` so `Main` can spawn simple projectile nodes.
 
 `LivingBlade`:
 
