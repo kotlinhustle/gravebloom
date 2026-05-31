@@ -101,13 +101,13 @@ scripts/
 - Enemy roles are visually marked in code: brutes get armor rings, runners get small speed wings, spitters get purple aim marks, and exploders get orange danger marks.
 - Enemies use light separation so they do not collapse into one harmless blob during circular kiting.
 - Spitters use predictive shots, flankers try to cut ahead/sideways, and after the first minute occasional interceptors spawn ahead of the player's movement to break endless clockwise/counterclockwise kiting.
-- Gravebloom hazard zones periodically warn, bloom, then damage the player if they keep running through the same route; they should read as large animated cursed flowers with a short Russian warning label.
+- Gravebloom hazard zones periodically warn, bloom, then damage the player if they keep running through the same route; they should read as large animated cursed flowers with a short Russian warning label. Keep a safe distance from the player on spawn and preserve a clear no-damage warning phase.
 - If too many enemies stay packed together after the first minute, the cluster can bloom into a hazard zone to punish harmless enemy balls.
 - `Король-Могила` is the final-minute pressure boss at 2:00: custom terrifying grave king sprite, very high speed, high health, larger contact radius, periodic Gravebloom hazards, flanker/spitter summons, and telegraphed boss attacks.
 - Boss attacks include `Похоронный Колокол` radial shock rings, `Королевский Приговор` lane strikes along the player's route, and phase-two `Черная корона` cross strikes.
 - Keeps the player inside visible ruined arena bounds and caps live enemy pressure for early readability.
 - Visible UI text is Russian-first; keep menus, HUD, result screens, upgrade choices, and combat notices localized.
-- Micro-lore is embedded through the start screen, timed run notices, relic descriptions, and result text.
+- Micro-lore is embedded through the start screen, timed run notices, relic descriptions, relic-pick echo lines, boss entrance lines, and result text.
 - Relic cards should keep the lore phrase, then add a short mechanical effect so choices stay understandable.
 - Spawns `Король-Могила` at 2:00 and a smaller miniboss near the end of the 3-minute run.
 - Owns enemy and XP shard lists.
@@ -115,6 +115,8 @@ scripts/
 - Handles screen shake, XP sparkles, and Shadow Spirit secondary weapon.
 - Handles Gravebloom Nova ultimate charge, UI button, keyboard trigger, radial damage, knockback, and burst FX.
 - Relics currently include blade damage/cooldown/range, Shadow Spirit, XP magnet, vampiric healing, Nova upgrades, and thorn retaliation.
+- `Кровавый Цветок` can heal from Nova kills, but Nova-triggered vampirism is capped per ultimate cast so the combo does not become a full heal button.
+- `Расширить бледный радиус` should improve blade range and tempo, not only target search radius, so it feels competitive with stronger relics.
 
 `Player`:
 
@@ -169,6 +171,8 @@ scripts/
 - Hits now show damage numbers, enemy flash/squash, knockback, and death bursts.
 - Runs now have a start screen, XP bar, 3:00 survival goal, miniboss event, victory screen, death screen, and restart button.
 - Relics can unlock Shadow Spirit, a secondary auto-skill that cuts through enemies in a beam.
+- Relics can unlock `Колокол Забвения`, an auto-weapon that periodically emits a radial shockwave around the player; repeat picks increase damage/radius and reduce cooldown.
+- `Колокол Забвения` should be guaranteed in the first relic choice until unlocked, so players discover the second auto-weapon instead of waiting for random rolls.
 - Gravebloom Nova is an automatic ultimate: it charges over time, shows a visible `NOVA` indicator with percent progress, then fires by itself and blasts nearby enemies.
 - Do not spend more time trying to make laptop touchpad tap-to-click control Nova; the game should not depend on that input path.
 - Small health packs can drop from enemies, pulse on the ground, heal a little on pickup, and expire after a short time.
@@ -178,5 +182,5 @@ scripts/
 
 - Add touch-friendly pause/options and Telegram-specific restart polish.
 - Split `Main` further into focused systems when complexity grows: spawner, upgrade manager, HUD, XP collector.
-- Add 2-3 more relic upgrades, including a first secondary weapon or spirit attack.
+- Add more auto-weapons and relic synergies once `Колокол Забвения` is tuned.
 - Improve visuals after the gameplay loop is clearer.

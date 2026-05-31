@@ -54,7 +54,10 @@ func quicken() -> void:
 	cooldown = max(0.22, cooldown - 0.08)
 
 func widen_reach() -> void:
-	attack_range += 35.0
+	attack_range += 45.0
+	dash_speed += 95.0
+	return_speed += 70.0
+	cooldown = max(0.28, cooldown - 0.03)
 
 func _update_orbit(delta: float) -> void:
 	visual_angle += delta * 3.2

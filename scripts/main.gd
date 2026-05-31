@@ -27,10 +27,12 @@ const ANTI_KITE_START_TIME := 58.0
 const ANTI_KITE_INTERVAL := 12.0
 const HAZARD_START_TIME := 62.0
 const HAZARD_INTERVAL := 5.0
-const HAZARD_ARM_TIME := 1.05
+const HAZARD_ARM_TIME := 1.55
 const HAZARD_ACTIVE_TIME := 2.6
 const HAZARD_RADIUS := 112.0
 const HAZARD_DAMAGE := 18.0
+const HAZARD_SAFE_DISTANCE := 190.0
+const NOVA_VAMPIRISM_HEAL_CAP := 15.0
 const CLUSTER_BLOOM_START_TIME := 72.0
 const CLUSTER_BLOOM_INTERVAL := 7.0
 const CLUSTER_BLOOM_MIN_ENEMIES := 12
@@ -46,6 +48,18 @@ const LORE_EVENTS := [
 	{"time": 45.0, "text": "Gravebloom тянется к крови"},
 	{"time": 90.0, "text": "Маска шепчет: не останавливайся"},
 	{"time": 130.0, "text": "Клинок вспоминает старую клятву"},
+]
+const DEATH_LORE_LINES := [
+	"Цветы сомкнулись над следами Маски.",
+	"Руины не отпускают тех, кто вспомнил их имя.",
+	"Клинок вернулся один.",
+	"Gravebloom выпил еще одну клятву.",
+]
+const VICTORY_LORE_LINES := [
+	"Рассвет не исцелил королевство, но заставил его замолчать.",
+	"Маска вынесла из руин еще один вдох.",
+	"Корни отступили. Ненадолго.",
+	"Клинок уснул, насытившись мертвыми.",
 ]
 
 var player: Player
@@ -67,10 +81,16 @@ var game_state := "start"
 var dread_boss_spawned := false
 var miniboss_spawned := false
 var last_run_result := ""
+var last_run_lore := ""
 var shadow_spirit_unlocked := false
 var shadow_spirit_timer := 3.0
 var shadow_spirit_cooldown := 5.5
 var shadow_spirit_damage := 2
+var oblivion_bell_unlocked := false
+var oblivion_bell_timer := 4.0
+var oblivion_bell_cooldown := 5.8
+var oblivion_bell_damage := 1
+var oblivion_bell_radius := 138.0
 var shake_time := 0.0
 var shake_intensity := 0.0
 var joystick_active := false
@@ -88,6 +108,8 @@ var thorn_bloom_unlocked := false
 var thorn_bloom_cooldown := 0.0
 var vampirism_unlocked := false
 var kill_count := 0
+var nova_damage_active := false
+var nova_vampirism_healed := 0.0
 var lore_event_index := 0
 var anti_kite_timer := ANTI_KITE_INTERVAL
 var hazard_timer := HAZARD_INTERVAL
@@ -155,6 +177,7 @@ func _process(delta: float) -> void:
 	_update_health_packs(delta)
 	_check_enemy_contact(delta)
 	_keep_player_inside_arena()
+	_update_oblivion_bell(delta)
 	_update_hud()
 
 func _build_arena() -> void:
@@ -458,10 +481,16 @@ func _reset_run() -> void:
 	dread_boss_spawned = false
 	miniboss_spawned = false
 	last_run_result = ""
+	last_run_lore = ""
 	shadow_spirit_unlocked = false
 	shadow_spirit_timer = 3.0
 	shadow_spirit_cooldown = 5.5
 	shadow_spirit_damage = 2
+	oblivion_bell_unlocked = false
+	oblivion_bell_timer = 4.0
+	oblivion_bell_cooldown = 5.8
+	oblivion_bell_damage = 1
+	oblivion_bell_radius = 138.0
 	ultimate_charge = 0.0
 	ultimate_ready = false
 	ultimate_cooldown = ULTIMATE_COOLDOWN
@@ -471,6 +500,8 @@ func _reset_run() -> void:
 	thorn_bloom_cooldown = 0.0
 	vampirism_unlocked = false
 	kill_count = 0
+	nova_damage_active = false
+	nova_vampirism_healed = 0.0
 	lore_event_index = 0
 	anti_kite_timer = ANTI_KITE_INTERVAL
 	hazard_timer = HAZARD_INTERVAL
@@ -764,6 +795,7 @@ func _spawn_miniboss() -> void:
 	_spawn_enemy("miniboss", true)
 	CombatFxScript.ring(fx_layer, player.global_position, Color(0.9, 0.55, 0.72, 0.9), 260.0, 0.7)
 	_flash_overlay_text("Могильный Страж пробудился")
+	_flash_overlay_text("Он все еще охраняет пустой трон")
 	_start_screen_shake(0.34, 8.0)
 
 func _spawn_dread_boss() -> void:
@@ -774,6 +806,7 @@ func _spawn_dread_boss() -> void:
 	CombatFxScript.ring(fx_layer, player.global_position, Color(0.64, 1.0, 0.56, 0.92), 360.0, 0.9)
 	CombatFxScript.ring(fx_layer, player.global_position, Color(0.95, 0.5, 0.8, 0.72), 220.0, 0.7)
 	_flash_overlay_text("Король-Могила встал")
+	_flash_overlay_text("За ним не осталось живых подданных")
 	_start_screen_shake(0.64, 12.0)
 	for i in range(3):
 		_spawn_hazard_zone(player.position + Vector2.RIGHT.rotated(TAU * float(i) / 3.0 + randf_range(-0.35, 0.35)) * randf_range(170.0, 310.0))
@@ -797,8 +830,14 @@ func _on_enemy_died(enemy_position: Vector2, xp_value: int = 1, was_miniboss: bo
 	CombatFxScript.burst(fx_layer, enemy_position, Color(0.55, 1.0, 0.72, 0.9), 18 if was_miniboss else 12)
 	_start_screen_shake(0.18 if was_miniboss else 0.06, 7.0 if was_miniboss else 2.5)
 	if vampirism_unlocked and player != null and kill_count % 9 == 0:
-		player.health = min(player.max_health, player.health + 5.0)
-		CombatFxScript.sparkle(fx_layer, player.global_position, Color(1.0, 0.45, 0.62, 0.9), 0.36)
+		var heal_amount: float = 5.0
+		if nova_damage_active:
+			var remaining_nova_heal: float = maxf(0.0, NOVA_VAMPIRISM_HEAL_CAP - nova_vampirism_healed)
+			heal_amount = minf(heal_amount, remaining_nova_heal)
+			nova_vampirism_healed += heal_amount
+		if heal_amount > 0.0:
+			player.health = min(player.max_health, player.health + heal_amount)
+			CombatFxScript.sparkle(fx_layer, player.global_position, Color(1.0, 0.45, 0.62, 0.9), 0.36)
 	if not was_miniboss and randf() < HEALTH_PACK_DROP_CHANCE:
 		_spawn_health_pack(enemy_position)
 	var shard: XPShard = XPShardScene.instantiate()
@@ -942,7 +981,7 @@ func _update_hazard_zones(delta: float) -> void:
 
 func _spawn_hazard_zone(zone_position: Vector2) -> void:
 	var zone := Node2D.new()
-	zone.position = _clamp_to_arena(zone_position)
+	zone.position = _clamp_to_arena(_keep_hazard_away_from_player(zone_position))
 	zone.z_index = 2
 	zone.set_meta("age", 0.0)
 	zone.set_meta("radius", HAZARD_RADIUS)
@@ -1008,7 +1047,17 @@ func _get_hazard_position() -> Vector2:
 		forward = Vector2.RIGHT.rotated(randf() * TAU)
 	var side := forward.rotated(PI / 2.0)
 	var side_sign := -1.0 if randf() < 0.5 else 1.0
-	return player.position + forward * randf_range(170.0, 310.0) + side * side_sign * randf_range(35.0, 145.0)
+	return _keep_hazard_away_from_player(player.position + forward * randf_range(230.0, 360.0) + side * side_sign * randf_range(60.0, 170.0))
+
+func _keep_hazard_away_from_player(zone_position: Vector2) -> Vector2:
+	if player == null:
+		return zone_position
+	var offset := zone_position - player.global_position
+	if offset.length() >= HAZARD_SAFE_DISTANCE:
+		return zone_position
+	if offset == Vector2.ZERO:
+		offset = _get_player_motion_direction(Vector2.RIGHT)
+	return player.global_position + offset.normalized() * HAZARD_SAFE_DISTANCE
 
 func _update_cluster_bloom(delta: float) -> void:
 	if elapsed < CLUSTER_BLOOM_START_TIME:
@@ -1093,7 +1142,7 @@ func _get_boss_hazard_position(boss: Enemy) -> Vector2:
 		to_player = Vector2.RIGHT.rotated(randf() * TAU)
 	var side := to_player.rotated(PI / 2.0)
 	var side_sign := -1.0 if randf() < 0.5 else 1.0
-	return player.position + to_player * randf_range(80.0, 180.0) + side * side_sign * randf_range(45.0, 135.0)
+	return _keep_hazard_away_from_player(player.position + to_player * randf_range(180.0, 280.0) + side * side_sign * randf_range(70.0, 160.0))
 
 func _spawn_boss_bell_attack(boss: Enemy) -> void:
 	var attack := Node2D.new()
@@ -1338,16 +1387,23 @@ func _show_upgrades() -> void:
 	upgrade_panel.visible = true
 
 func _roll_relics() -> Array:
+	var bell_relic := {"name": "Колокол Забвения", "description": "Его звон помнит похороны королей. Волны бьют вокруг Маски", "method": "_upgrade_oblivion_bell"}
 	var relics := [
 		{"name": "Заточить Живой Клинок", "description": "Он снова вспоминает, как резать плоть. Урон выше", "method": "_upgrade_damage"},
 		{"name": "Ускорить проклятие", "description": "Клинок голодает все чаще. Атаки быстрее", "method": "_upgrade_cooldown"},
-		{"name": "Расширить бледный радиус", "description": "Маска видит добычу дальше. Радиус поиска выше", "method": "_upgrade_range"},
+		{"name": "Расширить бледный радиус", "description": "Маска видит добычу дальше. Клинок летит дальше и быстрее", "method": "_upgrade_range"},
 		{"name": "Призвать Тень", "description": "Старый спутник прорезает толпу лучом", "method": "_upgrade_shadow_spirit"},
 		{"name": "Могильный Магнит", "description": "Осколки павших сами ищут Маску. Притяжение опыта выше", "method": "_upgrade_magnet"},
 		{"name": "Кровавый Цветок", "description": "Пьет кровь павших и возвращает ее тебе. Убийства лечат", "method": "_upgrade_vampirism"},
 		{"name": "Сердце Новы", "description": "Внутри цветка все еще горит звезда. Нова сильнее", "method": "_upgrade_nova"},
 		{"name": "Шипастый Венец", "description": "Короли Gravebloom умирали стоя. Ответный урон", "method": "_upgrade_thorns"},
 	]
+	relics.shuffle()
+	if not oblivion_bell_unlocked:
+		var choices := [bell_relic]
+		choices.append_array(relics.slice(0, MAX_RELIC_CHOICES - 1))
+		return choices
+	relics.append(bell_relic)
 	relics.shuffle()
 	return relics.slice(0, MAX_RELIC_CHOICES)
 
@@ -1363,6 +1419,7 @@ func _on_upgrade_button_pressed(button: Button) -> void:
 	var method_name := String(button.get_meta("upgrade_method", ""))
 	if method_name != "":
 		call(method_name)
+		_flash_overlay_text(_relic_lore_echo(method_name))
 	upgrade_panel.visible = false
 	joystick_base.visible = true
 	ultimate_button.visible = true
@@ -1370,6 +1427,28 @@ func _on_upgrade_button_pressed(button: Button) -> void:
 	paused_for_upgrade = false
 	game_state = "running"
 	get_tree().paused = false
+
+func _relic_lore_echo(method_name: String) -> String:
+	match method_name:
+		"_upgrade_damage":
+			return "Клинок вспомнил вкус королевской крови"
+		"_upgrade_cooldown":
+			return "Проклятие задышало чаще"
+		"_upgrade_range":
+			return "Бледный радиус коснулся дальних могил"
+		"_upgrade_shadow_spirit":
+			return "За Маской встал второй силуэт"
+		"_upgrade_oblivion_bell":
+			return "В руинах снова ударил похоронный звон"
+		"_upgrade_magnet":
+			return "Осколки сами ищут того, кто выжил"
+		"_upgrade_vampirism":
+			return "Цветок пьет смерть и возвращает тепло"
+		"_upgrade_nova":
+			return "В сердце цветка шевельнулась звезда"
+		"_upgrade_thorns":
+			return "Старая корона не умеет падать"
+	return "Руины приняли новую клятву"
 
 func _upgrade_damage() -> void:
 	living_blade.increase_damage()
@@ -1388,6 +1467,16 @@ func _upgrade_shadow_spirit() -> void:
 		shadow_spirit_unlocked = true
 		shadow_spirit_timer = 0.35
 	_flash_overlay_text("Тень пробудилась")
+
+func _upgrade_oblivion_bell() -> void:
+	if oblivion_bell_unlocked:
+		oblivion_bell_damage += 1
+		oblivion_bell_radius += 22.0
+		oblivion_bell_cooldown = maxf(3.4, oblivion_bell_cooldown - 0.45)
+	else:
+		oblivion_bell_unlocked = true
+		oblivion_bell_timer = 0.8
+	_flash_overlay_text("Колокол Забвения звучит")
 
 func _upgrade_magnet() -> void:
 	shard_pull_range += 70.0
@@ -1422,6 +1511,7 @@ func _show_game_over() -> void:
 		return
 	game_state = "game_over"
 	last_run_result = "Маска треснула, но проклятие запомнило тебя"
+	last_run_lore = _pick_lore_line(DEATH_LORE_LINES)
 	joystick_base.visible = false
 	ultimate_button.visible = false
 	ultimate_bar.visible = false
@@ -1432,6 +1522,7 @@ func _show_game_over() -> void:
 func _show_victory() -> void:
 	game_state = "victory"
 	last_run_result = "На миг Gravebloom отступил от сердца руин"
+	last_run_lore = _pick_lore_line(VICTORY_LORE_LINES)
 	joystick_base.visible = false
 	ultimate_button.visible = false
 	ultimate_bar.visible = false
@@ -1444,8 +1535,14 @@ func _show_result_screen(victory: bool) -> void:
 	_clear_container(overlay_list)
 	_add_overlay_label("Победа" if victory else "Забег окончен", 32)
 	_add_overlay_label(last_run_result, 20)
+	_add_overlay_label(last_run_lore, 18)
 	_add_overlay_label("Время: %s   Уровень: %d" % [_format_time(elapsed), level], 18)
 	_add_overlay_button("Заново", _start_run)
+
+func _pick_lore_line(lines: Array) -> String:
+	if lines.is_empty():
+		return ""
+	return String(lines[randi() % lines.size()])
 
 func _update_hud() -> void:
 	var remaining: float = max(0.0, RUN_DURATION - elapsed)
@@ -1523,6 +1620,8 @@ func _cast_ultimate() -> void:
 	CombatFxScript.burst(fx_layer, origin, Color(0.72, 1.0, 0.78, 0.92), 42)
 	_add_ultimate_lashes(origin)
 	var targets := enemies.duplicate()
+	nova_damage_active = true
+	nova_vampirism_healed = 0.0
 	for enemy in targets:
 		if not is_instance_valid(enemy):
 			continue
@@ -1532,6 +1631,7 @@ func _cast_ultimate() -> void:
 			if enemy.is_miniboss:
 				damage = int(ceil(float(ultimate_damage) * 0.65))
 			enemy.take_damage(damage, origin, 520.0)
+	nova_damage_active = false
 	_update_ultimate_ui()
 
 func _add_ultimate_lashes(origin: Vector2) -> void:
@@ -1677,6 +1777,45 @@ func _cast_shadow_spirit(target_position: Vector2) -> void:
 			enemy.take_damage(shadow_spirit_damage, start, 180.0)
 	_start_screen_shake(0.1, 3.5)
 
+func _update_oblivion_bell(delta: float) -> void:
+	if not oblivion_bell_unlocked or player == null:
+		return
+	oblivion_bell_timer -= delta
+	if oblivion_bell_timer > 0.0:
+		return
+	_cast_oblivion_bell()
+	oblivion_bell_timer = oblivion_bell_cooldown
+
+func _cast_oblivion_bell() -> void:
+	var origin := player.global_position
+	CombatFxScript.ring(fx_layer, origin, Color(0.82, 1.0, 0.62, 0.82), oblivion_bell_radius, 0.38)
+	CombatFxScript.ring(fx_layer, origin, Color(0.52, 1.0, 0.84, 0.48), oblivion_bell_radius * 0.62, 0.28)
+	_add_bell_wave_lines(origin)
+	var hit_count := 0
+	for enemy in enemies:
+		if not is_instance_valid(enemy):
+			continue
+		if enemy.global_position.distance_to(origin) <= oblivion_bell_radius:
+			enemy.take_damage(oblivion_bell_damage, origin, 260.0)
+			hit_count += 1
+	if hit_count > 0:
+		_start_screen_shake(0.08, 3.2)
+
+func _add_bell_wave_lines(origin: Vector2) -> void:
+	for i in range(12):
+		var angle := TAU * float(i) / 12.0
+		var line := Line2D.new()
+		line.width = 3.0
+		line.default_color = Color(0.84, 1.0, 0.58, 0.58)
+		line.points = PackedVector2Array([
+			origin + Vector2.RIGHT.rotated(angle) * 26.0,
+			origin + Vector2.RIGHT.rotated(angle) * oblivion_bell_radius,
+		])
+		fx_layer.add_child(line)
+		var tween := create_tween()
+		tween.tween_property(line, "modulate:a", 0.0, 0.22)
+		tween.tween_callback(line.queue_free)
+
 func _distance_to_segment(point: Vector2, start: Vector2, end: Vector2) -> float:
 	var segment := end - start
 	var length_squared := segment.length_squared()
@@ -1739,7 +1878,11 @@ func _add_overlay_button(text: String, callback: Callable) -> void:
 
 func _flash_overlay_text(text: String) -> void:
 	var label := _make_label(text, 26)
-	label.global_position = Vector2(80, 164)
+	label.global_position = Vector2(34, 168)
+	label.size = Vector2(472, 72)
+	label.custom_minimum_size = Vector2(472, 72)
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	ui_layer.add_child(label)
 	var tween := create_tween()
 	tween.set_parallel(true)
