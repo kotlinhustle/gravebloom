@@ -67,9 +67,12 @@ func _animate_role_markers(delta: float) -> void:
 	if mark != null:
 		mark.modulate.a = 0.72 + sin(anim_time * 2.5) * 0.2
 		mark.position.y = -34.0 + sin(anim_time * 2.1) * 2.0
-	var trail := get_node_or_null("RoleTrail") as CanvasItem
-	if trail != null:
-		trail.modulate.a = 0.42 + sin(anim_time * 4.0) * 0.22
+	var left_wing := get_node_or_null("RoleWingLeft") as CanvasItem
+	var right_wing := get_node_or_null("RoleWingRight") as CanvasItem
+	if left_wing != null and right_wing != null:
+		var wing_alpha := 0.42 + sin(anim_time * 4.0) * 0.18
+		left_wing.modulate.a = wing_alpha
+		right_wing.modulate.a = wing_alpha
 
 func take_damage(amount: int, hit_origin: Vector2 = Vector2.ZERO, knockback_force: float = 170.0) -> void:
 	if is_dead:

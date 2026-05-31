@@ -537,7 +537,7 @@ func _add_enemy_role_markers(enemy: Enemy, enemy_kind: String) -> void:
 				Vector2(-8, -27),
 			]))
 		"runner":
-			_add_enemy_trail(enemy, Color(0.68, 1.0, 0.92, 0.74))
+			_add_enemy_speed_wings(enemy, Color(0.68, 1.0, 0.92, 0.62))
 			_add_enemy_mark(enemy, Color(0.68, 1.0, 0.92, 0.92), PackedVector2Array([
 				Vector2(0, -42),
 				Vector2(13, -28),
@@ -591,19 +591,30 @@ func _add_enemy_mark(enemy: Enemy, color: Color, shape: PackedVector2Array) -> v
 	mark.polygon = shape
 	enemy.add_child(mark)
 
-func _add_enemy_trail(enemy: Enemy, color: Color) -> void:
-	var trail := Line2D.new()
-	trail.name = "RoleTrail"
-	trail.z_index = -2
-	trail.width = 4.0
-	trail.default_color = color
-	trail.points = PackedVector2Array([
-		Vector2(-22, 16),
-		Vector2(-46, 22),
+func _add_enemy_speed_wings(enemy: Enemy, color: Color) -> void:
+	var left_wing := Line2D.new()
+	left_wing.name = "RoleWingLeft"
+	left_wing.z_index = 4
+	left_wing.width = 3.0
+	left_wing.default_color = color
+	left_wing.points = PackedVector2Array([
 		Vector2(-18, -8),
-		Vector2(-42, -15),
+		Vector2(-30, 0),
+		Vector2(-18, 8),
 	])
-	enemy.add_child(trail)
+	enemy.add_child(left_wing)
+
+	var right_wing := Line2D.new()
+	right_wing.name = "RoleWingRight"
+	right_wing.z_index = 4
+	right_wing.width = 3.0
+	right_wing.default_color = color
+	right_wing.points = PackedVector2Array([
+		Vector2(18, -8),
+		Vector2(30, 0),
+		Vector2(18, 8),
+	])
+	enemy.add_child(right_wing)
 
 func _spawn_miniboss() -> void:
 	miniboss_spawned = true

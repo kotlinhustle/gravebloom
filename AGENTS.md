@@ -97,7 +97,7 @@ scripts/
 - Spawns the player.
 - Spawns enemy waves.
 - Enemy waves now mix roles: crawler, brute, fast runner, ranged spitter, explosive enemy, and miniboss.
-- Enemy roles are visually marked in code: brutes get armor rings, runners get speed trails, spitters get purple aim marks, and exploders get orange danger marks.
+- Enemy roles are visually marked in code: brutes get armor rings, runners get small speed wings, spitters get purple aim marks, and exploders get orange danger marks.
 - Keeps the player inside visible ruined arena bounds and caps live enemy pressure for early readability.
 - Visible UI text is Russian-first; keep menus, HUD, result screens, upgrade choices, and combat notices localized.
 - Spawns a miniboss near the end of the 3-minute run.
