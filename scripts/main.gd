@@ -826,9 +826,16 @@ func _build_ultimate_ui() -> void:
 	ultimate_button.text = "НОВА\n0%"
 	ultimate_button.disabled = false
 	ultimate_button.process_mode = Node.PROCESS_MODE_ALWAYS
+	ultimate_button.mouse_filter = Control.MOUSE_FILTER_STOP
 	ultimate_button.add_theme_font_size_override("font_size", 22)
 	ultimate_button.pressed.connect(_cast_ultimate)
+	ultimate_button.gui_input.connect(_on_ultimate_button_input)
 	ui_layer.add_child(ultimate_button)
+
+func _on_ultimate_button_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		_cast_ultimate()
+		ultimate_button.accept_event()
 
 func _update_ultimate(delta: float) -> void:
 	if ultimate_ready:
