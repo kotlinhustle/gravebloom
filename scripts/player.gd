@@ -123,9 +123,7 @@ func _update_mouse_drag_direction() -> void:
 		touch_direction = Vector2.ZERO
 		return
 	if not mouse_drag_active:
-		mouse_drag_active = true
-		mouse_drag_start = get_viewport().get_mouse_position()
-		touch_start = mouse_drag_start
+		return
 	_update_touch_direction(get_viewport().get_mouse_position())
 
 func _update_touch_direction(pointer_position: Vector2) -> void:

@@ -56,6 +56,20 @@ func _animate_art(delta: float) -> void:
 	art.position = base_art_position + Vector2(crawl, 0)
 	var squash := 1.0 + sin(anim_time * 1.7) * (0.035 if not is_miniboss else 0.018)
 	art.scale = art.scale.move_toward(base_art_scale * Vector2(squash, 1.0 / squash), delta * 12.0)
+	_animate_role_markers(delta)
+
+func _animate_role_markers(delta: float) -> void:
+	var ring := get_node_or_null("RoleRing") as CanvasItem
+	if ring != null:
+		ring.modulate.a = 0.62 + sin(anim_time * 1.8) * 0.22
+		ring.rotation += delta * (2.0 if enemy_kind == "exploder" else 0.6)
+	var mark := get_node_or_null("RoleMark") as CanvasItem
+	if mark != null:
+		mark.modulate.a = 0.72 + sin(anim_time * 2.5) * 0.2
+		mark.position.y = -34.0 + sin(anim_time * 2.1) * 2.0
+	var trail := get_node_or_null("RoleTrail") as CanvasItem
+	if trail != null:
+		trail.modulate.a = 0.42 + sin(anim_time * 4.0) * 0.22
 
 func take_damage(amount: int, hit_origin: Vector2 = Vector2.ZERO, knockback_force: float = 170.0) -> void:
 	if is_dead:

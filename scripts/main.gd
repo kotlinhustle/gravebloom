@@ -524,6 +524,86 @@ func _set_enemy_art(enemy: Enemy, enemy_kind: String, is_miniboss: bool) -> void
 	else:
 		art.texture = EnemyCrawlerTexture
 		art.scale = Vector2(0.28, 0.28)
+	_add_enemy_role_markers(enemy, enemy_kind)
+
+func _add_enemy_role_markers(enemy: Enemy, enemy_kind: String) -> void:
+	match enemy_kind:
+		"brute":
+			_add_enemy_ring(enemy, Color(0.95, 0.58, 0.72, 0.55), 31.0, 4.0)
+			_add_enemy_mark(enemy, Color(0.95, 0.58, 0.72, 0.86), PackedVector2Array([
+				Vector2(-14, -35),
+				Vector2(14, -35),
+				Vector2(8, -27),
+				Vector2(-8, -27),
+			]))
+		"runner":
+			_add_enemy_trail(enemy, Color(0.68, 1.0, 0.92, 0.74))
+			_add_enemy_mark(enemy, Color(0.68, 1.0, 0.92, 0.92), PackedVector2Array([
+				Vector2(0, -42),
+				Vector2(13, -28),
+				Vector2(3, -31),
+				Vector2(7, -20),
+				Vector2(-10, -35),
+			]))
+		"spitter":
+			_add_enemy_ring(enemy, Color(0.82, 0.52, 1.0, 0.58), 27.0, 3.0)
+			_add_enemy_mark(enemy, Color(0.86, 0.62, 1.0, 0.9), PackedVector2Array([
+				Vector2(0, -43),
+				Vector2(13, -31),
+				Vector2(0, -25),
+				Vector2(-13, -31),
+			]))
+		"exploder":
+			_add_enemy_ring(enemy, Color(1.0, 0.58, 0.28, 0.72), 34.0, 5.0)
+			_add_enemy_mark(enemy, Color(1.0, 0.72, 0.34, 0.95), PackedVector2Array([
+				Vector2(0, -45),
+				Vector2(9, -34),
+				Vector2(20, -33),
+				Vector2(11, -25),
+				Vector2(14, -14),
+				Vector2(0, -20),
+				Vector2(-14, -14),
+				Vector2(-11, -25),
+				Vector2(-20, -33),
+				Vector2(-9, -34),
+			]))
+		"miniboss":
+			_add_enemy_ring(enemy, Color(0.9, 0.48, 0.72, 0.7), 45.0, 5.0)
+
+func _add_enemy_ring(enemy: Enemy, color: Color, radius: float, width: float) -> void:
+	var ring := Line2D.new()
+	ring.name = "RoleRing"
+	ring.z_index = -1
+	ring.closed = true
+	ring.width = width
+	ring.default_color = color
+	var points := PackedVector2Array()
+	for i in range(18):
+		points.append(Vector2.RIGHT.rotated(TAU * float(i) / 18.0) * radius)
+	ring.points = points
+	enemy.add_child(ring)
+
+func _add_enemy_mark(enemy: Enemy, color: Color, shape: PackedVector2Array) -> void:
+	var mark := Polygon2D.new()
+	mark.name = "RoleMark"
+	mark.z_index = 5
+	mark.color = color
+	mark.polygon = shape
+	enemy.add_child(mark)
+
+func _add_enemy_trail(enemy: Enemy, color: Color) -> void:
+	var trail := Line2D.new()
+	trail.name = "RoleTrail"
+	trail.z_index = -2
+	trail.width = 4.0
+	trail.default_color = color
+	trail.points = PackedVector2Array([
+		Vector2(-22, 16),
+		Vector2(-46, 22),
+		Vector2(-18, -8),
+		Vector2(-42, -15),
+	])
+	enemy.add_child(trail)
 
 func _spawn_miniboss() -> void:
 	miniboss_spawned = true
