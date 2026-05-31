@@ -100,6 +100,7 @@ scripts/
 - Enemy roles are visually marked in code: brutes get armor rings, runners get small speed wings, spitters get purple aim marks, and exploders get orange danger marks.
 - Keeps the player inside visible ruined arena bounds and caps live enemy pressure for early readability.
 - Visible UI text is Russian-first; keep menus, HUD, result screens, upgrade choices, and combat notices localized.
+- Micro-lore is embedded through the start screen, timed run notices, relic descriptions, and result text.
 - Spawns a miniboss near the end of the 3-minute run.
 - Owns enemy and XP shard lists.
 - Updates XP collection, level-ups, randomized relic choices, HUD, XP bar, result screens, enemy contact damage, and enemy projectiles.
@@ -160,7 +161,7 @@ scripts/
 - Runs now have a start screen, XP bar, 3:00 survival goal, miniboss event, victory screen, death screen, and restart button.
 - Relics can unlock Shadow Spirit, a secondary auto-skill that cuts through enemies in a beam.
 - Gravebloom Nova is an ultimate: it charges over time, shows a visible `NOVA` button with percent progress, can be fired with the button or `Space`, and blasts nearby enemies.
-- The Nova button uses direct screen-rect pointer handling in `Main` for browser reliability instead of relying only on Godot `Button.pressed`.
+- The Nova button uses direct screen-rect pointer handling and a transparent `ultimate_hit_area` in `Main` for browser reliability instead of relying only on Godot `Button.pressed`.
 - XP pacing is intentionally slower after the ultimate was added: higher XP thresholds keep Nova kills from over-leveling too quickly.
 
 ## Near-Term Roadmap

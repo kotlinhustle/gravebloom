@@ -18,6 +18,13 @@ const ULTIMATE_COOLDOWN := 30.0
 const ULTIMATE_RADIUS := 380.0
 const ULTIMATE_DAMAGE := 7
 const MAX_RELIC_CHOICES := 3
+const BASE_VIEWPORT_SIZE := Vector2(540.0, 960.0)
+const LORE_EVENTS := [
+	{"time": 12.0, "text": "Руины проснулись"},
+	{"time": 45.0, "text": "Gravebloom тянется к крови"},
+	{"time": 90.0, "text": "Маска шепчет: не останавливайся"},
+	{"time": 130.0, "text": "Клинок вспоминает старую клятву"},
+]
 
 var player: Player
 var living_blade: Node2D
@@ -56,6 +63,7 @@ var thorn_bloom_cooldown := 0.0
 var vampirism_unlocked := false
 var kill_count := 0
 var ultimate_pointer_active := false
+var lore_event_index := 0
 
 @onready var world := Node2D.new()
 @onready var fx_layer := Node2D.new()
@@ -65,6 +73,7 @@ var ultimate_pointer_active := false
 @onready var xp_bar := ProgressBar.new()
 @onready var ultimate_bar := ProgressBar.new()
 @onready var ultimate_button := Button.new()
+@onready var ultimate_hit_area := Control.new()
 @onready var joystick_base := Panel.new()
 @onready var joystick_knob := Panel.new()
 @onready var upgrade_panel := PanelContainer.new()
@@ -93,6 +102,7 @@ func _process(delta: float) -> void:
 		return
 	if not miniboss_spawned and elapsed >= MINIBOSS_TIME:
 		_spawn_miniboss()
+	_update_lore_events()
 	spawn_timer -= delta
 	if spawn_timer <= 0.0:
 		_spawn_enemy_wave()
@@ -387,12 +397,14 @@ func _show_start_screen() -> void:
 	get_tree().paused = true
 	joystick_base.visible = false
 	ultimate_button.visible = false
+	ultimate_hit_area.visible = false
 	ultimate_bar.visible = false
 	overlay_panel.visible = true
 	_clear_container(overlay_list)
 	_add_overlay_label("GRAVEBLOOM", 42)
-	_add_overlay_label("Продержись 3:00 в проклятых руинах.", 22)
-	_add_overlay_label("Живой Клинок охотится сам. Твоя задача - двигаться.", 17)
+	_add_overlay_label("Королевство умерло, но его цветы продолжают расти.", 19)
+	_add_overlay_label("Маска помнит путь к сердцу проклятия.", 19)
+	_add_overlay_label("Продержись до рассвета.", 22)
 	_add_overlay_button("Начать забег", _start_run)
 
 func _start_run() -> void:
@@ -400,6 +412,7 @@ func _start_run() -> void:
 	overlay_panel.visible = false
 	joystick_base.visible = true
 	ultimate_button.visible = true
+	ultimate_hit_area.visible = true
 	ultimate_bar.visible = true
 	game_state = "running"
 	get_tree().paused = false
@@ -427,6 +440,7 @@ func _reset_run() -> void:
 	thorn_bloom_cooldown = 0.0
 	vampirism_unlocked = false
 	kill_count = 0
+	lore_event_index = 0
 	_update_ultimate_ui()
 	_reset_joystick()
 	_stop_screen_shake()
@@ -776,6 +790,7 @@ func _level_up() -> void:
 	game_state = "upgrade"
 	joystick_base.visible = false
 	ultimate_button.visible = false
+	ultimate_hit_area.visible = false
 	ultimate_bar.visible = false
 	_reset_joystick()
 	get_tree().paused = true
@@ -792,14 +807,14 @@ func _show_upgrades() -> void:
 
 func _roll_relics() -> Array:
 	var relics := [
-		{"name": "Заточить Живой Клинок", "description": "Больше урона клинком", "method": "_upgrade_damage"},
-		{"name": "Ускорить проклятие", "description": "Клинок атакует чаще", "method": "_upgrade_cooldown"},
-		{"name": "Расширить бледный радиус", "description": "Клинок ищет врагов дальше", "method": "_upgrade_range"},
-		{"name": "Призвать Тень", "description": "Дух прорезает толпу лучом", "method": "_upgrade_shadow_spirit"},
-		{"name": "Могильный Магнит", "description": "Опыт тянется к тебе дальше", "method": "_upgrade_magnet"},
-		{"name": "Кровавый Цветок", "description": "Каждое 9-е убийство лечит", "method": "_upgrade_vampirism"},
-		{"name": "Сердце Новы", "description": "Ульта заряжается быстрее и бьет шире", "method": "_upgrade_nova"},
-		{"name": "Шипастый Венец", "description": "Ближние враги получают ответный удар", "method": "_upgrade_thorns"},
+		{"name": "Заточить Живой Клинок", "description": "Он снова вспоминает, как резать плоть", "method": "_upgrade_damage"},
+		{"name": "Ускорить проклятие", "description": "Клинок голодает все чаще", "method": "_upgrade_cooldown"},
+		{"name": "Расширить бледный радиус", "description": "Маска видит добычу дальше", "method": "_upgrade_range"},
+		{"name": "Призвать Тень", "description": "Старый спутник прорезает толпу лучом", "method": "_upgrade_shadow_spirit"},
+		{"name": "Могильный Магнит", "description": "Осколки павших сами ищут Маску", "method": "_upgrade_magnet"},
+		{"name": "Кровавый Цветок", "description": "Пьет кровь павших и возвращает ее тебе", "method": "_upgrade_vampirism"},
+		{"name": "Сердце Новы", "description": "Внутри цветка все еще горит звезда", "method": "_upgrade_nova"},
+		{"name": "Шипастый Венец", "description": "Короли Gravebloom умирали стоя", "method": "_upgrade_thorns"},
 	]
 	relics.shuffle()
 	return relics.slice(0, MAX_RELIC_CHOICES)
@@ -819,6 +834,7 @@ func _on_upgrade_button_pressed(button: Button) -> void:
 	upgrade_panel.visible = false
 	joystick_base.visible = true
 	ultimate_button.visible = true
+	ultimate_hit_area.visible = true
 	ultimate_bar.visible = true
 	paused_for_upgrade = false
 	game_state = "running"
@@ -862,13 +878,22 @@ func _upgrade_thorns() -> void:
 	thorn_bloom_unlocked = true
 	_flash_overlay_text("Шипастый Венец пробудился")
 
+func _update_lore_events() -> void:
+	if lore_event_index >= LORE_EVENTS.size():
+		return
+	var lore_event: Dictionary = LORE_EVENTS[lore_event_index]
+	if elapsed >= float(lore_event["time"]):
+		lore_event_index += 1
+		_flash_overlay_text(String(lore_event["text"]))
+
 func _show_game_over() -> void:
 	if game_state == "game_over":
 		return
 	game_state = "game_over"
-	last_run_result = "Странник в Маске пал"
+	last_run_result = "Маска треснула, но проклятие запомнило тебя"
 	joystick_base.visible = false
 	ultimate_button.visible = false
+	ultimate_hit_area.visible = false
 	ultimate_bar.visible = false
 	_reset_joystick()
 	get_tree().paused = true
@@ -876,9 +901,10 @@ func _show_game_over() -> void:
 
 func _show_victory() -> void:
 	game_state = "victory"
-	last_run_result = "Проклятие отступает"
+	last_run_result = "На миг Gravebloom отступил от сердца руин"
 	joystick_base.visible = false
 	ultimate_button.visible = false
+	ultimate_hit_area.visible = false
 	ultimate_bar.visible = false
 	_reset_joystick()
 	get_tree().paused = true
@@ -924,19 +950,41 @@ func _build_ultimate_ui() -> void:
 	ultimate_button.focus_mode = Control.FOCUS_NONE
 	ultimate_button.add_theme_font_size_override("font_size", 22)
 	ui_layer.add_child(ultimate_button)
+	ultimate_hit_area.position = ultimate_button.position - Vector2(22.0, 22.0)
+	ultimate_hit_area.size = ultimate_button.size + Vector2(44.0, 44.0)
+	ultimate_hit_area.mouse_filter = Control.MOUSE_FILTER_STOP
+	ultimate_hit_area.process_mode = Node.PROCESS_MODE_ALWAYS
+	ultimate_hit_area.focus_mode = Control.FOCUS_NONE
+	ultimate_hit_area.gui_input.connect(_on_ultimate_hit_area_input)
+	ui_layer.add_child(ultimate_hit_area)
+
+func _on_ultimate_hit_area_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		ultimate_pointer_active = event.pressed
+		if event.pressed:
+			_cast_ultimate()
+		ultimate_hit_area.accept_event()
+	elif event is InputEventScreenTouch:
+		ultimate_pointer_active = event.pressed
+		if event.pressed:
+			_cast_ultimate()
+		ultimate_hit_area.accept_event()
+	elif event is InputEventMouseMotion or event is InputEventScreenDrag:
+		if ultimate_pointer_active:
+			ultimate_hit_area.accept_event()
 
 func _consume_ultimate_pointer(event: InputEvent) -> bool:
 	if ultimate_button == null or not ultimate_button.visible:
 		return false
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		if not _ultimate_hit_rect().has_point(event.position):
+		if not _ultimate_hit_test(event.position):
 			return false
 		ultimate_pointer_active = event.pressed
 		if event.pressed:
 			_cast_ultimate()
 		return true
 	if event is InputEventScreenTouch:
-		if not _ultimate_hit_rect().has_point(event.position):
+		if not _ultimate_hit_test(event.position):
 			return false
 		ultimate_pointer_active = event.pressed
 		if event.pressed:
@@ -948,8 +996,18 @@ func _consume_ultimate_pointer(event: InputEvent) -> bool:
 		return true
 	return false
 
-func _ultimate_hit_rect() -> Rect2:
-	return ultimate_button.get_global_rect().grow(18.0)
+func _ultimate_hit_test(pointer_position: Vector2) -> bool:
+	var hit_rect := ultimate_button.get_global_rect().grow(28.0)
+	if hit_rect.has_point(pointer_position):
+		return true
+	var viewport_size := get_viewport_rect().size
+	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
+		return false
+	var normalized_position := Vector2(
+		pointer_position.x * BASE_VIEWPORT_SIZE.x / viewport_size.x,
+		pointer_position.y * BASE_VIEWPORT_SIZE.y / viewport_size.y
+	)
+	return hit_rect.has_point(normalized_position)
 
 func _update_ultimate(delta: float) -> void:
 	if ultimate_ready:
