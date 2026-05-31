@@ -63,6 +63,7 @@ assets/
     enemy_crawler.png
     enemy_brute.png
     grave_warden.png
+    grave_king.png
     living_blade.png
     xp_shard.png
 scenes/
@@ -96,12 +97,19 @@ scripts/
 - Manages run states: start, running, upgrade, game_over, victory.
 - Spawns the player.
 - Spawns enemy waves.
-- Enemy waves now mix roles: crawler, brute, fast runner, ranged spitter, explosive enemy, and miniboss.
+- Enemy waves now mix roles: crawler, brute, fast runner, flanker, ranged spitter, explosive enemy, final-minute boss, and miniboss.
 - Enemy roles are visually marked in code: brutes get armor rings, runners get small speed wings, spitters get purple aim marks, and exploders get orange danger marks.
+- Enemies use light separation so they do not collapse into one harmless blob during circular kiting.
+- Spitters use predictive shots, flankers try to cut ahead/sideways, and after the first minute occasional interceptors spawn ahead of the player's movement to break endless clockwise/counterclockwise kiting.
+- Gravebloom hazard zones periodically warn, bloom, then damage the player if they keep running through the same route; they should read as large animated cursed flowers with a short Russian warning label.
+- If too many enemies stay packed together after the first minute, the cluster can bloom into a hazard zone to punish harmless enemy balls.
+- `Король-Могила` is the final-minute pressure boss at 2:00: custom terrifying grave king sprite, very high speed, high health, larger contact radius, periodic Gravebloom hazards, flanker/spitter summons, and telegraphed boss attacks.
+- Boss attacks include `Похоронный Колокол` radial shock rings, `Королевский Приговор` lane strikes along the player's route, and phase-two `Черная корона` cross strikes.
 - Keeps the player inside visible ruined arena bounds and caps live enemy pressure for early readability.
 - Visible UI text is Russian-first; keep menus, HUD, result screens, upgrade choices, and combat notices localized.
 - Micro-lore is embedded through the start screen, timed run notices, relic descriptions, and result text.
-- Spawns a miniboss near the end of the 3-minute run.
+- Relic cards should keep the lore phrase, then add a short mechanical effect so choices stay understandable.
+- Spawns `Король-Могила` at 2:00 and a smaller miniboss near the end of the 3-minute run.
 - Owns enemy and XP shard lists.
 - Updates XP collection, level-ups, randomized relic choices, HUD, XP bar, result screens, enemy contact damage, and enemy projectiles.
 - Handles screen shake, XP sparkles, and Shadow Spirit secondary weapon.
@@ -113,6 +121,7 @@ scripts/
 - `CharacterBody2D`.
 - Camera zoom is tuned for mobile portrait readability.
 - Supports keyboard movement via WASD/arrows.
+- Keyboard movement is polled every physics frame; do not reintroduce persistent key latch booleans for movement because browser builds can miss key release events and create stuck movement.
 - Supports mouse drag movement by polling left mouse button.
 - Mouse drag now starts only from unhandled pointer events, so UI clicks do not silently turn into movement input.
 - Has early touch input support for mobile-style movement.
@@ -160,8 +169,8 @@ scripts/
 - Hits now show damage numbers, enemy flash/squash, knockback, and death bursts.
 - Runs now have a start screen, XP bar, 3:00 survival goal, miniboss event, victory screen, death screen, and restart button.
 - Relics can unlock Shadow Spirit, a secondary auto-skill that cuts through enemies in a beam.
-- Gravebloom Nova is an ultimate: it charges over time, shows a visible `NOVA` button with percent progress, can be fired with the button or `Space`, and blasts nearby enemies.
-- The Nova button is a large real `Button` using `button_down`/press action for browser reliability.
+- Gravebloom Nova is an automatic ultimate: it charges over time, shows a visible `NOVA` indicator with percent progress, then fires by itself and blasts nearby enemies.
+- Do not spend more time trying to make laptop touchpad tap-to-click control Nova; the game should not depend on that input path.
 - Small health packs can drop from enemies, pulse on the ground, heal a little on pickup, and expire after a short time.
 - XP pacing is intentionally slower after the ultimate was added: higher XP thresholds keep Nova kills from over-leveling too quickly.
 

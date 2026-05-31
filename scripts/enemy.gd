@@ -20,6 +20,11 @@ var contact_damage := 18.0
 var spit_timer := 1.8
 var spit_cooldown := 2.6
 var preferred_range := 280.0
+var separation_radius := 54.0
+var separation_strength := 0.42
+var flank_side := 1.0
+var flank_distance := 150.0
+var flank_ahead := 135.0
 
 @onready var art := $Art
 @onready var base_art_position: Vector2 = art.position
@@ -38,18 +43,57 @@ func _physics_process(delta: float) -> void:
 	_animate_art(delta)
 
 func _movement_direction(direction: Vector2, delta: float) -> Vector2:
+	if enemy_kind == "flanker":
+		return _flanker_direction(direction)
 	if enemy_kind != "spitter":
-		return direction
+		return _with_separation(direction)
 	var distance := global_position.distance_to(target.global_position)
 	spit_timer -= delta
 	if spit_timer <= 0.0 and distance < 520.0:
 		spit_timer = spit_cooldown
-		spitting.emit(global_position, direction)
+		spitting.emit(global_position, _get_lead_direction(direction))
 	if distance < preferred_range * 0.74:
-		return -direction
+		return _with_separation(-direction)
 	if distance > preferred_range:
-		return direction
-	return Vector2.ZERO
+		return _with_separation(direction)
+	return _with_separation(Vector2.ZERO)
+
+func _flanker_direction(direction: Vector2) -> Vector2:
+	var target_velocity := Vector2.ZERO
+	if target is CharacterBody2D:
+		target_velocity = (target as CharacterBody2D).velocity
+	var forward := target_velocity.normalized()
+	if forward == Vector2.ZERO:
+		forward = direction
+	var flank_target := target.global_position + forward * flank_ahead + forward.rotated(PI / 2.0) * flank_side * flank_distance
+	var flank_direction := global_position.direction_to(flank_target)
+	return _with_separation(flank_direction)
+
+func _get_lead_direction(fallback_direction: Vector2) -> Vector2:
+	if target == null:
+		return fallback_direction
+	var target_velocity := Vector2.ZERO
+	if target is CharacterBody2D:
+		target_velocity = (target as CharacterBody2D).velocity
+	var lead_time: float = clampf(global_position.distance_to(target.global_position) / 320.0, 0.35, 0.85)
+	var predicted_position: Vector2 = target.global_position + target_velocity * lead_time
+	return global_position.direction_to(predicted_position)
+
+func _with_separation(base_direction: Vector2) -> Vector2:
+	var separation := Vector2.ZERO
+	for other in get_tree().get_nodes_in_group("enemies"):
+		if other == self or not (other is Enemy):
+			continue
+		var other_enemy := other as Enemy
+		var offset: Vector2 = global_position - other_enemy.global_position
+		var distance: float = offset.length()
+		if distance <= 0.0 or distance > separation_radius:
+			continue
+		separation += offset.normalized() * ((separation_radius - distance) / separation_radius)
+	var combined := base_direction + separation * separation_strength
+	if combined.length() > 1.0:
+		return combined.normalized()
+	return combined
 
 func _animate_art(delta: float) -> void:
 	var crawl := sin(anim_time) * (2.6 if not is_miniboss else 1.6)

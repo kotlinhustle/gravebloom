@@ -8,8 +8,10 @@ const CombatFxScript := preload("res://scripts/combat_fx.gd")
 const EnemyCrawlerTexture := preload("res://assets/sprites/enemy_crawler.png")
 const EnemyBruteTexture := preload("res://assets/sprites/enemy_brute.png")
 const GraveWardenTexture := preload("res://assets/sprites/grave_warden.png")
+const GraveKingTexture := preload("res://assets/sprites/grave_king.png")
 
 const RUN_DURATION := 180.0
+const DREAD_BOSS_TIME := 120.0
 const MINIBOSS_TIME := 150.0
 const ARENA_LIMIT_X := 2060.0
 const ARENA_LIMIT_Y := 1360.0
@@ -17,9 +19,28 @@ const MAX_ENEMIES := 55
 const ULTIMATE_COOLDOWN := 30.0
 const ULTIMATE_RADIUS := 380.0
 const ULTIMATE_DAMAGE := 7
+const ULTIMATE_AUTO_CAST := true
 const MAX_RELIC_CHOICES := 3
 const HEALTH_PACK_DROP_CHANCE := 0.07
 const HEALTH_PACK_HEAL := 16.0
+const ANTI_KITE_START_TIME := 58.0
+const ANTI_KITE_INTERVAL := 12.0
+const HAZARD_START_TIME := 62.0
+const HAZARD_INTERVAL := 5.0
+const HAZARD_ARM_TIME := 1.05
+const HAZARD_ACTIVE_TIME := 2.6
+const HAZARD_RADIUS := 112.0
+const HAZARD_DAMAGE := 18.0
+const CLUSTER_BLOOM_START_TIME := 72.0
+const CLUSTER_BLOOM_INTERVAL := 7.0
+const CLUSTER_BLOOM_MIN_ENEMIES := 12
+const DREAD_BOSS_HAZARD_INTERVAL := 4.8
+const DREAD_BOSS_SUMMON_INTERVAL := 7.4
+const DREAD_BOSS_BELL_INTERVAL := 8.2
+const DREAD_BOSS_JUDGMENT_INTERVAL := 6.4
+const DREAD_BOSS_CROSS_INTERVAL := 10.5
+const BOSS_ATTACK_ARM_TIME := 1.0
+const BOSS_ATTACK_ACTIVE_TIME := 0.45
 const LORE_EVENTS := [
 	{"time": 12.0, "text": "Руины проснулись"},
 	{"time": 45.0, "text": "Gravebloom тянется к крови"},
@@ -33,6 +54,8 @@ var enemies: Array[Enemy] = []
 var shards: Array[XPShard] = []
 var enemy_projectiles: Array[Node2D] = []
 var health_packs: Array[Node2D] = []
+var hazard_zones: Array[Node2D] = []
+var boss_attacks: Array[Node2D] = []
 var elapsed := 0.0
 var spawn_timer := 0.0
 var level := 1
@@ -41,6 +64,7 @@ var xp_to_next := 14
 var shard_pull_range := 95.0
 var paused_for_upgrade := false
 var game_state := "start"
+var dread_boss_spawned := false
 var miniboss_spawned := false
 var last_run_result := ""
 var shadow_spirit_unlocked := false
@@ -65,6 +89,15 @@ var thorn_bloom_cooldown := 0.0
 var vampirism_unlocked := false
 var kill_count := 0
 var lore_event_index := 0
+var anti_kite_timer := ANTI_KITE_INTERVAL
+var hazard_timer := HAZARD_INTERVAL
+var cluster_bloom_timer := CLUSTER_BLOOM_INTERVAL
+var dread_boss_hazard_timer := DREAD_BOSS_HAZARD_INTERVAL
+var dread_boss_summon_timer := DREAD_BOSS_SUMMON_INTERVAL
+var dread_boss_bell_timer := DREAD_BOSS_BELL_INTERVAL
+var dread_boss_judgment_timer := DREAD_BOSS_JUDGMENT_INTERVAL
+var dread_boss_cross_timer := DREAD_BOSS_CROSS_INTERVAL
+var dread_boss_phase_two := false
 
 @onready var world := Node2D.new()
 @onready var fx_layer := Node2D.new()
@@ -100,6 +133,8 @@ func _process(delta: float) -> void:
 	if elapsed >= RUN_DURATION:
 		_show_victory()
 		return
+	if not dread_boss_spawned and elapsed >= DREAD_BOSS_TIME:
+		_spawn_dread_boss()
 	if not miniboss_spawned and elapsed >= MINIBOSS_TIME:
 		_spawn_miniboss()
 	_update_lore_events()
@@ -107,20 +142,20 @@ func _process(delta: float) -> void:
 	if spawn_timer <= 0.0:
 		_spawn_enemy_wave()
 		spawn_timer = max(0.32, 1.18 - elapsed * 0.006)
+	_update_anti_kite_pressure(delta)
 	living_blade.tick(delta, enemies)
 	_update_ultimate(delta)
 	_update_shadow_spirit(delta)
 	_update_enemy_projectiles(delta)
+	_update_hazard_zones(delta)
+	_update_boss_attacks(delta)
+	_update_cluster_bloom(delta)
+	_update_dread_boss_pressure(delta)
 	_update_shards(delta)
 	_update_health_packs(delta)
 	_check_enemy_contact(delta)
 	_keep_player_inside_arena()
 	_update_hud()
-
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_SPACE or event.physical_keycode == KEY_SPACE:
-			_cast_ultimate()
 
 func _build_arena() -> void:
 	var bg := ColorRect.new()
@@ -420,6 +455,7 @@ func _reset_run() -> void:
 	xp = 0
 	xp_to_next = 14
 	paused_for_upgrade = false
+	dread_boss_spawned = false
 	miniboss_spawned = false
 	last_run_result = ""
 	shadow_spirit_unlocked = false
@@ -436,6 +472,15 @@ func _reset_run() -> void:
 	vampirism_unlocked = false
 	kill_count = 0
 	lore_event_index = 0
+	anti_kite_timer = ANTI_KITE_INTERVAL
+	hazard_timer = HAZARD_INTERVAL
+	cluster_bloom_timer = CLUSTER_BLOOM_INTERVAL
+	dread_boss_hazard_timer = DREAD_BOSS_HAZARD_INTERVAL
+	dread_boss_summon_timer = DREAD_BOSS_SUMMON_INTERVAL
+	dread_boss_bell_timer = DREAD_BOSS_BELL_INTERVAL
+	dread_boss_judgment_timer = DREAD_BOSS_JUDGMENT_INTERVAL
+	dread_boss_cross_timer = DREAD_BOSS_CROSS_INTERVAL
+	dread_boss_phase_two = false
 	_update_ultimate_ui()
 	_reset_joystick()
 	_stop_screen_shake()
@@ -452,7 +497,31 @@ func _spawn_enemy_wave() -> void:
 	for i in range(count):
 		_spawn_enemy(_pick_enemy_kind(), false)
 
+func _update_anti_kite_pressure(delta: float) -> void:
+	if elapsed < ANTI_KITE_START_TIME or player == null:
+		return
+	anti_kite_timer -= delta
+	if anti_kite_timer > 0.0:
+		return
+	anti_kite_timer = max(7.5, ANTI_KITE_INTERVAL - elapsed * 0.018)
+	var available_slots: int = MAX_ENEMIES - enemies.size()
+	if available_slots <= 0:
+		return
+	var interceptors: int = 1
+	if elapsed > 120.0 and available_slots > 1:
+		interceptors = 2
+	for i in range(min(interceptors, available_slots)):
+		var roll := randf()
+		var kind := "flanker"
+		if roll < 0.24:
+			kind = "exploder"
+		elif roll < 0.58:
+			kind = "runner"
+		_spawn_enemy(kind, false, _get_interceptor_position(i))
+
 func _pick_enemy_kind() -> String:
+	if elapsed > 58.0 and randf() < min(0.18, 0.05 + elapsed / 760.0):
+		return "flanker"
 	if elapsed > 70.0 and randf() < 0.08:
 		return "exploder"
 	if elapsed > 46.0 and randf() < min(0.16, 0.04 + elapsed / 650.0):
@@ -463,7 +532,7 @@ func _pick_enemy_kind() -> String:
 		return "brute"
 	return "crawler"
 
-func _spawn_enemy(enemy_kind: String, is_miniboss: bool) -> void:
+func _spawn_enemy(enemy_kind: String, is_miniboss: bool, spawn_position := Vector2.INF) -> void:
 	var enemy: Enemy = EnemyScene.instantiate()
 	enemy.enemy_kind = enemy_kind
 	enemy.max_health = 2 + int(elapsed / 52.0)
@@ -481,6 +550,14 @@ func _spawn_enemy(enemy_kind: String, is_miniboss: bool) -> void:
 		enemy.speed *= 1.48
 		enemy.scale = Vector2.ONE * 0.82
 		enemy.contact_damage = 14.0
+	elif enemy_kind == "flanker":
+		enemy.max_health += 2
+		enemy.speed *= 1.34
+		enemy.scale = Vector2.ONE * 0.9
+		enemy.contact_damage = 16.0
+		enemy.flank_side = -1.0 if randf() < 0.5 else 1.0
+		enemy.flank_distance = randf_range(125.0, 190.0)
+		enemy.flank_ahead = randf_range(105.0, 180.0)
 	elif enemy_kind == "spitter":
 		enemy.max_health += 2
 		enemy.speed *= 0.82
@@ -494,30 +571,55 @@ func _spawn_enemy(enemy_kind: String, is_miniboss: bool) -> void:
 		enemy.scale = Vector2.ONE * 1.05
 		enemy.contact_damage = 30.0
 		enemy.xp_value = 2
+	elif enemy_kind == "grave_king":
+		enemy.max_health = 112 + int(elapsed / 3.5)
+		enemy.speed = 142.0
+		enemy.scale = Vector2.ONE * 1.0
+		enemy.contact_damage = 52.0
+		enemy.xp_value = 24
 	if is_miniboss:
 		enemy.is_miniboss = true
-		enemy.enemy_kind = "miniboss"
-		enemy.max_health = 34 + int(elapsed / 10.0)
-		enemy.speed = 46.0
-		enemy.scale = Vector2.ONE * 2.25
-		enemy.xp_value = 12
-		enemy.contact_damage = 32.0
+		if enemy_kind != "grave_king":
+			enemy.enemy_kind = "miniboss"
+			enemy.max_health = 34 + int(elapsed / 10.0)
+			enemy.speed = 46.0
+			enemy.scale = Vector2.ONE * 2.25
+			enemy.xp_value = 12
+			enemy.contact_damage = 32.0
 	_set_enemy_art(enemy, enemy.enemy_kind, is_miniboss)
 	enemy.base_scale = enemy.scale
 	enemy.health = enemy.max_health
-	enemy.position = _clamp_to_arena(player.position + Vector2.RIGHT.rotated(randf() * TAU) * randf_range(360.0, 520.0))
+	if spawn_position == Vector2.INF:
+		enemy.position = _clamp_to_arena(player.position + Vector2.RIGHT.rotated(randf() * TAU) * randf_range(360.0, 520.0))
+	else:
+		enemy.position = _clamp_to_arena(spawn_position)
 	enemy.target = player
+	enemy.add_to_group("enemies")
 	enemy.damaged.connect(_on_enemy_damaged)
 	enemy.spitting.connect(_on_enemy_spitting)
 	enemy.died.connect(_on_enemy_died.bind(enemy.xp_value, enemy.is_miniboss))
 	enemies.append(enemy)
 	world.add_child(enemy)
 
+func _get_interceptor_position(index: int) -> Vector2:
+	var forward := player.velocity.normalized()
+	if forward == Vector2.ZERO:
+		forward = Vector2.RIGHT.rotated(randf() * TAU)
+	var side := forward.rotated(PI / 2.0)
+	var side_sign := -1.0 if index % 2 == 0 else 1.0
+	var distance_ahead := randf_range(250.0, 360.0)
+	var side_offset := side * side_sign * randf_range(70.0, 150.0)
+	return player.position + forward * distance_ahead + side_offset
+
 func _set_enemy_art(enemy: Enemy, enemy_kind: String, is_miniboss: bool) -> void:
 	var art := enemy.get_node_or_null("Art")
 	if art == null:
 		return
-	if is_miniboss:
+	if enemy_kind == "grave_king":
+		art.texture = GraveKingTexture
+		art.scale = Vector2(0.24, 0.24)
+		art.modulate = Color(0.82, 0.92, 0.86)
+	elif is_miniboss:
 		art.texture = GraveWardenTexture
 		art.scale = Vector2(0.2, 0.2)
 	elif enemy_kind == "brute":
@@ -527,6 +629,10 @@ func _set_enemy_art(enemy: Enemy, enemy_kind: String, is_miniboss: bool) -> void
 		art.texture = EnemyCrawlerTexture
 		art.scale = Vector2(0.23, 0.23)
 		art.modulate = Color(0.78, 1.0, 0.88)
+	elif enemy_kind == "flanker":
+		art.texture = EnemyCrawlerTexture
+		art.scale = Vector2(0.24, 0.24)
+		art.modulate = Color(1.0, 0.92, 0.62)
 	elif enemy_kind == "spitter":
 		art.texture = EnemyCrawlerTexture
 		art.scale = Vector2(0.27, 0.27)
@@ -559,6 +665,16 @@ func _add_enemy_role_markers(enemy: Enemy, enemy_kind: String) -> void:
 				Vector2(7, -20),
 				Vector2(-10, -35),
 			]))
+		"flanker":
+			_add_enemy_speed_wings(enemy, Color(1.0, 0.92, 0.58, 0.62))
+			_add_enemy_mark(enemy, Color(1.0, 0.9, 0.52, 0.9), PackedVector2Array([
+				Vector2(-13, -36),
+				Vector2(13, -36),
+				Vector2(3, -24),
+				Vector2(13, -16),
+				Vector2(-13, -16),
+				Vector2(-3, -24),
+			]))
 		"spitter":
 			_add_enemy_ring(enemy, Color(0.82, 0.52, 1.0, 0.58), 27.0, 3.0)
 			_add_enemy_mark(enemy, Color(0.86, 0.62, 1.0, 0.9), PackedVector2Array([
@@ -583,6 +699,19 @@ func _add_enemy_role_markers(enemy: Enemy, enemy_kind: String) -> void:
 			]))
 		"miniboss":
 			_add_enemy_ring(enemy, Color(0.9, 0.48, 0.72, 0.7), 45.0, 5.0)
+		"grave_king":
+			_add_enemy_ring(enemy, Color(0.62, 1.0, 0.58, 0.82), 62.0, 7.0)
+			_add_enemy_ring(enemy, Color(0.95, 0.52, 0.86, 0.58), 78.0, 4.0)
+			_add_enemy_mark(enemy, Color(0.76, 1.0, 0.62, 0.96), PackedVector2Array([
+				Vector2(0, -76),
+				Vector2(18, -48),
+				Vector2(9, -52),
+				Vector2(22, -24),
+				Vector2(0, -38),
+				Vector2(-22, -24),
+				Vector2(-9, -52),
+				Vector2(-18, -48),
+			]))
 
 func _add_enemy_ring(enemy: Enemy, color: Color, radius: float, width: float) -> void:
 	var ring := Line2D.new()
@@ -637,6 +766,18 @@ func _spawn_miniboss() -> void:
 	_flash_overlay_text("Могильный Страж пробудился")
 	_start_screen_shake(0.34, 8.0)
 
+func _spawn_dread_boss() -> void:
+	dread_boss_spawned = true
+	var spawn_direction := Vector2.RIGHT.rotated(randf() * TAU)
+	var spawn_position := player.position + spawn_direction * 520.0
+	_spawn_enemy("grave_king", true, spawn_position)
+	CombatFxScript.ring(fx_layer, player.global_position, Color(0.64, 1.0, 0.56, 0.92), 360.0, 0.9)
+	CombatFxScript.ring(fx_layer, player.global_position, Color(0.95, 0.5, 0.8, 0.72), 220.0, 0.7)
+	_flash_overlay_text("Король-Могила встал")
+	_start_screen_shake(0.64, 12.0)
+	for i in range(3):
+		_spawn_hazard_zone(player.position + Vector2.RIGHT.rotated(TAU * float(i) / 3.0 + randf_range(-0.35, 0.35)) * randf_range(170.0, 310.0))
+
 func _on_enemy_damaged(enemy_position: Vector2, amount: int) -> void:
 	CombatFxScript.damage_number(fx_layer, enemy_position, amount)
 
@@ -668,7 +809,7 @@ func _on_enemy_died(enemy_position: Vector2, xp_value: int = 1, was_miniboss: bo
 	shards.append(shard)
 	world.add_child(shard)
 	if was_miniboss:
-		_flash_overlay_text("Могильный Страж повержен")
+		_flash_overlay_text("Король-Могила пал" if xp_value >= 20 else "Могильный Страж повержен")
 	_compact_enemies()
 
 func _spawn_health_pack(pack_position: Vector2) -> void:
@@ -745,6 +886,348 @@ func _update_enemy_projectiles(delta: float) -> void:
 		alive_projectiles.append(projectile)
 	enemy_projectiles = alive_projectiles
 
+func _update_hazard_zones(delta: float) -> void:
+	if elapsed >= HAZARD_START_TIME and player != null:
+		hazard_timer -= delta
+		if hazard_timer <= 0.0:
+			hazard_timer = max(3.8, HAZARD_INTERVAL - elapsed * 0.018)
+			_spawn_hazard_zone(_get_hazard_position())
+	var alive_hazards: Array[Node2D] = []
+	for zone in hazard_zones:
+		if not is_instance_valid(zone):
+			continue
+		var age := float(zone.get_meta("age", 0.0)) + delta
+		zone.set_meta("age", age)
+		var radius := float(zone.get_meta("radius", HAZARD_RADIUS))
+		var active := age >= HAZARD_ARM_TIME
+		var total_time := HAZARD_ARM_TIME + HAZARD_ACTIVE_TIME
+		var core := zone.get_node_or_null("Core") as CanvasItem
+		var ring := zone.get_node_or_null("Ring") as CanvasItem
+		var petals := zone.get_node_or_null("Petals") as CanvasItem
+		var runes := zone.get_node_or_null("Runes") as CanvasItem
+		var bloom := zone.get_node_or_null("Bloom") as CanvasItem
+		var label := zone.get_node_or_null("Label") as Label
+		if ring != null:
+			ring.scale = Vector2.ONE * (0.62 + min(1.0, age / HAZARD_ARM_TIME) * 0.45)
+			ring.rotation += delta * (1.2 if active else 0.45)
+			ring.modulate.a = 0.46 + sin(age * 11.0) * 0.18
+		if core != null:
+			core.scale = Vector2.ONE * (0.84 + sin(age * 4.5) * 0.045)
+			core.modulate.a = 0.1 if not active else 0.34 + sin(age * 7.0) * 0.08
+		if petals != null:
+			petals.rotation -= delta * (0.45 if active else 0.18)
+			petals.scale = Vector2.ONE * (0.82 + min(1.0, age / HAZARD_ARM_TIME) * 0.22 + sin(age * 5.0) * 0.025)
+			petals.modulate.a = 0.36 if not active else 0.72
+		if runes != null:
+			runes.rotation += delta * 0.72
+			runes.modulate.a = 0.3 + sin(age * 8.0) * 0.14
+		if bloom != null:
+			bloom.rotation += delta * 1.8
+			bloom.scale = Vector2.ONE * (0.8 + min(1.0, age / HAZARD_ARM_TIME) * 0.45 + sin(age * 7.0) * 0.08)
+		if label != null:
+			label.modulate.a = max(0.0, min(1.0, total_time - age)) * (0.72 if not active else 1.0)
+			label.position.y = -radius - 56.0 + sin(age * 5.0) * 2.0
+		if active and player != null and zone.global_position.distance_to(player.global_position) < radius:
+			player.take_damage(HAZARD_DAMAGE * delta)
+			if randf() < 0.22:
+				CombatFxScript.sparkle(fx_layer, player.global_position, Color(0.7, 1.0, 0.58, 0.82), 0.12)
+			if player.is_dead:
+				_show_game_over()
+		if age >= total_time:
+			CombatFxScript.sparkle(fx_layer, zone.global_position, Color(0.62, 1.0, 0.5, 0.55), 0.18)
+			zone.queue_free()
+			continue
+		alive_hazards.append(zone)
+	hazard_zones = alive_hazards
+
+func _spawn_hazard_zone(zone_position: Vector2) -> void:
+	var zone := Node2D.new()
+	zone.position = _clamp_to_arena(zone_position)
+	zone.z_index = 2
+	zone.set_meta("age", 0.0)
+	zone.set_meta("radius", HAZARD_RADIUS)
+	var shadow := _make_ellipse(HAZARD_RADIUS * 1.16, HAZARD_RADIUS * 0.84, Color(0.04, 0.12, 0.06, 0.48), 32)
+	shadow.name = "Shadow"
+	zone.add_child(shadow)
+	var core := _make_ellipse(HAZARD_RADIUS, HAZARD_RADIUS * 0.72, Color(0.38, 0.92, 0.34, 0.12), 34)
+	core.name = "Core"
+	zone.add_child(core)
+	var petals := Node2D.new()
+	petals.name = "Petals"
+	for i in range(12):
+		var petal := _make_ellipse(16.0, 42.0, Color(0.52, 1.0, 0.34, 0.42), 12)
+		petal.position = Vector2.RIGHT.rotated(TAU * float(i) / 12.0) * (HAZARD_RADIUS * 0.48)
+		petal.rotation = TAU * float(i) / 12.0 + PI / 2.0
+		petals.add_child(petal)
+	zone.add_child(petals)
+	var ring := Line2D.new()
+	ring.name = "Ring"
+	ring.closed = true
+	ring.width = 6.0
+	ring.default_color = Color(0.72, 1.0, 0.48, 0.66)
+	var points := PackedVector2Array()
+	for i in range(36):
+		var wobble := 1.0 + sin(float(i) * 3.0) * 0.055
+		points.append(Vector2(cos(TAU * float(i) / 36.0) * HAZARD_RADIUS * wobble, sin(TAU * float(i) / 36.0) * HAZARD_RADIUS * 0.72 * wobble))
+	ring.points = points
+	zone.add_child(ring)
+	var runes := Node2D.new()
+	runes.name = "Runes"
+	for i in range(8):
+		var rune := Line2D.new()
+		rune.width = 3.0
+		rune.default_color = Color(0.9, 1.0, 0.5, 0.72)
+		rune.points = PackedVector2Array([
+			Vector2(-7.0, -8.0),
+			Vector2(0.0, 8.0),
+			Vector2(8.0, -5.0),
+		])
+		rune.position = Vector2.RIGHT.rotated(TAU * float(i) / 8.0) * (HAZARD_RADIUS * 0.76)
+		rune.rotation = TAU * float(i) / 8.0 + randf_range(-0.35, 0.35)
+		runes.add_child(rune)
+	zone.add_child(runes)
+	var bloom := _make_ellipse(26.0, 16.0, Color(0.8, 1.0, 0.45, 0.82), 11)
+	bloom.name = "Bloom"
+	bloom.rotation = randf() * TAU
+	zone.add_child(bloom)
+	var label := Label.new()
+	label.name = "Label"
+	label.text = "ПРОКЛЯТЫЙ ЦВЕТОК"
+	label.position = Vector2(-115.0, -HAZARD_RADIUS - 56.0)
+	label.size = Vector2(230.0, 30.0)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 17)
+	label.add_theme_color_override("font_color", Color(0.86, 1.0, 0.54, 0.95))
+	zone.add_child(label)
+	hazard_zones.append(zone)
+	world.add_child(zone)
+
+func _get_hazard_position() -> Vector2:
+	var forward := player.velocity.normalized()
+	if forward == Vector2.ZERO:
+		forward = Vector2.RIGHT.rotated(randf() * TAU)
+	var side := forward.rotated(PI / 2.0)
+	var side_sign := -1.0 if randf() < 0.5 else 1.0
+	return player.position + forward * randf_range(170.0, 310.0) + side * side_sign * randf_range(35.0, 145.0)
+
+func _update_cluster_bloom(delta: float) -> void:
+	if elapsed < CLUSTER_BLOOM_START_TIME:
+		return
+	cluster_bloom_timer -= delta
+	if cluster_bloom_timer > 0.0:
+		return
+	cluster_bloom_timer = max(5.8, CLUSTER_BLOOM_INTERVAL - elapsed * 0.012)
+	var cluster_center := _get_enemy_cluster_center()
+	if cluster_center == Vector2.INF:
+		return
+	_spawn_hazard_zone(cluster_center)
+	_flash_overlay_text("Толпа расцветает")
+
+func _get_enemy_cluster_center() -> Vector2:
+	_compact_enemies()
+	if enemies.size() < CLUSTER_BLOOM_MIN_ENEMIES:
+		return Vector2.INF
+	var center := Vector2.ZERO
+	for enemy in enemies:
+		center += enemy.global_position
+	center /= float(enemies.size())
+	var clustered := 0
+	for enemy in enemies:
+		if enemy.global_position.distance_to(center) < 230.0:
+			clustered += 1
+	if clustered < CLUSTER_BLOOM_MIN_ENEMIES:
+		return Vector2.INF
+	return center
+
+func _update_dread_boss_pressure(delta: float) -> void:
+	if not dread_boss_spawned or player == null:
+		return
+	var boss := _get_dread_boss()
+	if boss == null:
+		return
+	if not dread_boss_phase_two and boss.health <= int(ceil(float(boss.max_health) * 0.5)):
+		dread_boss_phase_two = true
+		boss.speed *= 1.34
+		boss.contact_damage += 10.0
+		boss.modulate = Color(1.0, 0.78, 0.88)
+		_flash_overlay_text("Корона раскрылась")
+		_start_screen_shake(0.5, 11.0)
+		_spawn_boss_cross_attack(boss)
+	dread_boss_hazard_timer -= delta
+	if dread_boss_hazard_timer <= 0.0:
+		dread_boss_hazard_timer = max(2.8, DREAD_BOSS_HAZARD_INTERVAL - elapsed * 0.006) * (0.74 if dread_boss_phase_two else 1.0)
+		_spawn_hazard_zone(_get_boss_hazard_position(boss))
+		CombatFxScript.ring(fx_layer, boss.global_position, Color(0.62, 1.0, 0.5, 0.55), 150.0, 0.34)
+	dread_boss_summon_timer -= delta
+	if dread_boss_summon_timer <= 0.0:
+		dread_boss_summon_timer = max(4.8, DREAD_BOSS_SUMMON_INTERVAL - elapsed * 0.006) * (0.82 if dread_boss_phase_two else 1.0)
+		var available_slots: int = MAX_ENEMIES - enemies.size()
+		if available_slots > 0:
+			var summon_count: int = min(3 if dread_boss_phase_two else 2, available_slots)
+			for i in range(summon_count):
+				var kind := "flanker" if i == 0 else "spitter"
+				_spawn_enemy(kind, false, _get_interceptor_position(i))
+		_flash_overlay_text("Король зовет мертвых")
+	dread_boss_bell_timer -= delta
+	if dread_boss_bell_timer <= 0.0:
+		dread_boss_bell_timer = DREAD_BOSS_BELL_INTERVAL * (0.76 if dread_boss_phase_two else 1.0)
+		_spawn_boss_bell_attack(boss)
+	dread_boss_judgment_timer -= delta
+	if dread_boss_judgment_timer <= 0.0:
+		dread_boss_judgment_timer = DREAD_BOSS_JUDGMENT_INTERVAL * (0.78 if dread_boss_phase_two else 1.0)
+		_spawn_boss_judgment_attack(boss)
+	dread_boss_cross_timer -= delta
+	if dread_boss_phase_two and dread_boss_cross_timer <= 0.0:
+		dread_boss_cross_timer = DREAD_BOSS_CROSS_INTERVAL
+		_spawn_boss_cross_attack(boss)
+
+func _get_dread_boss() -> Enemy:
+	for enemy in enemies:
+		if is_instance_valid(enemy) and enemy.enemy_kind == "grave_king":
+			return enemy
+	return null
+
+func _get_boss_hazard_position(boss: Enemy) -> Vector2:
+	var to_player := boss.global_position.direction_to(player.global_position)
+	if to_player == Vector2.ZERO:
+		to_player = Vector2.RIGHT.rotated(randf() * TAU)
+	var side := to_player.rotated(PI / 2.0)
+	var side_sign := -1.0 if randf() < 0.5 else 1.0
+	return player.position + to_player * randf_range(80.0, 180.0) + side * side_sign * randf_range(45.0, 135.0)
+
+func _spawn_boss_bell_attack(boss: Enemy) -> void:
+	var attack := Node2D.new()
+	attack.position = boss.global_position
+	attack.z_index = 5
+	attack.set_meta("kind", "bell")
+	attack.set_meta("age", 0.0)
+	attack.set_meta("arm_time", BOSS_ATTACK_ARM_TIME)
+	attack.set_meta("active_time", BOSS_ATTACK_ACTIVE_TIME)
+	attack.set_meta("radius", 245.0 if not dread_boss_phase_two else 300.0)
+	attack.set_meta("width", 58.0)
+	attack.set_meta("damage", 34.0 if not dread_boss_phase_two else 44.0)
+	attack.set_meta("hit", false)
+	var ring := Line2D.new()
+	ring.name = "Telegraph"
+	ring.closed = true
+	ring.width = 8.0
+	ring.default_color = Color(0.9, 1.0, 0.56, 0.78)
+	var points := PackedVector2Array()
+	for i in range(48):
+		points.append(Vector2.RIGHT.rotated(TAU * float(i) / 48.0) * float(attack.get_meta("radius", 245.0)))
+	ring.points = points
+	attack.add_child(ring)
+	boss_attacks.append(attack)
+	world.add_child(attack)
+	_flash_overlay_text("Похоронный Колокол")
+
+func _spawn_boss_judgment_attack(boss: Enemy) -> void:
+	var direction := _get_player_motion_direction(boss.global_position.direction_to(player.global_position))
+	var center := player.global_position + direction * 165.0
+	_spawn_boss_lane_attack(center, direction, 720.0, 76.0, 32.0 if not dread_boss_phase_two else 42.0, "Королевский Приговор")
+
+func _spawn_boss_cross_attack(boss: Enemy) -> void:
+	var base_direction := boss.global_position.direction_to(player.global_position)
+	if base_direction == Vector2.ZERO:
+		base_direction = Vector2.RIGHT.rotated(randf() * TAU)
+	_spawn_boss_lane_attack(player.global_position, base_direction, 760.0, 68.0, 36.0, "Черная корона")
+	_spawn_boss_lane_attack(player.global_position, base_direction.rotated(PI / 2.0), 760.0, 68.0, 36.0, "Черная корона")
+
+func _spawn_boss_lane_attack(center: Vector2, direction: Vector2, length: float, width: float, damage: float, label_text: String) -> void:
+	var attack := Node2D.new()
+	attack.position = Vector2.ZERO
+	attack.z_index = 5
+	attack.set_meta("kind", "lane")
+	attack.set_meta("age", 0.0)
+	attack.set_meta("arm_time", BOSS_ATTACK_ARM_TIME)
+	attack.set_meta("active_time", BOSS_ATTACK_ACTIVE_TIME)
+	attack.set_meta("start", center - direction * (length * 0.5))
+	attack.set_meta("end", center + direction * (length * 0.5))
+	attack.set_meta("width", width)
+	attack.set_meta("damage", damage)
+	attack.set_meta("hit", false)
+	var line := Line2D.new()
+	line.name = "Telegraph"
+	line.width = width
+	line.default_color = Color(0.95, 0.58, 0.9, 0.48)
+	line.points = PackedVector2Array([
+		center - direction * (length * 0.5),
+		center + direction * (length * 0.5),
+	])
+	attack.add_child(line)
+	var edge := Line2D.new()
+	edge.name = "Edge"
+	edge.width = 4.0
+	edge.default_color = Color(0.86, 1.0, 0.58, 0.88)
+	edge.points = line.points
+	attack.add_child(edge)
+	boss_attacks.append(attack)
+	world.add_child(attack)
+	_flash_overlay_text(label_text)
+
+func _get_player_motion_direction(fallback: Vector2) -> Vector2:
+	var direction := player.velocity.normalized()
+	if direction == Vector2.ZERO:
+		direction = fallback
+	if direction == Vector2.ZERO:
+		direction = Vector2.RIGHT.rotated(randf() * TAU)
+	return direction
+
+func _update_boss_attacks(delta: float) -> void:
+	var alive_attacks: Array[Node2D] = []
+	for attack in boss_attacks:
+		if not is_instance_valid(attack):
+			continue
+		var age: float = float(attack.get_meta("age", 0.0)) + delta
+		attack.set_meta("age", age)
+		var arm_time: float = float(attack.get_meta("arm_time", BOSS_ATTACK_ARM_TIME))
+		var active_time: float = float(attack.get_meta("active_time", BOSS_ATTACK_ACTIVE_TIME))
+		var active := age >= arm_time
+		_update_boss_attack_visual(attack, age, arm_time, active)
+		if active and not bool(attack.get_meta("hit", false)):
+			_damage_player_from_boss_attack(attack)
+			attack.set_meta("hit", true)
+		if age >= arm_time + active_time:
+			attack.queue_free()
+			continue
+		alive_attacks.append(attack)
+	boss_attacks = alive_attacks
+
+func _update_boss_attack_visual(attack: Node2D, age: float, arm_time: float, active: bool) -> void:
+	var telegraph := attack.get_node_or_null("Telegraph") as CanvasItem
+	var edge := attack.get_node_or_null("Edge") as CanvasItem
+	var pulse := 0.5 + sin(age * 14.0) * 0.22
+	if telegraph != null:
+		telegraph.modulate.a = 0.92 if active else pulse
+		if attack.get_meta("kind", "") == "bell":
+			telegraph.scale = Vector2.ONE * (0.35 + min(1.0, age / arm_time) * 0.75)
+			telegraph.rotation += get_process_delta_time() * 0.9
+	if edge != null:
+		edge.modulate.a = 1.0 if active else 0.42 + sin(age * 18.0) * 0.22
+
+func _damage_player_from_boss_attack(attack: Node2D) -> void:
+	if player == null or player.is_dead:
+		return
+	var damage: float = float(attack.get_meta("damage", 30.0))
+	var kind := String(attack.get_meta("kind", ""))
+	var did_hit := false
+	if kind == "bell":
+		var radius: float = float(attack.get_meta("radius", 245.0))
+		var width: float = float(attack.get_meta("width", 58.0))
+		var distance := attack.global_position.distance_to(player.global_position)
+		did_hit = abs(distance - radius) <= width or distance < radius * 0.38
+	elif kind == "lane":
+		var start := attack.get_meta("start", Vector2.ZERO) as Vector2
+		var end := attack.get_meta("end", Vector2.ZERO) as Vector2
+		var width: float = float(attack.get_meta("width", 70.0))
+		did_hit = _distance_to_segment(player.global_position, start, end) <= width * 0.5
+	if did_hit:
+		player.take_damage(damage)
+		_start_screen_shake(0.24, 9.0)
+		CombatFxScript.burst(fx_layer, player.global_position, Color(0.9, 1.0, 0.52, 0.9), 18)
+		if player.is_dead:
+			_show_game_over()
+
 func _update_shards(delta: float) -> void:
 	for shard in shards:
 		if not is_instance_valid(shard):
@@ -804,7 +1287,12 @@ func _check_enemy_contact(delta: float) -> void:
 	for enemy in enemies:
 		if not is_instance_valid(enemy):
 			continue
-		if enemy.global_position.distance_to(player.global_position) < 42.0:
+		var contact_radius := 42.0
+		if enemy.enemy_kind == "grave_king":
+			contact_radius = 76.0
+		elif enemy.is_miniboss:
+			contact_radius = 58.0
+		if enemy.global_position.distance_to(player.global_position) < contact_radius:
 			var damage := enemy.contact_damage
 			player.take_damage(damage * delta)
 			if thorn_bloom_unlocked:
@@ -851,14 +1339,14 @@ func _show_upgrades() -> void:
 
 func _roll_relics() -> Array:
 	var relics := [
-		{"name": "Заточить Живой Клинок", "description": "Он снова вспоминает, как резать плоть", "method": "_upgrade_damage"},
-		{"name": "Ускорить проклятие", "description": "Клинок голодает все чаще", "method": "_upgrade_cooldown"},
-		{"name": "Расширить бледный радиус", "description": "Маска видит добычу дальше", "method": "_upgrade_range"},
+		{"name": "Заточить Живой Клинок", "description": "Он снова вспоминает, как резать плоть. Урон выше", "method": "_upgrade_damage"},
+		{"name": "Ускорить проклятие", "description": "Клинок голодает все чаще. Атаки быстрее", "method": "_upgrade_cooldown"},
+		{"name": "Расширить бледный радиус", "description": "Маска видит добычу дальше. Радиус поиска выше", "method": "_upgrade_range"},
 		{"name": "Призвать Тень", "description": "Старый спутник прорезает толпу лучом", "method": "_upgrade_shadow_spirit"},
-		{"name": "Могильный Магнит", "description": "Осколки павших сами ищут Маску", "method": "_upgrade_magnet"},
-		{"name": "Кровавый Цветок", "description": "Пьет кровь павших и возвращает ее тебе", "method": "_upgrade_vampirism"},
-		{"name": "Сердце Новы", "description": "Внутри цветка все еще горит звезда", "method": "_upgrade_nova"},
-		{"name": "Шипастый Венец", "description": "Короли Gravebloom умирали стоя", "method": "_upgrade_thorns"},
+		{"name": "Могильный Магнит", "description": "Осколки павших сами ищут Маску. Притяжение опыта выше", "method": "_upgrade_magnet"},
+		{"name": "Кровавый Цветок", "description": "Пьет кровь павших и возвращает ее тебе. Убийства лечат", "method": "_upgrade_vampirism"},
+		{"name": "Сердце Новы", "description": "Внутри цветка все еще горит звезда. Нова сильнее", "method": "_upgrade_nova"},
+		{"name": "Шипастый Венец", "description": "Короли Gravebloom умирали стоя. Ответный урон", "method": "_upgrade_thorns"},
 	]
 	relics.shuffle()
 	return relics.slice(0, MAX_RELIC_CHOICES)
@@ -986,17 +1474,13 @@ func _build_ultimate_ui() -> void:
 	ultimate_button.custom_minimum_size = Vector2(194, 114)
 	ultimate_button.size = Vector2(194, 114)
 	ultimate_button.text = "НОВА\n0%"
-	ultimate_button.disabled = false
+	ultimate_button.disabled = true
 	ultimate_button.process_mode = Node.PROCESS_MODE_ALWAYS
-	ultimate_button.mouse_filter = Control.MOUSE_FILTER_STOP
+	ultimate_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ultimate_button.focus_mode = Control.FOCUS_NONE
 	ultimate_button.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
 	ultimate_button.add_theme_font_size_override("font_size", 24)
-	ultimate_button.button_down.connect(_on_ultimate_button_down)
 	ui_layer.add_child(ultimate_button)
-
-func _on_ultimate_button_down() -> void:
-	_cast_ultimate()
 
 func _update_ultimate(delta: float) -> void:
 	if ultimate_ready:
@@ -1004,8 +1488,12 @@ func _update_ultimate(delta: float) -> void:
 	ultimate_charge = min(ultimate_cooldown, ultimate_charge + delta)
 	if ultimate_charge >= ultimate_cooldown:
 		ultimate_ready = true
-		_flash_overlay_text("Нова готова")
-		CombatFxScript.ring(fx_layer, player.global_position, Color(0.58, 1.0, 0.72, 0.65), 130.0, 0.42)
+		if ULTIMATE_AUTO_CAST:
+			_cast_ultimate()
+			return
+		else:
+			_flash_overlay_text("Нова готова")
+			CombatFxScript.ring(fx_layer, player.global_position, Color(0.58, 1.0, 0.72, 0.65), 130.0, 0.42)
 	_update_ultimate_ui()
 
 func _update_ultimate_ui() -> void:
@@ -1014,8 +1502,8 @@ func _update_ultimate_ui() -> void:
 	ultimate_bar.max_value = ultimate_cooldown
 	ultimate_bar.value = ultimate_charge
 	var charge_percent := int(floor((ultimate_charge / ultimate_cooldown) * 100.0))
-	ultimate_button.text = "НОВА\nГОТОВА" if ultimate_ready else "НОВА\n%d%%" % charge_percent
-	ultimate_button.disabled = false
+	ultimate_button.text = "НОВА\nАВТО" if ultimate_ready else "НОВА\n%d%%" % charge_percent
+	ultimate_button.disabled = true
 	ultimate_button.modulate = Color.WHITE if ultimate_ready else Color(0.78, 0.86, 0.78, 0.95)
 
 func _cast_ultimate() -> void:
@@ -1027,6 +1515,7 @@ func _cast_ultimate() -> void:
 	ultimate_ready = false
 	ultimate_charge = 0.0
 	var origin := player.global_position
+	player.clear_pointer_input()
 	_flash_overlay_text("НОВА GRAVEBLOOM")
 	_start_screen_shake(0.42, 13.0)
 	CombatFxScript.ring(fx_layer, origin, Color(0.78, 1.0, 0.72, 0.95), ultimate_radius, 0.55)
@@ -1271,6 +1760,12 @@ func _clear_world_entities() -> void:
 	for pack in health_packs:
 		if is_instance_valid(pack):
 			pack.queue_free()
+	for zone in hazard_zones:
+		if is_instance_valid(zone):
+			zone.queue_free()
+	for attack in boss_attacks:
+		if is_instance_valid(attack):
+			attack.queue_free()
 	if is_instance_valid(player):
 		player.queue_free()
 	if is_instance_valid(living_blade):
@@ -1279,5 +1774,7 @@ func _clear_world_entities() -> void:
 	shards.clear()
 	enemy_projectiles.clear()
 	health_packs.clear()
+	hazard_zones.clear()
+	boss_attacks.clear()
 	player = null
 	living_blade = null

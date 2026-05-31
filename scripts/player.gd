@@ -16,10 +16,6 @@ var touch_active := false
 var mouse_drag_active := false
 var mouse_drag_start := Vector2.ZERO
 var virtual_direction := Vector2.ZERO
-var key_left := false
-var key_right := false
-var key_up := false
-var key_down := false
 var anim_time := 0.0
 var sprite_frame := 0
 var sprite_frame_timer := 0.0
@@ -75,33 +71,21 @@ func _update_sprite_frame(delta: float, direction: Vector2, moving: bool) -> voi
 
 func _get_keyboard_direction() -> Vector2:
 	var direction := Vector2.ZERO
-	if key_left:
+	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT) or Input.is_physical_key_pressed(KEY_A) or Input.is_physical_key_pressed(KEY_LEFT):
 		direction.x -= 1.0
-	if key_right:
+	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT) or Input.is_physical_key_pressed(KEY_D) or Input.is_physical_key_pressed(KEY_RIGHT):
 		direction.x += 1.0
-	if key_up:
+	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP) or Input.is_physical_key_pressed(KEY_W) or Input.is_physical_key_pressed(KEY_UP):
 		direction.y -= 1.0
-	if key_down:
-		direction.y += 1.0
-	if direction.length() > 1.0:
-		return direction.normalized()
-	if direction.length() > 0.0:
-		return direction
-	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
-		direction.x -= 1.0
-	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
-		direction.x += 1.0
-	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
-		direction.y -= 1.0
-	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
+	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN) or Input.is_physical_key_pressed(KEY_S) or Input.is_physical_key_pressed(KEY_DOWN):
 		direction.y += 1.0
 	if direction.length() > 1.0:
 		direction = direction.normalized()
 	return direction
 
-func _input(event: InputEvent) -> void:
-	if event is InputEventKey:
-		_update_key_state(event)
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+		clear_pointer_input()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
@@ -133,26 +117,16 @@ func _update_touch_direction(pointer_position: Vector2) -> void:
 	else:
 		touch_direction = Vector2.ZERO
 
-func _update_key_state(event: InputEventKey) -> void:
-	if event.echo:
-		return
-	var pressed_now := event.pressed
-	var key := event.keycode
-	var physical_key := event.physical_keycode
-	if key == KEY_A or key == KEY_LEFT or physical_key == KEY_A or physical_key == KEY_LEFT:
-		key_left = pressed_now
-	elif key == KEY_D or key == KEY_RIGHT or physical_key == KEY_D or physical_key == KEY_RIGHT:
-		key_right = pressed_now
-	elif key == KEY_W or key == KEY_UP or physical_key == KEY_W or physical_key == KEY_UP:
-		key_up = pressed_now
-	elif key == KEY_S or key == KEY_DOWN or physical_key == KEY_S or physical_key == KEY_DOWN:
-		key_down = pressed_now
-
 func set_virtual_direction(direction: Vector2) -> void:
 	if direction.length() > 1.0:
 		virtual_direction = direction.normalized()
 	else:
 		virtual_direction = direction
+
+func clear_pointer_input() -> void:
+	touch_active = false
+	mouse_drag_active = false
+	touch_direction = Vector2.ZERO
 
 func set_arena_limits(limits: Vector2) -> void:
 	arena_limits = limits
