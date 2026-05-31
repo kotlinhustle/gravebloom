@@ -18,7 +18,8 @@ const ULTIMATE_COOLDOWN := 30.0
 const ULTIMATE_RADIUS := 380.0
 const ULTIMATE_DAMAGE := 7
 const MAX_RELIC_CHOICES := 3
-const BASE_VIEWPORT_SIZE := Vector2(540.0, 960.0)
+const HEALTH_PACK_DROP_CHANCE := 0.07
+const HEALTH_PACK_HEAL := 16.0
 const LORE_EVENTS := [
 	{"time": 12.0, "text": "Руины проснулись"},
 	{"time": 45.0, "text": "Gravebloom тянется к крови"},
@@ -31,6 +32,7 @@ var living_blade: Node2D
 var enemies: Array[Enemy] = []
 var shards: Array[XPShard] = []
 var enemy_projectiles: Array[Node2D] = []
+var health_packs: Array[Node2D] = []
 var elapsed := 0.0
 var spawn_timer := 0.0
 var level := 1
@@ -62,7 +64,6 @@ var thorn_bloom_unlocked := false
 var thorn_bloom_cooldown := 0.0
 var vampirism_unlocked := false
 var kill_count := 0
-var ultimate_pointer_active := false
 var lore_event_index := 0
 
 @onready var world := Node2D.new()
@@ -73,7 +74,6 @@ var lore_event_index := 0
 @onready var xp_bar := ProgressBar.new()
 @onready var ultimate_bar := ProgressBar.new()
 @onready var ultimate_button := Button.new()
-@onready var ultimate_hit_area := Control.new()
 @onready var joystick_base := Panel.new()
 @onready var joystick_knob := Panel.new()
 @onready var upgrade_panel := PanelContainer.new()
@@ -112,6 +112,7 @@ func _process(delta: float) -> void:
 	_update_shadow_spirit(delta)
 	_update_enemy_projectiles(delta)
 	_update_shards(delta)
+	_update_health_packs(delta)
 	_check_enemy_contact(delta)
 	_keep_player_inside_arena()
 	_update_hud()
@@ -120,10 +121,6 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_SPACE or event.physical_keycode == KEY_SPACE:
 			_cast_ultimate()
-
-func _input(event: InputEvent) -> void:
-	if _consume_ultimate_pointer(event):
-		get_viewport().set_input_as_handled()
 
 func _build_arena() -> void:
 	var bg := ColorRect.new()
@@ -397,7 +394,6 @@ func _show_start_screen() -> void:
 	get_tree().paused = true
 	joystick_base.visible = false
 	ultimate_button.visible = false
-	ultimate_hit_area.visible = false
 	ultimate_bar.visible = false
 	overlay_panel.visible = true
 	_clear_container(overlay_list)
@@ -412,7 +408,6 @@ func _start_run() -> void:
 	overlay_panel.visible = false
 	joystick_base.visible = true
 	ultimate_button.visible = true
-	ultimate_hit_area.visible = true
 	ultimate_bar.visible = true
 	game_state = "running"
 	get_tree().paused = false
@@ -663,6 +658,8 @@ func _on_enemy_died(enemy_position: Vector2, xp_value: int = 1, was_miniboss: bo
 	if vampirism_unlocked and player != null and kill_count % 9 == 0:
 		player.health = min(player.max_health, player.health + 5.0)
 		CombatFxScript.sparkle(fx_layer, player.global_position, Color(1.0, 0.45, 0.62, 0.9), 0.36)
+	if not was_miniboss and randf() < HEALTH_PACK_DROP_CHANCE:
+		_spawn_health_pack(enemy_position)
 	var shard: XPShard = XPShardScene.instantiate()
 	shard.position = enemy_position
 	shard.value = xp_value
@@ -673,6 +670,54 @@ func _on_enemy_died(enemy_position: Vector2, xp_value: int = 1, was_miniboss: bo
 	if was_miniboss:
 		_flash_overlay_text("Могильный Страж повержен")
 	_compact_enemies()
+
+func _spawn_health_pack(pack_position: Vector2) -> void:
+	var pack := Node2D.new()
+	pack.position = pack_position + Vector2(randf_range(-18.0, 18.0), randf_range(-18.0, 18.0))
+	pack.z_index = 4
+	var glow := _make_ellipse(20.0, 14.0, Color(0.95, 0.16, 0.24, 0.28), 14)
+	glow.name = "Glow"
+	pack.add_child(glow)
+	var body := ColorRect.new()
+	body.name = "Body"
+	body.color = Color(0.16, 0.04, 0.06, 0.95)
+	body.size = Vector2(28.0, 28.0)
+	body.position = Vector2(-14.0, -14.0)
+	pack.add_child(body)
+	var cross_vertical := ColorRect.new()
+	cross_vertical.color = Color(1.0, 0.24, 0.32, 1.0)
+	cross_vertical.size = Vector2(8.0, 22.0)
+	cross_vertical.position = Vector2(-4.0, -11.0)
+	pack.add_child(cross_vertical)
+	var cross_horizontal := ColorRect.new()
+	cross_horizontal.color = Color(1.0, 0.24, 0.32, 1.0)
+	cross_horizontal.size = Vector2(22.0, 8.0)
+	cross_horizontal.position = Vector2(-11.0, -4.0)
+	pack.add_child(cross_horizontal)
+	pack.set_meta("age", 0.0)
+	health_packs.append(pack)
+	world.add_child(pack)
+
+func _update_health_packs(delta: float) -> void:
+	var alive_packs: Array[Node2D] = []
+	for pack in health_packs:
+		if not is_instance_valid(pack):
+			continue
+		var age := float(pack.get_meta("age", 0.0)) + delta
+		pack.set_meta("age", age)
+		pack.rotation = sin(age * 2.5) * 0.08
+		pack.scale = Vector2.ONE * (1.0 + sin(age * 4.0) * 0.05)
+		if player != null and pack.global_position.distance_to(player.global_position) < 34.0:
+			player.heal(HEALTH_PACK_HEAL)
+			CombatFxScript.ring(fx_layer, pack.global_position, Color(1.0, 0.26, 0.34, 0.72), 70.0, 0.26)
+			_flash_overlay_text("+%d здоровье" % int(HEALTH_PACK_HEAL))
+			pack.queue_free()
+			continue
+		if age > 26.0:
+			pack.queue_free()
+			continue
+		alive_packs.append(pack)
+	health_packs = alive_packs
 
 func _update_enemy_projectiles(delta: float) -> void:
 	var alive_projectiles: Array[Node2D] = []
@@ -790,7 +835,6 @@ func _level_up() -> void:
 	game_state = "upgrade"
 	joystick_base.visible = false
 	ultimate_button.visible = false
-	ultimate_hit_area.visible = false
 	ultimate_bar.visible = false
 	_reset_joystick()
 	get_tree().paused = true
@@ -834,7 +878,6 @@ func _on_upgrade_button_pressed(button: Button) -> void:
 	upgrade_panel.visible = false
 	joystick_base.visible = true
 	ultimate_button.visible = true
-	ultimate_hit_area.visible = true
 	ultimate_bar.visible = true
 	paused_for_upgrade = false
 	game_state = "running"
@@ -893,7 +936,6 @@ func _show_game_over() -> void:
 	last_run_result = "Маска треснула, но проклятие запомнило тебя"
 	joystick_base.visible = false
 	ultimate_button.visible = false
-	ultimate_hit_area.visible = false
 	ultimate_bar.visible = false
 	_reset_joystick()
 	get_tree().paused = true
@@ -904,7 +946,6 @@ func _show_victory() -> void:
 	last_run_result = "На миг Gravebloom отступил от сердца руин"
 	joystick_base.visible = false
 	ultimate_button.visible = false
-	ultimate_hit_area.visible = false
 	ultimate_bar.visible = false
 	_reset_joystick()
 	get_tree().paused = true
@@ -934,80 +975,28 @@ func _update_hud() -> void:
 	_update_ultimate_ui()
 
 func _build_ultimate_ui() -> void:
-	ultimate_bar.position = Vector2(348, 878)
-	ultimate_bar.size = Vector2(160, 18)
+	ultimate_bar.position = Vector2(328, 882)
+	ultimate_bar.size = Vector2(188, 18)
 	ultimate_bar.max_value = ULTIMATE_COOLDOWN
 	ultimate_bar.value = 0.0
 	ultimate_bar.show_percentage = false
 	ultimate_bar.process_mode = Node.PROCESS_MODE_ALWAYS
 	ui_layer.add_child(ultimate_bar)
-	ultimate_button.position = Vector2(358, 786)
-	ultimate_button.size = Vector2(140, 84)
+	ultimate_button.position = Vector2(326, 760)
+	ultimate_button.custom_minimum_size = Vector2(194, 114)
+	ultimate_button.size = Vector2(194, 114)
 	ultimate_button.text = "НОВА\n0%"
 	ultimate_button.disabled = false
 	ultimate_button.process_mode = Node.PROCESS_MODE_ALWAYS
 	ultimate_button.mouse_filter = Control.MOUSE_FILTER_STOP
 	ultimate_button.focus_mode = Control.FOCUS_NONE
-	ultimate_button.add_theme_font_size_override("font_size", 22)
+	ultimate_button.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
+	ultimate_button.add_theme_font_size_override("font_size", 24)
+	ultimate_button.button_down.connect(_on_ultimate_button_down)
 	ui_layer.add_child(ultimate_button)
-	ultimate_hit_area.position = ultimate_button.position - Vector2(22.0, 22.0)
-	ultimate_hit_area.size = ultimate_button.size + Vector2(44.0, 44.0)
-	ultimate_hit_area.mouse_filter = Control.MOUSE_FILTER_STOP
-	ultimate_hit_area.process_mode = Node.PROCESS_MODE_ALWAYS
-	ultimate_hit_area.focus_mode = Control.FOCUS_NONE
-	ultimate_hit_area.gui_input.connect(_on_ultimate_hit_area_input)
-	ui_layer.add_child(ultimate_hit_area)
 
-func _on_ultimate_hit_area_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		ultimate_pointer_active = event.pressed
-		if event.pressed:
-			_cast_ultimate()
-		ultimate_hit_area.accept_event()
-	elif event is InputEventScreenTouch:
-		ultimate_pointer_active = event.pressed
-		if event.pressed:
-			_cast_ultimate()
-		ultimate_hit_area.accept_event()
-	elif event is InputEventMouseMotion or event is InputEventScreenDrag:
-		if ultimate_pointer_active:
-			ultimate_hit_area.accept_event()
-
-func _consume_ultimate_pointer(event: InputEvent) -> bool:
-	if ultimate_button == null or not ultimate_button.visible:
-		return false
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		if not _ultimate_hit_test(event.position):
-			return false
-		ultimate_pointer_active = event.pressed
-		if event.pressed:
-			_cast_ultimate()
-		return true
-	if event is InputEventScreenTouch:
-		if not _ultimate_hit_test(event.position):
-			return false
-		ultimate_pointer_active = event.pressed
-		if event.pressed:
-			_cast_ultimate()
-		return true
-	if event is InputEventMouseMotion and ultimate_pointer_active:
-		return true
-	if event is InputEventScreenDrag and ultimate_pointer_active:
-		return true
-	return false
-
-func _ultimate_hit_test(pointer_position: Vector2) -> bool:
-	var hit_rect := ultimate_button.get_global_rect().grow(28.0)
-	if hit_rect.has_point(pointer_position):
-		return true
-	var viewport_size := get_viewport_rect().size
-	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
-		return false
-	var normalized_position := Vector2(
-		pointer_position.x * BASE_VIEWPORT_SIZE.x / viewport_size.x,
-		pointer_position.y * BASE_VIEWPORT_SIZE.y / viewport_size.y
-	)
-	return hit_rect.has_point(normalized_position)
+func _on_ultimate_button_down() -> void:
+	_cast_ultimate()
 
 func _update_ultimate(delta: float) -> void:
 	if ultimate_ready:
@@ -1279,6 +1268,9 @@ func _clear_world_entities() -> void:
 	for projectile in enemy_projectiles:
 		if is_instance_valid(projectile):
 			projectile.queue_free()
+	for pack in health_packs:
+		if is_instance_valid(pack):
+			pack.queue_free()
 	if is_instance_valid(player):
 		player.queue_free()
 	if is_instance_valid(living_blade):
@@ -1286,5 +1278,6 @@ func _clear_world_entities() -> void:
 	enemies.clear()
 	shards.clear()
 	enemy_projectiles.clear()
+	health_packs.clear()
 	player = null
 	living_blade = null

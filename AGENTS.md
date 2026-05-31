@@ -161,7 +161,8 @@ scripts/
 - Runs now have a start screen, XP bar, 3:00 survival goal, miniboss event, victory screen, death screen, and restart button.
 - Relics can unlock Shadow Spirit, a secondary auto-skill that cuts through enemies in a beam.
 - Gravebloom Nova is an ultimate: it charges over time, shows a visible `NOVA` button with percent progress, can be fired with the button or `Space`, and blasts nearby enemies.
-- The Nova button uses direct screen-rect pointer handling and a transparent `ultimate_hit_area` in `Main` for browser reliability instead of relying only on Godot `Button.pressed`.
+- The Nova button is a large real `Button` using `button_down`/press action for browser reliability.
+- Small health packs can drop from enemies, pulse on the ground, heal a little on pickup, and expire after a short time.
 - XP pacing is intentionally slower after the ultimate was added: higher XP thresholds keep Nova kills from over-leveling too quickly.
 
 ## Near-Term Roadmap

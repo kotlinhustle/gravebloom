@@ -177,3 +177,11 @@ func take_damage(amount: float) -> void:
 	tween.chain().tween_property(art, "scale", base_art_scale, 0.1)
 	if health <= 0.0:
 		is_dead = true
+
+func heal(amount: float) -> void:
+	if is_dead:
+		return
+	health = min(max_health, health + amount)
+	modulate = Color(0.72, 1.0, 0.76)
+	var tween := create_tween()
+	tween.tween_property(self, "modulate", Color.WHITE, 0.16)
