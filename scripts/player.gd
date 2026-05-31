@@ -136,7 +136,9 @@ func _update_touch_direction(pointer_position: Vector2) -> void:
 		touch_direction = Vector2.ZERO
 
 func _update_key_state(event: InputEventKey) -> void:
-	var pressed_now := event.pressed and not event.echo
+	if event.echo:
+		return
+	var pressed_now := event.pressed
 	var key := event.keycode
 	var physical_key := event.physical_keycode
 	if key == KEY_A or key == KEY_LEFT or physical_key == KEY_A or physical_key == KEY_LEFT:
