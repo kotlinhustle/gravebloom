@@ -299,8 +299,6 @@ func _build_screen_vignette() -> void:
 	ui_layer.add_child(vignette)
 	_add_vignette_rect(vignette, Vector2.ZERO, Vector2(540.0, 120.0), Color(0.0, 0.0, 0.0, 0.28))
 	_add_vignette_rect(vignette, Vector2(0.0, 820.0), Vector2(540.0, 140.0), Color(0.0, 0.0, 0.0, 0.32))
-	_add_vignette_rect(vignette, Vector2.ZERO, Vector2(54.0, 960.0), Color(0.0, 0.0, 0.0, 0.24))
-	_add_vignette_rect(vignette, Vector2(486.0, 0.0), Vector2(54.0, 960.0), Color(0.0, 0.0, 0.0, 0.24))
 
 func _add_vignette_rect(parent: Node, position: Vector2, size: Vector2, color: Color) -> void:
 	var rect := ColorRect.new()
@@ -827,13 +825,13 @@ func _build_ultimate_ui() -> void:
 	ultimate_button.disabled = false
 	ultimate_button.process_mode = Node.PROCESS_MODE_ALWAYS
 	ultimate_button.mouse_filter = Control.MOUSE_FILTER_STOP
+	ultimate_button.focus_mode = Control.FOCUS_NONE
 	ultimate_button.add_theme_font_size_override("font_size", 22)
-	ultimate_button.pressed.connect(_cast_ultimate)
 	ultimate_button.gui_input.connect(_on_ultimate_button_input)
 	ui_layer.add_child(ultimate_button)
 
 func _on_ultimate_button_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
 		_cast_ultimate()
 		ultimate_button.accept_event()
 
