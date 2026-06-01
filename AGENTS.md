@@ -111,6 +111,7 @@ scripts/
 - Visible UI text is Russian-first; keep menus, HUD, result screens, upgrade choices, and combat notices localized.
 - Micro-lore is embedded through the start screen, timed run notices, relic descriptions, relic-pick echo lines, boss entrance lines, and result text.
 - Relic cards should keep the lore phrase, then add a short mechanical effect so choices stay understandable.
+- Relic choice text must fit on a 540px-wide phone screen; keep descriptions short and mechanical enough to avoid clipped button text.
 - Spawns `Король-Могила` at 2:00 and a smaller miniboss near the end of the 3-minute run.
 - Owns enemy and XP shard lists.
 - Updates XP collection, level-ups, randomized relic choices, HUD, XP bar, result screens, enemy contact damage, and enemy projectiles.
@@ -130,7 +131,7 @@ scripts/
 - Supports mouse drag movement by polling left mouse button.
 - Mouse drag now starts only from unhandled pointer events, so UI clicks do not silently turn into movement input.
 - Has early touch input support for mobile-style movement.
-- Uses a visible virtual joystick on the running screen for TWA/mobile clarity.
+- Uses a visible virtual joystick on the running screen for TWA/mobile clarity; joystick is on the right and Nova indicator is on the left.
 - Takes damage and dies.
 
 `Enemy`:
@@ -176,6 +177,7 @@ scripts/
 - Hits now show damage numbers, enemy flash/squash, knockback, and death bursts.
 - Incoming damage now shows red numbers over the player, throttled for continuous contact/hazard damage so it does not spam the screen.
 - Runs now have a start screen, XP bar, 3:00 survival goal, miniboss event, victory screen, death screen, and restart button.
+- Result screens should summarize the run: time survived, level, kills, XP progress, and selected relic build with duplicate counts.
 - Relics can unlock Shadow Spirit, a secondary auto-skill that cuts through enemies in a beam.
 - Relics can unlock `Колокол Забвения`, an auto-weapon that periodically emits a radial shockwave around the player; repeat picks increase damage/radius and reduce cooldown.
 - `Колокол Забвения` should be guaranteed in the first relic choice until unlocked, so players discover the second auto-weapon instead of waiting for random rolls.
@@ -183,6 +185,7 @@ scripts/
 - Nova readiness should be readable without staring at HUD: faint aura at 85%, rotating Gravebloom ring at 90%, stronger warning at 97%, then a distinct burst cue at cast.
 - Do not spend more time trying to make laptop touchpad tap-to-click control Nova; the game should not depend on that input path.
 - Small health packs can drop from enemies, pulse on the ground, heal a little on pickup, and expire after a short time.
+- Run reset must restore temporary upgrade state such as XP magnet range; upgrades should not leak into the next run after death/restart.
 - XP pacing is intentionally slower after the ultimate was added: higher XP thresholds keep Nova kills from over-leveling too quickly.
 
 ## Near-Term Roadmap

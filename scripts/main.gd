@@ -94,6 +94,8 @@ var dread_boss_spawned := false
 var miniboss_spawned := false
 var last_run_result := ""
 var last_run_lore := ""
+var relic_pick_counts: Dictionary = {}
+var relic_pick_order: Array[String] = []
 var shadow_spirit_unlocked := false
 var shadow_spirit_timer := 3.0
 var shadow_spirit_cooldown := 5.5
@@ -107,7 +109,7 @@ var shake_time := 0.0
 var shake_intensity := 0.0
 var joystick_active := false
 var joystick_direction := Vector2.ZERO
-var joystick_radius := 56.0
+var joystick_radius := 67.0
 var ambient_glows: Array[CanvasItem] = []
 var fog_wisps: Array[CanvasItem] = []
 var ambience_time := 0.0
@@ -580,11 +582,14 @@ func _reset_run() -> void:
 	level = 1
 	xp = 0
 	xp_to_next = 14
+	shard_pull_range = 95.0
 	paused_for_upgrade = false
 	dread_boss_spawned = false
 	miniboss_spawned = false
 	last_run_result = ""
 	last_run_lore = ""
+	relic_pick_counts.clear()
+	relic_pick_order.clear()
 	shadow_spirit_unlocked = false
 	shadow_spirit_timer = 3.0
 	shadow_spirit_cooldown = 5.5
@@ -1747,16 +1752,16 @@ func _show_upgrades() -> void:
 	upgrade_panel.visible = true
 
 func _roll_relics() -> Array:
-	var bell_relic := {"name": "Колокол Забвения", "description": "Его звон помнит похороны королей. Волны бьют вокруг Маски", "method": "_upgrade_oblivion_bell"}
+	var bell_relic := {"name": "Колокол Забвения", "description": "Автооружие: волны вокруг Маски", "method": "_upgrade_oblivion_bell"}
 	var relics := [
-		{"name": "Заточить Живой Клинок", "description": "Он снова вспоминает, как резать плоть. Урон выше", "method": "_upgrade_damage"},
-		{"name": "Ускорить проклятие", "description": "Клинок голодает все чаще. Атаки быстрее", "method": "_upgrade_cooldown"},
-		{"name": "Расширить бледный радиус", "description": "Маска видит добычу дальше. Клинок летит дальше и быстрее", "method": "_upgrade_range"},
-		{"name": "Призвать Тень", "description": "Старый спутник прорезает толпу лучом", "method": "_upgrade_shadow_spirit"},
-		{"name": "Могильный Магнит", "description": "Осколки павших сами ищут Маску. Притяжение опыта выше", "method": "_upgrade_magnet"},
-		{"name": "Кровавый Цветок", "description": "Пьет кровь павших и возвращает ее тебе. Повтор усиливает лечение", "method": "_upgrade_vampirism"},
-		{"name": "Сердце Новы", "description": "Внутри цветка все еще горит звезда. Авто-ульта заряжается быстрее, бьет шире и сильнее", "method": "_upgrade_nova"},
-		{"name": "Шипастый Венец", "description": "Короли Gravebloom умирали стоя. Ответный урон", "method": "_upgrade_thorns"},
+		{"name": "Заточить Живой Клинок", "description": "Урон клинка выше", "method": "_upgrade_damage"},
+		{"name": "Ускорить проклятие", "description": "Клинок атакует чаще", "method": "_upgrade_cooldown"},
+		{"name": "Расширить бледный радиус", "description": "Клинок летит дальше", "method": "_upgrade_range"},
+		{"name": "Призвать Тень", "description": "Автооружие: луч сквозь толпу", "method": "_upgrade_shadow_spirit"},
+		{"name": "Могильный Магнит", "description": "Опыт притягивается дальше", "method": "_upgrade_magnet"},
+		{"name": "Кровавый Цветок", "description": "Вампиризм. Повтор сильнее", "method": "_upgrade_vampirism"},
+		{"name": "Сердце Новы", "description": "Нова быстрее, шире, сильнее", "method": "_upgrade_nova"},
+		{"name": "Шипастый Венец", "description": "Ответный урон рядом", "method": "_upgrade_thorns"},
 	]
 	relics.shuffle()
 	if not oblivion_bell_unlocked:
@@ -1772,12 +1777,15 @@ func _add_upgrade_button(text: String, description: String, method_name: String)
 	button.text = "%s\n%s" % [text, description]
 	button.custom_minimum_size = Vector2(430, 70)
 	button.set_meta("upgrade_method", String(method_name))
+	button.set_meta("relic_name", text)
 	button.pressed.connect(_on_upgrade_button_pressed.bind(button))
 	upgrade_list.add_child(button)
 
 func _on_upgrade_button_pressed(button: Button) -> void:
 	var method_name := String(button.get_meta("upgrade_method", ""))
+	var relic_name := String(button.get_meta("relic_name", ""))
 	if method_name != "":
+		_record_relic_pick(relic_name)
 		call(method_name)
 		_flash_overlay_text(_relic_lore_echo(method_name))
 	upgrade_panel.visible = false
@@ -1787,6 +1795,14 @@ func _on_upgrade_button_pressed(button: Button) -> void:
 	paused_for_upgrade = false
 	game_state = "running"
 	get_tree().paused = false
+
+func _record_relic_pick(relic_name: String) -> void:
+	if relic_name.is_empty():
+		return
+	if not relic_pick_counts.has(relic_name):
+		relic_pick_counts[relic_name] = 0
+		relic_pick_order.append(relic_name)
+	relic_pick_counts[relic_name] = int(relic_pick_counts[relic_name]) + 1
 
 func _relic_lore_echo(method_name: String) -> String:
 	match method_name:
@@ -1898,11 +1914,26 @@ func _show_victory() -> void:
 func _show_result_screen(victory: bool) -> void:
 	overlay_panel.visible = true
 	_clear_container(overlay_list)
-	_add_overlay_label("Победа" if victory else "Забег окончен", 32)
+	_add_overlay_label("Победа" if victory else "Забег окончен", 34)
 	_add_overlay_label(last_run_result, 20)
 	_add_overlay_label(last_run_lore, 18)
-	_add_overlay_label("Время: %s   Уровень: %d" % [_format_time(elapsed), level], 18)
+	_add_overlay_label("Время: %s   Уровень: %d   Убийства: %d" % [_format_time(elapsed), level, kill_count], 18)
+	_add_overlay_label("Осколки: %d/%d" % [xp, xp_to_next], 16)
+	var build_summary := _format_relic_summary()
+	if not build_summary.is_empty():
+		_add_overlay_label("Реликвии: %s" % build_summary, 16)
+	else:
+		_add_overlay_label("Реликвии: Маска вошла в руины без даров", 16)
 	_add_overlay_button("Заново", _start_run)
+
+func _format_relic_summary() -> String:
+	var parts: Array[String] = []
+	for relic_name in relic_pick_order:
+		var count := int(relic_pick_counts.get(relic_name, 0))
+		if count <= 0:
+			continue
+		parts.append("%s x%d" % [relic_name, count] if count > 1 else relic_name)
+	return ", ".join(parts)
 
 func _pick_lore_line(lines: Array) -> String:
 	if lines.is_empty():
@@ -1925,14 +1956,14 @@ func _update_hud() -> void:
 	_update_ultimate_ui()
 
 func _build_ultimate_ui() -> void:
-	ultimate_bar.position = Vector2(328, 882)
+	ultimate_bar.position = Vector2(22, 882)
 	ultimate_bar.size = Vector2(188, 18)
 	ultimate_bar.max_value = ULTIMATE_COOLDOWN
 	ultimate_bar.value = 0.0
 	ultimate_bar.show_percentage = false
 	ultimate_bar.process_mode = Node.PROCESS_MODE_ALWAYS
 	ui_layer.add_child(ultimate_bar)
-	ultimate_button.position = Vector2(326, 760)
+	ultimate_button.position = Vector2(20, 760)
 	ultimate_button.custom_minimum_size = Vector2(194, 114)
 	ultimate_button.size = Vector2(194, 114)
 	ultimate_button.text = "НОВА\n0%"
@@ -2091,21 +2122,21 @@ func _add_ultimate_lashes(origin: Vector2) -> void:
 		tween.tween_callback(lash.queue_free)
 
 func _build_joystick() -> void:
-	joystick_base.position = Vector2(30, 770)
-	joystick_base.custom_minimum_size = Vector2(142, 142)
-	joystick_base.size = Vector2(142, 142)
+	joystick_base.position = Vector2(340, 760)
+	joystick_base.custom_minimum_size = Vector2(170, 170)
+	joystick_base.size = Vector2(170, 170)
 	joystick_base.visible = false
 	joystick_base.mouse_filter = Control.MOUSE_FILTER_STOP
 	joystick_base.process_mode = Node.PROCESS_MODE_ALWAYS
-	joystick_base.add_theme_stylebox_override("panel", _make_round_style(Color(0.18, 0.22, 0.2, 0.42), 70, Color(0.62, 1.0, 0.77, 0.42), 3))
+	joystick_base.add_theme_stylebox_override("panel", _make_round_style(Color(0.18, 0.22, 0.2, 0.42), 85, Color(0.62, 1.0, 0.77, 0.42), 3))
 	joystick_base.gui_input.connect(_on_joystick_input)
 	ui_layer.add_child(joystick_base)
 
-	joystick_knob.position = Vector2(43, 43)
-	joystick_knob.custom_minimum_size = Vector2(56, 56)
-	joystick_knob.size = Vector2(56, 56)
+	joystick_knob.position = Vector2(51.5, 51.5)
+	joystick_knob.custom_minimum_size = Vector2(67, 67)
+	joystick_knob.size = Vector2(67, 67)
 	joystick_knob.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	joystick_knob.add_theme_stylebox_override("panel", _make_round_style(Color(0.58, 1.0, 0.72, 0.76), 28, Color(0.9, 1.0, 0.86, 0.55), 2))
+	joystick_knob.add_theme_stylebox_override("panel", _make_round_style(Color(0.58, 1.0, 0.72, 0.76), 34, Color(0.9, 1.0, 0.86, 0.55), 2))
 	joystick_base.add_child(joystick_knob)
 
 func _make_round_style(fill: Color, radius: int, border_color: Color, border_width: int) -> StyleBoxFlat:
