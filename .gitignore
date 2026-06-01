@@ -4,5 +4,6 @@
 *.tmp
 *.import
 *.translation
+feedback.md
 export/
 build/
