@@ -1,12 +1,13 @@
 class_name CombatFx
 extends RefCounted
 
-static func damage_number(parent: Node, position: Vector2, amount: int) -> void:
+static func damage_number(parent: Node, position: Vector2, amount: int, color: Color = Color(0.9, 1.0, 0.76), font_size: int = 18) -> void:
 	var label := Label.new()
 	label.text = str(amount)
 	label.global_position = position + Vector2(randf_range(-10.0, 10.0), -28.0)
-	label.add_theme_font_size_override("font_size", 18)
-	label.add_theme_color_override("font_color", Color(0.9, 1.0, 0.76))
+	label.z_index = 100
+	label.add_theme_font_size_override("font_size", font_size)
+	label.add_theme_color_override("font_color", color)
 	label.add_theme_color_override("font_shadow_color", Color(0.02, 0.015, 0.02, 0.9))
 	label.add_theme_constant_override("shadow_offset_x", 2)
 	label.add_theme_constant_override("shadow_offset_y", 2)

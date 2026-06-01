@@ -20,11 +20,23 @@ const ULTIMATE_COOLDOWN := 30.0
 const ULTIMATE_RADIUS := 380.0
 const ULTIMATE_DAMAGE := 7
 const ULTIMATE_AUTO_CAST := true
+const NOVA_CUE_WAKE := 0.85
+const NOVA_CUE_WARN := 0.90
+const NOVA_CUE_STRIKE := 0.97
+const ENEMY_SPAWN_OFFSCREEN_MARGIN := 180.0
+const ENEMY_SPAWN_SCREEN_PADDING := 64.0
 const MAX_RELIC_CHOICES := 3
 const HEALTH_PACK_DROP_CHANCE := 0.07
 const HEALTH_PACK_HEAL := 16.0
+const SPITTER_PROJECTILE_DAMAGE := 8.0
+const PLAYER_DAMAGE_NUMBER_INTERVAL := 0.48
 const ANTI_KITE_START_TIME := 58.0
 const ANTI_KITE_INTERVAL := 12.0
+const PRESSURE_DIRECTOR_START_TIME := 38.0
+const PRESSURE_DIRECTOR_INTERVAL := 2.1
+const PRESSURE_NEAR_RADIUS := 760.0
+const PRESSURE_VISIBLE_PADDING := 120.0
+const PRESSURE_FAR_RADIUS := 1120.0
 const HAZARD_START_TIME := 62.0
 const HAZARD_INTERVAL := 5.0
 const HAZARD_ARM_TIME := 1.55
@@ -107,11 +119,19 @@ var ultimate_damage := ULTIMATE_DAMAGE
 var thorn_bloom_unlocked := false
 var thorn_bloom_cooldown := 0.0
 var vampirism_unlocked := false
+var vampirism_level := 0
+var vampirism_heal_amount := 5.0
+var vampirism_kills_required := 9
 var kill_count := 0
 var nova_damage_active := false
 var nova_vampirism_healed := 0.0
+var nova_charge_stage := 0
+var nova_pulse_time := 0.0
+var player_damage_number_cooldown := 0.0
+var player_damage_number_accumulator := 0.0
 var lore_event_index := 0
 var anti_kite_timer := ANTI_KITE_INTERVAL
+var pressure_director_timer := PRESSURE_DIRECTOR_INTERVAL
 var hazard_timer := HAZARD_INTERVAL
 var cluster_bloom_timer := CLUSTER_BLOOM_INTERVAL
 var dread_boss_hazard_timer := DREAD_BOSS_HAZARD_INTERVAL
@@ -135,6 +155,10 @@ var dread_boss_phase_two := false
 @onready var upgrade_list := VBoxContainer.new()
 @onready var overlay_panel := PanelContainer.new()
 @onready var overlay_list := VBoxContainer.new()
+@onready var nova_charge_fx := Node2D.new()
+@onready var nova_wake_player := AudioStreamPlayer.new()
+@onready var nova_warn_player := AudioStreamPlayer.new()
+@onready var nova_burst_player := AudioStreamPlayer.new()
 
 func _ready() -> void:
 	randomize()
@@ -142,16 +166,20 @@ func _ready() -> void:
 	add_child(fx_layer)
 	_build_arena()
 	_build_ui()
+	_build_nova_charge_fx()
+	_build_nova_audio()
 	_show_start_screen()
 
 func _process(delta: float) -> void:
 	_update_screen_shake(delta)
 	_update_joystick_mouse()
 	_update_arena_ambience(delta)
+	_update_nova_charge_fx(delta)
 	if game_state != "running":
 		return
 	elapsed += delta
 	thorn_bloom_cooldown = max(0.0, thorn_bloom_cooldown - delta)
+	player_damage_number_cooldown = max(0.0, player_damage_number_cooldown - delta)
 	if elapsed >= RUN_DURATION:
 		_show_victory()
 		return
@@ -164,6 +192,7 @@ func _process(delta: float) -> void:
 	if spawn_timer <= 0.0:
 		_spawn_enemy_wave()
 		spawn_timer = max(0.32, 1.18 - elapsed * 0.006)
+	_update_pressure_director(delta)
 	_update_anti_kite_pressure(delta)
 	living_blade.tick(delta, enemies)
 	_update_ultimate(delta)
@@ -387,6 +416,80 @@ func _make_ellipse(radius_x: float, radius_y: float, color: Color, point_count: 
 	polygon.polygon = points
 	return polygon
 
+func _make_ring_points(radius: float, point_count: int) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for i in range(point_count):
+		points.append(Vector2.RIGHT.rotated(TAU * float(i) / float(point_count)) * radius)
+	return points
+
+func _build_nova_charge_fx() -> void:
+	nova_charge_fx.visible = false
+	nova_charge_fx.z_index = 40
+	fx_layer.add_child(nova_charge_fx)
+
+	var aura := _make_ellipse(62.0, 42.0, Color(0.42, 1.0, 0.66, 0.16), 32)
+	aura.name = "Aura"
+	nova_charge_fx.add_child(aura)
+
+	var outer_ring := Line2D.new()
+	outer_ring.name = "OuterRing"
+	outer_ring.width = 4.0
+	outer_ring.closed = true
+	outer_ring.default_color = Color(0.62, 1.0, 0.74, 0.72)
+	outer_ring.points = _make_ring_points(72.0, 44)
+	nova_charge_fx.add_child(outer_ring)
+
+	var inner_ring := Line2D.new()
+	inner_ring.name = "InnerRing"
+	inner_ring.width = 2.0
+	inner_ring.closed = true
+	inner_ring.default_color = Color(0.9, 0.78, 1.0, 0.58)
+	inner_ring.points = _make_ring_points(46.0, 32)
+	nova_charge_fx.add_child(inner_ring)
+
+	var petal_root := Node2D.new()
+	petal_root.name = "Petals"
+	nova_charge_fx.add_child(petal_root)
+	for i in range(10):
+		var petal := _make_ellipse(7.0, 19.0, Color(0.76, 1.0, 0.72, 0.62), 12)
+		var angle := TAU * float(i) / 10.0
+		petal.position = Vector2.RIGHT.rotated(angle) * 72.0
+		petal.rotation = angle + PI * 0.5
+		petal_root.add_child(petal)
+
+func _build_nova_audio() -> void:
+	nova_wake_player.stream = _make_nova_tone([210.0, 315.0], 0.22, 0.28)
+	nova_warn_player.stream = _make_nova_tone([280.0, 420.0, 630.0], 0.32, 0.36)
+	nova_burst_player.stream = _make_nova_tone([130.0, 260.0, 520.0], 0.48, 0.52)
+	for player_node in [nova_wake_player, nova_warn_player, nova_burst_player]:
+		player_node.volume_db = -8.0
+		add_child(player_node)
+
+func _make_nova_tone(frequencies: Array, duration: float, volume: float) -> AudioStreamWAV:
+	var mix_rate := 22050
+	var sample_count := int(duration * float(mix_rate))
+	var data := PackedByteArray()
+	data.resize(sample_count * 2)
+	for i in range(sample_count):
+		var t := float(i) / float(mix_rate)
+		var fade_in: float = clamp(t / 0.025, 0.0, 1.0)
+		var fade_out: float = clamp((duration - t) / 0.16, 0.0, 1.0)
+		var envelope := fade_in * fade_out
+		var sample := 0.0
+		for frequency in frequencies:
+			var sweep := 1.0 + t * 0.42
+			sample += sin(TAU * float(frequency) * sweep * t)
+		sample /= max(1.0, float(frequencies.size()))
+		sample += sin(TAU * 42.0 * t) * 0.22
+		var value := int(clamp(sample * envelope * volume, -1.0, 1.0) * 32767.0)
+		data.encode_s16(i * 2, value)
+	var stream := AudioStreamWAV.new()
+	stream.format = AudioStreamWAV.FORMAT_16_BITS
+	stream.mix_rate = mix_rate
+	stream.stereo = false
+	stream.data = data
+	return stream
+
 func _update_arena_ambience(delta: float) -> void:
 	ambience_time += delta
 	for i in range(ambient_glows.size()):
@@ -496,14 +599,23 @@ func _reset_run() -> void:
 	ultimate_cooldown = ULTIMATE_COOLDOWN
 	ultimate_radius = ULTIMATE_RADIUS
 	ultimate_damage = ULTIMATE_DAMAGE
+	nova_charge_stage = 0
+	nova_pulse_time = 0.0
+	nova_charge_fx.visible = false
 	thorn_bloom_unlocked = false
 	thorn_bloom_cooldown = 0.0
 	vampirism_unlocked = false
+	vampirism_level = 0
+	vampirism_heal_amount = 5.0
+	vampirism_kills_required = 9
 	kill_count = 0
 	nova_damage_active = false
 	nova_vampirism_healed = 0.0
+	player_damage_number_cooldown = 0.0
+	player_damage_number_accumulator = 0.0
 	lore_event_index = 0
 	anti_kite_timer = ANTI_KITE_INTERVAL
+	pressure_director_timer = PRESSURE_DIRECTOR_INTERVAL
 	hazard_timer = HAZARD_INTERVAL
 	cluster_bloom_timer = CLUSTER_BLOOM_INTERVAL
 	dread_boss_hazard_timer = DREAD_BOSS_HAZARD_INTERVAL
@@ -549,6 +661,103 @@ func _update_anti_kite_pressure(delta: float) -> void:
 		elif roll < 0.58:
 			kind = "runner"
 		_spawn_enemy(kind, false, _get_interceptor_position(i))
+
+func _update_pressure_director(delta: float) -> void:
+	if elapsed < PRESSURE_DIRECTOR_START_TIME or player == null:
+		return
+	pressure_director_timer -= delta
+	if pressure_director_timer > 0.0:
+		return
+	pressure_director_timer = max(1.25, PRESSURE_DIRECTOR_INTERVAL - elapsed * 0.004)
+	_compact_enemies()
+	var near_threats := _count_active_threats_near_player()
+	var target_threats := _target_active_threats()
+	if near_threats >= target_threats:
+		return
+	var missing := target_threats - near_threats
+	_recycle_far_pressure_enemies(missing)
+	var available_slots: int = MAX_ENEMIES - enemies.size()
+	var spawn_count: int = min(missing, max(0, available_slots))
+	if elapsed >= DREAD_BOSS_TIME:
+		spawn_count = min(spawn_count + 1, max(0, available_slots))
+	for i in range(spawn_count):
+		_spawn_enemy(_pick_pressure_enemy_kind(i), false, _get_pressure_spawn_position(i))
+
+func _count_active_threats_near_player() -> int:
+	var count := 0
+	for enemy in enemies:
+		if not is_instance_valid(enemy) or enemy.is_dead:
+			continue
+		if enemy.is_miniboss:
+			count += 1
+			continue
+		var distance := enemy.global_position.distance_to(player.global_position)
+		if distance <= PRESSURE_NEAR_RADIUS or _is_position_on_screen(enemy.global_position, PRESSURE_VISIBLE_PADDING):
+			count += 1
+	return count
+
+func _target_active_threats() -> int:
+	if elapsed >= DREAD_BOSS_TIME:
+		return 14
+	if elapsed >= 90.0:
+		return 10
+	if elapsed >= 58.0:
+		return 7
+	return 5
+
+func _recycle_far_pressure_enemies(needed_slots: int) -> int:
+	if needed_slots <= 0:
+		return 0
+	var recycled := 0
+	var far_enemies := _get_far_recyclable_enemies()
+	for enemy in far_enemies:
+		if recycled >= needed_slots:
+			break
+		if not is_instance_valid(enemy):
+			continue
+		enemy.queue_free()
+		recycled += 1
+	if recycled > 0:
+		_compact_enemies()
+	return recycled
+
+func _get_far_recyclable_enemies() -> Array[Enemy]:
+	var far_enemies: Array[Enemy] = []
+	for enemy in enemies:
+		if not is_instance_valid(enemy) or enemy.is_dead or enemy.is_miniboss:
+			continue
+		if enemy.enemy_kind == "grave_king":
+			continue
+		if enemy.global_position.distance_to(player.global_position) >= PRESSURE_FAR_RADIUS and not _is_position_on_screen(enemy.global_position, PRESSURE_VISIBLE_PADDING):
+			far_enemies.append(enemy)
+	far_enemies.sort_custom(func(a: Enemy, b: Enemy) -> bool:
+		return a.global_position.distance_to(player.global_position) > b.global_position.distance_to(player.global_position)
+	)
+	return far_enemies
+
+func _pick_pressure_enemy_kind(index: int) -> String:
+	if elapsed >= DREAD_BOSS_TIME:
+		if index == 0:
+			return "flanker"
+		if randf() < 0.32:
+			return "spitter"
+		if randf() < 0.56:
+			return "runner"
+		return "crawler"
+	if elapsed >= 75.0:
+		if randf() < 0.36:
+			return "runner"
+		if randf() < 0.58:
+			return "flanker"
+	return _pick_enemy_kind()
+
+func _get_pressure_spawn_position(index: int) -> Vector2:
+	var direction := _get_player_motion_direction(Vector2.RIGHT.rotated(randf() * TAU))
+	if index % 3 == 1:
+		direction = direction.rotated(PI * 0.5)
+	elif index % 3 == 2:
+		direction = direction.rotated(-PI * 0.5)
+	return _get_offscreen_spawn_position(ENEMY_SPAWN_OFFSCREEN_MARGIN * 0.58, direction)
 
 func _pick_enemy_kind() -> String:
 	if elapsed > 58.0 and randf() < min(0.18, 0.05 + elapsed / 760.0):
@@ -621,7 +830,7 @@ func _spawn_enemy(enemy_kind: String, is_miniboss: bool, spawn_position := Vecto
 	enemy.base_scale = enemy.scale
 	enemy.health = enemy.max_health
 	if spawn_position == Vector2.INF:
-		enemy.position = _clamp_to_arena(player.position + Vector2.RIGHT.rotated(randf() * TAU) * randf_range(360.0, 520.0))
+		enemy.position = _get_offscreen_spawn_position(ENEMY_SPAWN_OFFSCREEN_MARGIN)
 	else:
 		enemy.position = _clamp_to_arena(spawn_position)
 	enemy.target = player
@@ -636,11 +845,89 @@ func _get_interceptor_position(index: int) -> Vector2:
 	var forward := player.velocity.normalized()
 	if forward == Vector2.ZERO:
 		forward = Vector2.RIGHT.rotated(randf() * TAU)
+	if not _is_position_on_screen(player.global_position + forward * 380.0, 0.0):
+		return _clamp_to_arena(player.position + forward * randf_range(320.0, 460.0))
 	var side := forward.rotated(PI / 2.0)
 	var side_sign := -1.0 if index % 2 == 0 else 1.0
-	var distance_ahead := randf_range(250.0, 360.0)
-	var side_offset := side * side_sign * randf_range(70.0, 150.0)
-	return player.position + forward * distance_ahead + side_offset
+	var preferred := (forward + side * side_sign * randf_range(0.15, 0.36)).normalized()
+	return _get_offscreen_spawn_position(ENEMY_SPAWN_OFFSCREEN_MARGIN * 0.72, preferred)
+
+func _get_offscreen_spawn_position(margin: float = ENEMY_SPAWN_OFFSCREEN_MARGIN, preferred_direction: Vector2 = Vector2.ZERO) -> Vector2:
+	if player == null:
+		return Vector2.ZERO
+	var edges: Array[String] = _spawn_edges_for_direction(preferred_direction)
+	for attempt in range(28):
+		var edge: String = String(edges[attempt % edges.size()])
+		if attempt >= edges.size():
+			edge = String(edges[randi() % edges.size()])
+		var candidate := _position_on_screen_edge(edge, margin)
+		if not _is_position_on_screen(candidate, ENEMY_SPAWN_SCREEN_PADDING) and candidate.distance_to(player.global_position) > 300.0:
+			return candidate
+	return _clamp_to_arena(player.global_position + Vector2.RIGHT.rotated(randf() * TAU) * 760.0)
+
+func _spawn_edges_for_direction(direction: Vector2) -> Array[String]:
+	if direction == Vector2.ZERO:
+		var edges: Array[String] = ["left", "right", "top", "bottom"]
+		edges.shuffle()
+		return edges
+	var primary := ""
+	var secondary_a := ""
+	var secondary_b := ""
+	var opposite := ""
+	if abs(direction.x) >= abs(direction.y):
+		primary = "right" if direction.x >= 0.0 else "left"
+		opposite = "left" if direction.x >= 0.0 else "right"
+		secondary_a = "bottom" if direction.y >= 0.0 else "top"
+		secondary_b = "top" if direction.y >= 0.0 else "bottom"
+	else:
+		primary = "bottom" if direction.y >= 0.0 else "top"
+		opposite = "top" if direction.y >= 0.0 else "bottom"
+		secondary_a = "right" if direction.x >= 0.0 else "left"
+		secondary_b = "left" if direction.x >= 0.0 else "right"
+	var ordered_edges: Array[String] = [primary, secondary_a, secondary_b, opposite]
+	return ordered_edges
+
+func _position_on_screen_edge(edge: String, margin: float) -> Vector2:
+	var center := _camera_world_center()
+	var half_extents := _camera_world_half_extents() + Vector2(margin, margin)
+	var position := center
+	match edge:
+		"left":
+			position.x = center.x - half_extents.x
+			position.y = randf_range(center.y - half_extents.y, center.y + half_extents.y)
+		"right":
+			position.x = center.x + half_extents.x
+			position.y = randf_range(center.y - half_extents.y, center.y + half_extents.y)
+		"top":
+			position.x = randf_range(center.x - half_extents.x, center.x + half_extents.x)
+			position.y = center.y - half_extents.y
+		"bottom":
+			position.x = randf_range(center.x - half_extents.x, center.x + half_extents.x)
+			position.y = center.y + half_extents.y
+	return _clamp_to_arena(position)
+
+func _is_position_on_screen(position: Vector2, padding: float) -> bool:
+	var center := _camera_world_center()
+	var half_extents := _camera_world_half_extents() + Vector2(padding, padding)
+	var offset := position - center
+	return abs(offset.x) <= half_extents.x and abs(offset.y) <= half_extents.y
+
+func _camera_world_center() -> Vector2:
+	if player == null:
+		return Vector2.ZERO
+	return player.global_position
+
+func _camera_world_half_extents() -> Vector2:
+	var viewport_size := get_viewport_rect().size
+	var zoom := Vector2.ONE
+	if player != null:
+		var camera := player.get_node_or_null("Camera2D") as Camera2D
+		if camera != null:
+			zoom = camera.zoom
+	return Vector2(
+		(viewport_size.x / maxf(zoom.x, 0.01)) * 0.5,
+		(viewport_size.y / maxf(zoom.y, 0.01)) * 0.5
+	)
 
 func _set_enemy_art(enemy: Enemy, enemy_kind: String, is_miniboss: bool) -> void:
 	var art := enemy.get_node_or_null("Art")
@@ -800,8 +1087,8 @@ func _spawn_miniboss() -> void:
 
 func _spawn_dread_boss() -> void:
 	dread_boss_spawned = true
-	var spawn_direction := Vector2.RIGHT.rotated(randf() * TAU)
-	var spawn_position := player.position + spawn_direction * 520.0
+	var spawn_direction := _get_player_motion_direction(Vector2.RIGHT.rotated(randf() * TAU))
+	var spawn_position := _get_offscreen_spawn_position(ENEMY_SPAWN_OFFSCREEN_MARGIN * 1.25, spawn_direction)
 	_spawn_enemy("grave_king", true, spawn_position)
 	CombatFxScript.ring(fx_layer, player.global_position, Color(0.64, 1.0, 0.56, 0.92), 360.0, 0.9)
 	CombatFxScript.ring(fx_layer, player.global_position, Color(0.95, 0.5, 0.8, 0.72), 220.0, 0.7)
@@ -815,22 +1102,54 @@ func _on_enemy_damaged(enemy_position: Vector2, amount: int) -> void:
 	CombatFxScript.damage_number(fx_layer, enemy_position, amount)
 
 func _on_enemy_spitting(enemy_position: Vector2, direction: Vector2) -> void:
-	var projectile := _make_ellipse(9.0, 9.0, Color(0.78, 0.48, 1.0, 0.92), 10)
+	var projectile := _make_spitter_projectile(direction)
 	projectile.position = enemy_position + direction * 32.0
 	projectile.set_meta("velocity", direction * 270.0)
-	projectile.set_meta("damage", 18.0)
+	projectile.set_meta("damage", SPITTER_PROJECTILE_DAMAGE)
 	projectile.set_meta("ttl", 2.2)
 	projectile.z_index = 6
 	enemy_projectiles.append(projectile)
 	world.add_child(projectile)
 	CombatFxScript.sparkle(fx_layer, enemy_position, Color(0.82, 0.55, 1.0, 0.72), 0.22)
 
+func _make_spitter_projectile(direction: Vector2) -> Node2D:
+	var projectile := Node2D.new()
+	projectile.rotation = direction.angle()
+
+	var tail := Line2D.new()
+	tail.name = "Tail"
+	tail.width = 7.0
+	tail.default_color = Color(0.46, 0.95, 0.86, 0.5)
+	tail.points = PackedVector2Array([Vector2(-34.0, 0.0), Vector2(-10.0, 0.0)])
+	projectile.add_child(tail)
+
+	var halo := _make_ellipse(15.0, 11.0, Color(0.48, 1.0, 0.86, 0.28), 16)
+	halo.name = "Halo"
+	projectile.add_child(halo)
+
+	var ring := Line2D.new()
+	ring.name = "Ring"
+	ring.width = 3.0
+	ring.closed = true
+	ring.default_color = Color(0.88, 0.52, 1.0, 0.78)
+	ring.points = _make_ring_points(12.0, 18)
+	projectile.add_child(ring)
+
+	var core := _make_ellipse(7.0, 7.0, Color(0.95, 0.74, 1.0, 0.96), 12)
+	core.name = "Core"
+	projectile.add_child(core)
+
+	var seed := _make_ellipse(3.0, 3.0, Color(0.18, 0.08, 0.22, 0.9), 8)
+	seed.name = "Seed"
+	projectile.add_child(seed)
+	return projectile
+
 func _on_enemy_died(enemy_position: Vector2, xp_value: int = 1, was_miniboss: bool = false) -> void:
 	kill_count += 1
 	CombatFxScript.burst(fx_layer, enemy_position, Color(0.55, 1.0, 0.72, 0.9), 18 if was_miniboss else 12)
 	_start_screen_shake(0.18 if was_miniboss else 0.06, 7.0 if was_miniboss else 2.5)
-	if vampirism_unlocked and player != null and kill_count % 9 == 0:
-		var heal_amount: float = 5.0
+	if vampirism_unlocked and player != null and kill_count % vampirism_kills_required == 0:
+		var heal_amount: float = vampirism_heal_amount
 		if nova_damage_active:
 			var remaining_nova_heal: float = maxf(0.0, NOVA_VAMPIRISM_HEAL_CAP - nova_vampirism_healed)
 			heal_amount = minf(heal_amount, remaining_nova_heal)
@@ -911,9 +1230,10 @@ func _update_enemy_projectiles(delta: float) -> void:
 		projectile.set_meta("ttl", ttl)
 		var velocity := projectile.get_meta("velocity", Vector2.ZERO) as Vector2
 		projectile.position += velocity * delta
-		projectile.rotation += delta * 8.0
+		_update_spitter_projectile_visual(projectile, delta)
 		if player != null and projectile.global_position.distance_to(player.global_position) < 28.0:
-			player.take_damage(float(projectile.get_meta("damage", 16.0)))
+			var damage: float = float(projectile.get_meta("damage", SPITTER_PROJECTILE_DAMAGE))
+			_damage_player(damage, damage, true)
 			CombatFxScript.burst(fx_layer, projectile.global_position, Color(0.85, 0.48, 1.0, 0.84), 8)
 			projectile.queue_free()
 			if player.is_dead:
@@ -924,6 +1244,24 @@ func _update_enemy_projectiles(delta: float) -> void:
 			continue
 		alive_projectiles.append(projectile)
 	enemy_projectiles = alive_projectiles
+
+func _update_spitter_projectile_visual(projectile: Node2D, delta: float) -> void:
+	var age := float(projectile.get_meta("age", 0.0)) + delta
+	projectile.set_meta("age", age)
+	var ring := projectile.get_node_or_null("Ring") as Line2D
+	var halo := projectile.get_node_or_null("Halo") as CanvasItem
+	var tail := projectile.get_node_or_null("Tail") as Line2D
+	var core := projectile.get_node_or_null("Core") as CanvasItem
+	if ring != null:
+		ring.rotation += delta * 9.0
+		ring.width = 2.0 + sin(age * 12.0) * 0.9
+	if halo != null:
+		halo.scale = Vector2.ONE * (1.0 + sin(age * 10.0) * 0.12)
+		halo.modulate.a = 0.78 + sin(age * 8.0) * 0.18
+	if tail != null:
+		tail.modulate.a = 0.55 + sin(age * 14.0) * 0.16
+	if core != null:
+		core.scale = Vector2.ONE * (1.0 + sin(age * 16.0) * 0.08)
 
 func _update_hazard_zones(delta: float) -> void:
 	if elapsed >= HAZARD_START_TIME and player != null:
@@ -967,7 +1305,7 @@ func _update_hazard_zones(delta: float) -> void:
 			label.modulate.a = max(0.0, min(1.0, total_time - age)) * (0.72 if not active else 1.0)
 			label.position.y = -radius - 56.0 + sin(age * 5.0) * 2.0
 		if active and player != null and zone.global_position.distance_to(player.global_position) < radius:
-			player.take_damage(HAZARD_DAMAGE * delta)
+			_damage_player(HAZARD_DAMAGE * delta)
 			if randf() < 0.22:
 				CombatFxScript.sparkle(fx_layer, player.global_position, Color(0.7, 1.0, 0.58, 0.82), 0.12)
 			if player.is_dead:
@@ -1271,7 +1609,7 @@ func _damage_player_from_boss_attack(attack: Node2D) -> void:
 		var width: float = float(attack.get_meta("width", 70.0))
 		did_hit = _distance_to_segment(player.global_position, start, end) <= width * 0.5
 	if did_hit:
-		player.take_damage(damage)
+		_damage_player(damage, damage, true)
 		_start_screen_shake(0.24, 9.0)
 		CombatFxScript.burst(fx_layer, player.global_position, Color(0.9, 1.0, 0.52, 0.9), 18)
 		if player.is_dead:
@@ -1343,13 +1681,35 @@ func _check_enemy_contact(delta: float) -> void:
 			contact_radius = 58.0
 		if enemy.global_position.distance_to(player.global_position) < contact_radius:
 			var damage := enemy.contact_damage
-			player.take_damage(damage * delta)
+			_damage_player(damage * delta)
 			if thorn_bloom_unlocked:
 				_trigger_thorn_bloom(enemy.global_position)
 			if enemy.enemy_kind == "exploder":
 				_explode_enemy(enemy)
 			if player.is_dead:
 				_show_game_over()
+
+func _damage_player(amount: float, display_amount: float = -1.0, force_number: bool = false) -> void:
+	if player == null or player.is_dead:
+		return
+	player.take_damage(amount)
+	if display_amount < 0.0:
+		display_amount = amount
+	if force_number:
+		_show_player_damage_number(display_amount)
+		player_damage_number_cooldown = PLAYER_DAMAGE_NUMBER_INTERVAL
+		return
+	player_damage_number_accumulator += display_amount
+	if player_damage_number_cooldown <= 0.0:
+		_show_player_damage_number(player_damage_number_accumulator)
+		player_damage_number_accumulator = 0.0
+		player_damage_number_cooldown = PLAYER_DAMAGE_NUMBER_INTERVAL
+
+func _show_player_damage_number(amount: float) -> void:
+	if player == null:
+		return
+	var shown_amount: int = max(1, int(ceil(amount)))
+	CombatFxScript.damage_number(fx_layer, player.global_position + Vector2(0.0, -18.0), shown_amount, Color(1.0, 0.36, 0.42), 22)
 
 func _keep_player_inside_arena() -> void:
 	if player == null:
@@ -1394,8 +1754,8 @@ func _roll_relics() -> Array:
 		{"name": "Расширить бледный радиус", "description": "Маска видит добычу дальше. Клинок летит дальше и быстрее", "method": "_upgrade_range"},
 		{"name": "Призвать Тень", "description": "Старый спутник прорезает толпу лучом", "method": "_upgrade_shadow_spirit"},
 		{"name": "Могильный Магнит", "description": "Осколки павших сами ищут Маску. Притяжение опыта выше", "method": "_upgrade_magnet"},
-		{"name": "Кровавый Цветок", "description": "Пьет кровь павших и возвращает ее тебе. Убийства лечат", "method": "_upgrade_vampirism"},
-		{"name": "Сердце Новы", "description": "Внутри цветка все еще горит звезда. Нова сильнее", "method": "_upgrade_nova"},
+		{"name": "Кровавый Цветок", "description": "Пьет кровь павших и возвращает ее тебе. Повтор усиливает лечение", "method": "_upgrade_vampirism"},
+		{"name": "Сердце Новы", "description": "Внутри цветка все еще горит звезда. Авто-ульта заряжается быстрее, бьет шире и сильнее", "method": "_upgrade_nova"},
 		{"name": "Шипастый Венец", "description": "Короли Gravebloom умирали стоя. Ответный урон", "method": "_upgrade_thorns"},
 	]
 	relics.shuffle()
@@ -1483,9 +1843,14 @@ func _upgrade_magnet() -> void:
 	_flash_overlay_text("Магнит опыта усилен")
 
 func _upgrade_vampirism() -> void:
-	vampirism_unlocked = true
-	player.health = min(player.max_health, player.health + 12.0)
-	_flash_overlay_text("Кровавый Цветок расцвел")
+	vampirism_level += 1
+	if not vampirism_unlocked:
+		vampirism_unlocked = true
+	else:
+		vampirism_heal_amount += 2.0
+		vampirism_kills_required = max(5, vampirism_kills_required - 1)
+	player.health = min(player.max_health, player.health + 10.0 + float(vampirism_level) * 2.0)
+	_flash_overlay_text("Кровавый Цветок расцвел" if vampirism_level == 1 else "Кровавый Цветок пьет глубже")
 
 func _upgrade_nova() -> void:
 	ultimate_cooldown = max(20.0, ultimate_cooldown - 3.5)
@@ -1583,6 +1948,7 @@ func _update_ultimate(delta: float) -> void:
 	if ultimate_ready:
 		return
 	ultimate_charge = min(ultimate_cooldown, ultimate_charge + delta)
+	_update_nova_charge_cues()
 	if ultimate_charge >= ultimate_cooldown:
 		ultimate_ready = true
 		if ULTIMATE_AUTO_CAST:
@@ -1603,6 +1969,79 @@ func _update_ultimate_ui() -> void:
 	ultimate_button.disabled = true
 	ultimate_button.modulate = Color.WHITE if ultimate_ready else Color(0.78, 0.86, 0.78, 0.95)
 
+func _update_nova_charge_cues() -> void:
+	var ratio: float = _nova_charge_ratio()
+	var next_stage := 0
+	if ratio >= NOVA_CUE_STRIKE:
+		next_stage = 3
+	elif ratio >= NOVA_CUE_WARN:
+		next_stage = 2
+	elif ratio >= NOVA_CUE_WAKE:
+		next_stage = 1
+	if next_stage <= nova_charge_stage:
+		return
+	nova_charge_stage = next_stage
+	match nova_charge_stage:
+		1:
+			_play_nova_cue(nova_wake_player)
+			if player != null:
+				CombatFxScript.ring(fx_layer, player.global_position, Color(0.58, 1.0, 0.72, 0.36), 96.0, 0.34)
+		2:
+			_play_nova_cue(nova_warn_player)
+			if player != null:
+				CombatFxScript.ring(fx_layer, player.global_position, Color(0.76, 1.0, 0.68, 0.54), 132.0, 0.38)
+				_start_screen_shake(0.08, 2.5)
+		3:
+			_play_nova_cue(nova_burst_player)
+			if player != null:
+				CombatFxScript.ring(fx_layer, player.global_position, Color(0.96, 0.82, 1.0, 0.7), 172.0, 0.28)
+				_start_screen_shake(0.16, 5.5)
+
+func _play_nova_cue(audio_player: AudioStreamPlayer) -> void:
+	if audio_player == null:
+		return
+	audio_player.stop()
+	audio_player.play()
+
+func _nova_charge_ratio() -> float:
+	if ultimate_cooldown <= 0.0:
+		return 0.0
+	return clamp(ultimate_charge / ultimate_cooldown, 0.0, 1.0)
+
+func _update_nova_charge_fx(delta: float) -> void:
+	if game_state != "running" or player == null or nova_charge_fx == null:
+		if nova_charge_fx != null:
+			nova_charge_fx.visible = false
+		return
+	var ratio: float = _nova_charge_ratio()
+	if ratio < NOVA_CUE_WAKE:
+		nova_charge_fx.visible = false
+		return
+	nova_pulse_time += delta
+	nova_charge_fx.visible = true
+	nova_charge_fx.global_position = player.global_position + Vector2(0.0, -10.0)
+	var stage_strength: float = clampf((ratio - NOVA_CUE_WAKE) / (1.0 - NOVA_CUE_WAKE), 0.0, 1.0)
+	var pulse: float = 0.5 + sin(nova_pulse_time * lerpf(5.2, 10.5, stage_strength)) * 0.5
+	nova_charge_fx.scale = Vector2.ONE * lerpf(0.82, 1.28, stage_strength) * (1.0 + pulse * lerpf(0.03, 0.1, stage_strength))
+
+	var aura := nova_charge_fx.get_node_or_null("Aura") as CanvasItem
+	var outer_ring := nova_charge_fx.get_node_or_null("OuterRing") as Line2D
+	var inner_ring := nova_charge_fx.get_node_or_null("InnerRing") as Line2D
+	var petals := nova_charge_fx.get_node_or_null("Petals") as Node2D
+	if aura != null:
+		aura.modulate.a = lerpf(0.45, 1.0, stage_strength) * (0.74 + pulse * 0.26)
+	if outer_ring != null:
+		outer_ring.rotation += delta * lerpf(1.6, 4.8, stage_strength)
+		outer_ring.width = lerpf(3.0, 7.0, stage_strength)
+		outer_ring.default_color = Color(0.58 + stage_strength * 0.3, 1.0, 0.72 + stage_strength * 0.2, 0.58 + pulse * 0.34)
+	if inner_ring != null:
+		inner_ring.rotation -= delta * lerpf(2.4, 6.2, stage_strength)
+		inner_ring.width = lerpf(2.0, 4.0, stage_strength)
+		inner_ring.default_color = Color(0.92, 0.76 + stage_strength * 0.18, 1.0, 0.42 + pulse * 0.36)
+	if petals != null:
+		petals.rotation += delta * lerpf(2.0, 7.0, stage_strength)
+		petals.modulate.a = lerpf(0.5, 1.0, stage_strength)
+
 func _cast_ultimate() -> void:
 	if game_state != "running" or player == null:
 		return
@@ -1611,9 +2050,12 @@ func _cast_ultimate() -> void:
 		return
 	ultimate_ready = false
 	ultimate_charge = 0.0
+	nova_charge_stage = 0
+	nova_charge_fx.visible = false
 	var origin := player.global_position
 	player.clear_pointer_input()
 	_flash_overlay_text("НОВА GRAVEBLOOM")
+	_play_nova_cue(nova_burst_player)
 	_start_screen_shake(0.42, 13.0)
 	CombatFxScript.ring(fx_layer, origin, Color(0.78, 1.0, 0.72, 0.95), ultimate_radius, 0.55)
 	CombatFxScript.ring(fx_layer, origin, Color(0.95, 0.78, 1.0, 0.68), ultimate_radius * 0.62, 0.42)

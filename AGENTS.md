@@ -97,10 +97,12 @@ scripts/
 - Manages run states: start, running, upgrade, game_over, victory.
 - Spawns the player.
 - Spawns enemy waves.
+- Regular enemies should spawn just outside the current camera view and walk in from the screen edge, not materialize inside the active screen.
 - Enemy waves now mix roles: crawler, brute, fast runner, flanker, ranged spitter, explosive enemy, final-minute boss, and miniboss.
 - Enemy roles are visually marked in code: brutes get armor rings, runners get small speed wings, spitters get purple aim marks, and exploders get orange danger marks.
 - Enemies use light separation so they do not collapse into one harmless blob during circular kiting.
 - Spitters use predictive shots, flankers try to cut ahead/sideways, and after the first minute occasional interceptors spawn ahead of the player's movement to break endless clockwise/counterclockwise kiting.
+- A pressure director keeps the fight populated around the player: it counts nearby/on-screen threats, spawns edge pressure if the active screen goes empty, and recycles far non-boss enemies when the global enemy cap is filled by harmless distant mobs.
 - Gravebloom hazard zones periodically warn, bloom, then damage the player if they keep running through the same route; they should read as large animated cursed flowers with a short Russian warning label. Keep a safe distance from the player on spawn and preserve a clear no-damage warning phase.
 - If too many enemies stay packed together after the first minute, the cluster can bloom into a hazard zone to punish harmless enemy balls.
 - `Король-Могила` is the final-minute pressure boss at 2:00: custom terrifying grave king sprite, very high speed, high health, larger contact radius, periodic Gravebloom hazards, flanker/spitter summons, and telegraphed boss attacks.
@@ -113,9 +115,10 @@ scripts/
 - Owns enemy and XP shard lists.
 - Updates XP collection, level-ups, randomized relic choices, HUD, XP bar, result screens, enemy contact damage, and enemy projectiles.
 - Handles screen shake, XP sparkles, and Shadow Spirit secondary weapon.
-- Handles Gravebloom Nova ultimate charge, UI button, keyboard trigger, radial damage, knockback, and burst FX.
+- Handles Gravebloom Nova ultimate charge, UI indicator, staged 85/90/97% visual/audio cues around the player, radial damage, knockback, and burst FX.
 - Relics currently include blade damage/cooldown/range, Shadow Spirit, XP magnet, vampiric healing, Nova upgrades, and thorn retaliation.
 - `Кровавый Цветок` can heal from Nova kills, but Nova-triggered vampirism is capped per ultimate cast so the combo does not become a full heal button.
+- Repeated `Кровавый Цветок` picks should improve the vampirism build by increasing heal amount and reducing kills required, not be a dead duplicate choice.
 - `Расширить бледный радиус` should improve blade range and tempo, not only target search radius, so it feels competitive with stronger relics.
 
 `Player`:
@@ -141,6 +144,8 @@ scripts/
 - Emits `died(enemy_position)` on death.
 - Emits `damaged(enemy_position, amount)` for hit feedback.
 - Emits `spitting(enemy_position, direction)` so `Main` can spawn simple projectile nodes.
+- Spitter projectiles should stay lower-damage ranged pressure; close contact, boss hits, and telegraphed hazards should remain more dangerous than a regular ranged shot.
+- Spitter projectiles use a readable toxic core/ring/tail visual rather than a plain dot.
 
 `LivingBlade`:
 
@@ -169,11 +174,13 @@ scripts/
 - Mouse drag means: hold left mouse button, drag away from the starting point, release to stop.
 - The green object around the hero is the Living Blade; it now flies out to hunt enemies and returns.
 - Hits now show damage numbers, enemy flash/squash, knockback, and death bursts.
+- Incoming damage now shows red numbers over the player, throttled for continuous contact/hazard damage so it does not spam the screen.
 - Runs now have a start screen, XP bar, 3:00 survival goal, miniboss event, victory screen, death screen, and restart button.
 - Relics can unlock Shadow Spirit, a secondary auto-skill that cuts through enemies in a beam.
 - Relics can unlock `Колокол Забвения`, an auto-weapon that periodically emits a radial shockwave around the player; repeat picks increase damage/radius and reduce cooldown.
 - `Колокол Забвения` should be guaranteed in the first relic choice until unlocked, so players discover the second auto-weapon instead of waiting for random rolls.
-- Gravebloom Nova is an automatic ultimate: it charges over time, shows a visible `NOVA` indicator with percent progress, then fires by itself and blasts nearby enemies.
+- Gravebloom Nova is an automatic ultimate: it charges over time, shows a visible `NOVA` indicator with percent progress, gives peripheral visual/audio cues from 85% onward, then fires by itself and blasts nearby enemies.
+- Nova readiness should be readable without staring at HUD: faint aura at 85%, rotating Gravebloom ring at 90%, stronger warning at 97%, then a distinct burst cue at cast.
 - Do not spend more time trying to make laptop touchpad tap-to-click control Nova; the game should not depend on that input path.
 - Small health packs can drop from enemies, pulse on the ground, heal a little on pickup, and expire after a short time.
 - XP pacing is intentionally slower after the ultimate was added: higher XP thresholds keep Nova kills from over-leveling too quickly.
