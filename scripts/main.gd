@@ -149,6 +149,8 @@ var dread_boss_phase_two := false
 @onready var hud := Label.new()
 @onready var hp_bar := ProgressBar.new()
 @onready var xp_bar := ProgressBar.new()
+@onready var boss_name_label := Label.new()
+@onready var boss_hp_bar := ProgressBar.new()
 @onready var ultimate_bar := ProgressBar.new()
 @onready var ultimate_button := Button.new()
 @onready var joystick_base := Panel.new()
@@ -536,6 +538,7 @@ func _build_ui() -> void:
 	xp_bar.value = xp
 	xp_bar.show_percentage = false
 	ui_layer.add_child(xp_bar)
+	_build_boss_ui()
 	_build_ultimate_ui()
 	_build_joystick()
 	upgrade_panel.visible = false
@@ -551,6 +554,43 @@ func _build_ui() -> void:
 	ui_layer.add_child(overlay_panel)
 	overlay_panel.add_child(overlay_list)
 	_update_hud()
+
+func _build_boss_ui() -> void:
+	boss_name_label.position = Vector2(18, 174)
+	boss_name_label.size = Vector2(504, 26)
+	boss_name_label.text = "КОРОЛЬ-МОГИЛА"
+	boss_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	boss_name_label.add_theme_font_size_override("font_size", 20)
+	boss_name_label.add_theme_color_override("font_color", Color(0.9, 0.82, 0.72))
+	boss_name_label.add_theme_color_override("font_shadow_color", Color(0.02, 0.015, 0.02, 0.9))
+	boss_name_label.add_theme_constant_override("shadow_offset_x", 2)
+	boss_name_label.add_theme_constant_override("shadow_offset_y", 2)
+	boss_name_label.visible = false
+	ui_layer.add_child(boss_name_label)
+
+	boss_hp_bar.position = Vector2(46, 204)
+	boss_hp_bar.size = Vector2(448, 22)
+	boss_hp_bar.max_value = 100.0
+	boss_hp_bar.value = 100.0
+	boss_hp_bar.show_percentage = false
+	boss_hp_bar.visible = false
+	boss_hp_bar.add_theme_stylebox_override("background", _make_bar_style(Color(0.055, 0.035, 0.045, 0.92), Color(0.32, 0.22, 0.26, 0.9)))
+	boss_hp_bar.add_theme_stylebox_override("fill", _make_bar_style(Color(0.62, 0.12, 0.18, 0.96), Color(0.9, 0.62, 0.42, 0.9)))
+	ui_layer.add_child(boss_hp_bar)
+
+func _make_bar_style(fill: Color, border_color: Color) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = fill
+	style.border_color = border_color
+	style.border_width_left = 2
+	style.border_width_top = 2
+	style.border_width_right = 2
+	style.border_width_bottom = 2
+	style.corner_radius_top_left = 4
+	style.corner_radius_top_right = 4
+	style.corner_radius_bottom_left = 4
+	style.corner_radius_bottom_right = 4
+	return style
 
 func _show_start_screen() -> void:
 	game_state = "start"
@@ -586,6 +626,7 @@ func _reset_run() -> void:
 	paused_for_upgrade = false
 	dread_boss_spawned = false
 	miniboss_spawned = false
+	_hide_boss_ui()
 	last_run_result = ""
 	last_run_lore = ""
 	relic_pick_counts.clear()
@@ -817,7 +858,7 @@ func _spawn_enemy(enemy_kind: String, is_miniboss: bool, spawn_position := Vecto
 		enemy.contact_damage = 30.0
 		enemy.xp_value = 2
 	elif enemy_kind == "grave_king":
-		enemy.max_health = 112 + int(elapsed / 3.5)
+		enemy.max_health = 78 + int(elapsed / 6.0)
 		enemy.speed = 142.0
 		enemy.scale = Vector2.ONE * 1.0
 		enemy.contact_damage = 52.0
@@ -1095,6 +1136,7 @@ func _spawn_dread_boss() -> void:
 	var spawn_direction := _get_player_motion_direction(Vector2.RIGHT.rotated(randf() * TAU))
 	var spawn_position := _get_offscreen_spawn_position(ENEMY_SPAWN_OFFSCREEN_MARGIN * 1.25, spawn_direction)
 	_spawn_enemy("grave_king", true, spawn_position)
+	_show_boss_ui(_get_dread_boss())
 	CombatFxScript.ring(fx_layer, player.global_position, Color(0.64, 1.0, 0.56, 0.92), 360.0, 0.9)
 	CombatFxScript.ring(fx_layer, player.global_position, Color(0.95, 0.5, 0.8, 0.72), 220.0, 0.7)
 	_flash_overlay_text("Король-Могила встал")
@@ -1173,6 +1215,8 @@ func _on_enemy_died(enemy_position: Vector2, xp_value: int = 1, was_miniboss: bo
 	world.add_child(shard)
 	if was_miniboss:
 		_flash_overlay_text("Король-Могила пал" if xp_value >= 20 else "Могильный Страж повержен")
+		if xp_value >= 20:
+			_hide_boss_ui()
 	_compact_enemies()
 
 func _spawn_health_pack(pack_position: Vector2) -> void:
@@ -1443,6 +1487,7 @@ func _update_dread_boss_pressure(delta: float) -> void:
 		boss.contact_damage += 10.0
 		boss.modulate = Color(1.0, 0.78, 0.88)
 		_flash_overlay_text("Корона раскрылась")
+		_flash_boss_ui()
 		_start_screen_shake(0.5, 11.0)
 		_spawn_boss_cross_attack(boss)
 	dread_boss_hazard_timer -= delta
@@ -1896,6 +1941,7 @@ func _show_game_over() -> void:
 	joystick_base.visible = false
 	ultimate_button.visible = false
 	ultimate_bar.visible = false
+	_hide_boss_ui()
 	_reset_joystick()
 	get_tree().paused = true
 	_show_result_screen(false)
@@ -1953,7 +1999,42 @@ func _update_hud() -> void:
 	hp_bar.value = health_value
 	xp_bar.max_value = xp_to_next
 	xp_bar.value = xp
+	_update_boss_ui()
 	_update_ultimate_ui()
+
+func _show_boss_ui(boss: Enemy) -> void:
+	if boss == null:
+		return
+	boss_name_label.visible = true
+	boss_hp_bar.visible = true
+	boss_hp_bar.max_value = max(1, boss.max_health)
+	boss_hp_bar.value = max(0, boss.health)
+	boss_hp_bar.modulate = Color.WHITE
+	boss_name_label.modulate = Color.WHITE
+
+func _hide_boss_ui() -> void:
+	boss_name_label.visible = false
+	boss_hp_bar.visible = false
+
+func _update_boss_ui() -> void:
+	if not boss_hp_bar.visible:
+		return
+	var boss := _get_dread_boss()
+	if boss == null:
+		_hide_boss_ui()
+		return
+	boss_hp_bar.max_value = max(1, boss.max_health)
+	boss_hp_bar.value = clamp(boss.health, 0, boss.max_health)
+
+func _flash_boss_ui() -> void:
+	if not boss_hp_bar.visible:
+		return
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(boss_hp_bar, "modulate", Color(1.0, 0.42, 0.62), 0.08)
+	tween.tween_property(boss_name_label, "modulate", Color(1.0, 0.7, 0.82), 0.08)
+	tween.chain().tween_property(boss_hp_bar, "modulate", Color.WHITE, 0.28)
+	tween.parallel().tween_property(boss_name_label, "modulate", Color.WHITE, 0.28)
 
 func _build_ultimate_ui() -> void:
 	ultimate_bar.position = Vector2(22, 882)
@@ -2101,7 +2182,9 @@ func _cast_ultimate() -> void:
 		var distance := origin.distance_to(enemy.global_position)
 		if distance <= ultimate_radius:
 			var damage := ultimate_damage
-			if enemy.is_miniboss:
+			if enemy.enemy_kind == "grave_king":
+				damage = int(ceil(float(ultimate_damage) * 1.35))
+			elif enemy.is_miniboss:
 				damage = int(ceil(float(ultimate_damage) * 0.65))
 			enemy.take_damage(damage, origin, 520.0)
 	nova_damage_active = false

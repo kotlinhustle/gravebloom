@@ -106,7 +106,9 @@ scripts/
 - Gravebloom hazard zones periodically warn, bloom, then damage the player if they keep running through the same route; they should read as large animated cursed flowers with a short Russian warning label. Keep a safe distance from the player on spawn and preserve a clear no-damage warning phase.
 - If too many enemies stay packed together after the first minute, the cluster can bloom into a hazard zone to punish harmless enemy balls.
 - `Король-Могила` is the final-minute pressure boss at 2:00: custom terrifying grave king sprite, very high speed, high health, larger contact radius, periodic Gravebloom hazards, flanker/spitter summons, and telegraphed boss attacks.
+- Король-Могила should be killable in the final minute with a decent offensive build: lower HP than a pure survival wall, extra Nova damage, and extra Living Blade damage against him.
 - Boss attacks include `Похоронный Колокол` radial shock rings, `Королевский Приговор` lane strikes along the player's route, and phase-two `Черная корона` cross strikes.
+- Король-Могила has a dedicated top HUD boss HP bar that appears on spawn, updates with damage, flashes on phase two, and hides on boss death/result screens.
 - Keeps the player inside visible ruined arena bounds and caps live enemy pressure for early readability.
 - Visible UI text is Russian-first; keep menus, HUD, result screens, upgrade choices, and combat notices localized.
 - Micro-lore is embedded through the start screen, timed run notices, relic descriptions, relic-pick echo lines, boss entrance lines, and result text.

@@ -4,6 +4,7 @@ extends Node2D
 var owner_player: Node2D
 var fx_layer: Node2D
 var damage := 1
+var grave_king_damage_multiplier := 1.65
 var cooldown := 0.72
 var attack_range := 230.0
 var dash_speed := 820.0
@@ -92,7 +93,10 @@ func _hit_target() -> void:
 	if has_hit_target or not is_instance_valid(target_enemy):
 		return
 	has_hit_target = true
-	target_enemy.take_damage(damage, owner_player.global_position, 260.0)
+	var hit_damage := damage
+	if "enemy_kind" in target_enemy and target_enemy.enemy_kind == "grave_king":
+		hit_damage = int(ceil(float(damage) * grave_king_damage_multiplier))
+	target_enemy.take_damage(hit_damage, owner_player.global_position, 260.0)
 	_show_impact(target_enemy.global_position)
 	blade_sprite.scale = base_blade_scale * Vector2(1.55, 0.7)
 
