@@ -58,6 +58,14 @@ const DREAD_BOSS_JUDGMENT_INTERVAL := 6.4
 const DREAD_BOSS_CROSS_INTERVAL := 10.5
 const BOSS_ATTACK_ARM_TIME := 1.0
 const BOSS_ATTACK_ACTIVE_TIME := 0.45
+const SAVE_PATH := "user://save.json"
+const HISTORY_LIMIT := 8
+const META_UPGRADES := {
+	"mask": {"name": "Крепче Маска", "description": "+5 стартового HP", "base_cost": 24, "cost_step": 18, "max": 8},
+	"blade": {"name": "Острее Клинок", "description": "+1 стартовый урон клинка", "base_cost": 38, "cost_step": 28, "max": 4},
+	"magnet": {"name": "Старый Магнит", "description": "Опыт ближе к Маске", "base_cost": 22, "cost_step": 16, "max": 8},
+	"nova": {"name": "Быстрее Нова", "description": "Нова заряжается быстрее", "base_cost": 32, "cost_step": 24, "max": 5},
+}
 const LORE_EVENTS := [
 	{"time": 12.0, "text": "Руины проснулись"},
 	{"time": 45.0, "text": "Gravebloom тянется к крови"},
@@ -98,6 +106,11 @@ var dread_boss_spawned := false
 var miniboss_spawned := false
 var last_run_result := ""
 var last_run_lore := ""
+var last_run_ash := 0
+var run_reward_recorded := false
+var profile_ash := 0
+var profile_upgrades: Dictionary = {}
+var run_history: Array = []
 var relic_pick_counts: Dictionary = {}
 var relic_pick_order: Array[String] = []
 var shadow_spirit_unlocked := false
@@ -183,6 +196,7 @@ func _ready() -> void:
 	_build_ui()
 	_build_nova_charge_fx()
 	_build_nova_audio()
+	_load_profile()
 	_show_start_screen()
 
 func _process(delta: float) -> void:
@@ -530,6 +544,16 @@ func _spawn_player() -> void:
 	living_blade = LivingBladeScene.instantiate()
 	living_blade.setup(player, fx_layer)
 	world.add_child(living_blade)
+	_apply_profile_start_bonuses()
+
+func _apply_profile_start_bonuses() -> void:
+	if player != null:
+		var mask_bonus := float(_profile_upgrade_level("mask")) * 5.0
+		player.max_health += mask_bonus
+		player.health = player.max_health
+	if is_instance_valid(living_blade):
+		for i in range(_profile_upgrade_level("blade")):
+			living_blade.increase_damage()
 
 func _build_ui() -> void:
 	add_child(ui_layer)
@@ -613,8 +637,14 @@ func _make_bar_style(fill: Color, border_color: Color) -> StyleBoxFlat:
 	return style
 
 func _show_start_screen() -> void:
+	_clear_world_entities()
 	game_state = "start"
 	get_tree().paused = true
+	build_label.visible = false
+	hp_bar.visible = false
+	xp_bar.visible = false
+	_hide_boss_ui()
+	upgrade_panel.visible = false
 	joystick_base.visible = false
 	ultimate_button.visible = false
 	ultimate_bar.visible = false
@@ -624,16 +654,48 @@ func _show_start_screen() -> void:
 	_add_overlay_label("Королевство умерло, но его цветы продолжают расти.", 19)
 	_add_overlay_label("Маска помнит путь к сердцу проклятия.", 19)
 	_add_overlay_label("Продержись до рассвета.", 22)
+	_add_overlay_label("Пепел: %d" % profile_ash, 18)
 	_add_overlay_button("Начать забег", _start_run)
+	_add_overlay_button("Профиль", _show_profile_screen)
 
 func _start_run() -> void:
 	_reset_run()
 	overlay_panel.visible = false
+	hp_bar.visible = true
+	xp_bar.visible = true
 	joystick_base.visible = true
 	ultimate_button.visible = true
 	ultimate_bar.visible = true
 	game_state = "running"
 	get_tree().paused = false
+
+func _show_profile_screen() -> void:
+	_clear_world_entities()
+	game_state = "profile"
+	get_tree().paused = true
+	build_label.visible = false
+	hp_bar.visible = false
+	xp_bar.visible = false
+	_hide_boss_ui()
+	upgrade_panel.visible = false
+	joystick_base.visible = false
+	ultimate_button.visible = false
+	ultimate_bar.visible = false
+	overlay_panel.visible = true
+	_clear_container(overlay_list)
+	_add_overlay_label("Профиль Маски", 32)
+	_add_overlay_label("Пепел: %d" % profile_ash, 22)
+	_add_overlay_label("Постоянные дары", 20)
+	for upgrade_id in ["mask", "blade", "magnet", "nova"]:
+		_add_profile_upgrade_button(upgrade_id)
+	_add_overlay_label("История забегов", 20)
+	if run_history.is_empty():
+		_add_overlay_label("Пока руины молчат.", 16)
+	else:
+		var history_count: int = min(HISTORY_LIMIT, run_history.size())
+		for entry in run_history.slice(0, history_count):
+			_add_overlay_label(_format_history_entry(entry), 15)
+	_add_overlay_button("Назад", _show_start_screen)
 
 func _reset_run() -> void:
 	_clear_world_entities()
@@ -643,13 +705,15 @@ func _reset_run() -> void:
 	player_damage_bonus = 0.0
 	xp = 0
 	xp_to_next = 14
-	shard_pull_range = 95.0
+	shard_pull_range = 95.0 + float(_profile_upgrade_level("magnet")) * 16.0
 	paused_for_upgrade = false
 	dread_boss_spawned = false
 	miniboss_spawned = false
 	_hide_boss_ui()
 	last_run_result = ""
 	last_run_lore = ""
+	last_run_ash = 0
+	run_reward_recorded = false
 	relic_pick_counts.clear()
 	relic_pick_order.clear()
 	shadow_spirit_unlocked = false
@@ -669,7 +733,7 @@ func _reset_run() -> void:
 	blood_blade_evolved = false
 	ultimate_charge = 0.0
 	ultimate_ready = false
-	ultimate_cooldown = ULTIMATE_COOLDOWN
+	ultimate_cooldown = maxf(20.0, ULTIMATE_COOLDOWN - float(_profile_upgrade_level("nova")) * 1.4)
 	ultimate_radius = ULTIMATE_RADIUS
 	ultimate_damage = ULTIMATE_DAMAGE
 	nova_charge_stage = 0
@@ -1835,11 +1899,11 @@ func _show_upgrades() -> void:
 
 func _roll_relics() -> Array:
 	var bell_relic := {"name": "Колокол Забвения", "description": "Автооружие: волны вокруг Маски", "method": "_upgrade_oblivion_bell"}
-	var blood_relic := {"name": "Кровавый Цветок", "description": "Вампиризм. Эво: Цветок+2 дара Клинка", "method": "_upgrade_vampirism"}
+	var blood_relic := {"name": "Кровавый Цветок", "description": "Вампиризм. Эволюция: Цветок+2 улучшения Клинка", "method": "_upgrade_vampirism"}
 	var blade_relics := [
-		{"name": "Заточить Живой Клинок", "description": "Урон клинка выше. Эво: Цветок+2 дара", "method": "_upgrade_damage"},
-		{"name": "Ускорить проклятие", "description": "Клинок чаще. Эво: Цветок+2 дара", "method": "_upgrade_cooldown"},
-		{"name": "Расширить бледный радиус", "description": "Клинок дальше. Эво: Цветок+2 дара", "method": "_upgrade_range"},
+		{"name": "Заточить Живой Клинок", "description": "Урон клинка выше. Эволюция: Цветок+2 улучшения", "method": "_upgrade_damage"},
+		{"name": "Ускорить проклятие", "description": "Клинок чаще. Эволюция: Цветок+2 улучшения", "method": "_upgrade_cooldown"},
+		{"name": "Расширить бледный радиус", "description": "Клинок дальше. Эволюция: Цветок+2 улучшения", "method": "_upgrade_range"},
 	]
 	var relics := [
 		{"name": "Призвать Тень", "description": "Автооружие: луч сквозь толпу", "method": "_upgrade_shadow_spirit"},
@@ -2036,6 +2100,7 @@ func _show_game_over() -> void:
 	game_state = "game_over"
 	last_run_result = "Маска треснула, но проклятие запомнило тебя"
 	last_run_lore = _pick_lore_line(DEATH_LORE_LINES)
+	_finish_run(false)
 	build_label.visible = false
 	joystick_base.visible = false
 	ultimate_button.visible = false
@@ -2049,6 +2114,7 @@ func _show_victory() -> void:
 	game_state = "victory"
 	last_run_result = "На миг Gravebloom отступил от сердца руин"
 	last_run_lore = _pick_lore_line(VICTORY_LORE_LINES)
+	_finish_run(true)
 	build_label.visible = false
 	joystick_base.visible = false
 	ultimate_button.visible = false
@@ -2064,6 +2130,7 @@ func _show_result_screen(victory: bool) -> void:
 	_add_overlay_label(last_run_result, 20)
 	_add_overlay_label(last_run_lore, 18)
 	_add_overlay_label("Время: %s   Уровень: %d   Убийства: %d" % [_format_time(elapsed), level, kill_count], 18)
+	_add_overlay_label("Получено пепла: %d   Всего: %d" % [last_run_ash, profile_ash], 18)
 	_add_overlay_label("Осколки: %d/%d" % [xp, xp_to_next], 16)
 	var build_summary := _format_relic_summary()
 	if not build_summary.is_empty():
@@ -2071,6 +2138,37 @@ func _show_result_screen(victory: bool) -> void:
 	else:
 		_add_overlay_label("Реликвии: Маска вошла в руины без даров", 16)
 	_add_overlay_button("Заново", _start_run)
+	_add_overlay_button("Профиль", _show_profile_screen)
+
+func _finish_run(victory: bool) -> void:
+	if run_reward_recorded:
+		return
+	run_reward_recorded = true
+	last_run_ash = _calculate_ash_reward(victory)
+	profile_ash += last_run_ash
+	var history_entry := {
+		"victory": victory,
+		"time": elapsed,
+		"level": level,
+		"kills": kill_count,
+		"ash": last_run_ash,
+		"build": _format_relic_summary(),
+		"date": Time.get_datetime_string_from_system(false, true),
+	}
+	run_history.insert(0, history_entry)
+	run_history = run_history.slice(0, HISTORY_LIMIT)
+	_save_profile()
+
+func _calculate_ash_reward(victory: bool) -> int:
+	var reward := 0
+	reward += int(elapsed / 12.0)
+	reward += level * 4
+	reward += int(kill_count / 4)
+	if dread_boss_spawned:
+		reward += 10
+	if victory:
+		reward += 45
+	return max(3, reward)
 
 func _format_relic_summary() -> String:
 	var parts: Array[String] = []
@@ -2087,6 +2185,95 @@ func _pick_lore_line(lines: Array) -> String:
 	if lines.is_empty():
 		return ""
 	return String(lines[randi() % lines.size()])
+
+func _load_profile() -> void:
+	_reset_profile_defaults()
+	if not FileAccess.file_exists(SAVE_PATH):
+		return
+	var file := FileAccess.open(SAVE_PATH, FileAccess.READ)
+	if file == null:
+		return
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return
+	var data: Dictionary = parsed
+	profile_ash = int(data.get("ash", 0))
+	var upgrades: Variant = data.get("upgrades", {})
+	if typeof(upgrades) == TYPE_DICTIONARY:
+		for upgrade_id in META_UPGRADES.keys():
+			profile_upgrades[String(upgrade_id)] = int(upgrades.get(String(upgrade_id), 0))
+	var history: Variant = data.get("history", [])
+	if typeof(history) == TYPE_ARRAY:
+		run_history = history
+
+func _save_profile() -> void:
+	var data := {
+		"version": 1,
+		"ash": profile_ash,
+		"upgrades": profile_upgrades,
+		"history": run_history.slice(0, HISTORY_LIMIT),
+	}
+	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	if file == null:
+		return
+	file.store_string(JSON.stringify(data))
+
+func _reset_profile_defaults() -> void:
+	profile_ash = 0
+	profile_upgrades.clear()
+	for upgrade_id in META_UPGRADES.keys():
+		profile_upgrades[String(upgrade_id)] = 0
+	run_history.clear()
+
+func _profile_upgrade_level(upgrade_id: String) -> int:
+	return int(profile_upgrades.get(upgrade_id, 0))
+
+func _profile_upgrade_cost(upgrade_id: String) -> int:
+	var upgrade: Dictionary = META_UPGRADES[upgrade_id]
+	var level := _profile_upgrade_level(upgrade_id)
+	return int(upgrade["base_cost"]) + level * int(upgrade["cost_step"])
+
+func _add_profile_upgrade_button(upgrade_id: String) -> void:
+	var upgrade: Dictionary = META_UPGRADES[upgrade_id]
+	var level := _profile_upgrade_level(upgrade_id)
+	var max_level := int(upgrade["max"])
+	var cost := _profile_upgrade_cost(upgrade_id)
+	var button := Button.new()
+	button.custom_minimum_size = Vector2(430, 62)
+	if level >= max_level:
+		button.text = "%s %d/%d\n%s" % [String(upgrade["name"]), level, max_level, String(upgrade["description"])]
+		button.disabled = true
+	else:
+		button.text = "%s %d/%d  %d пепла\n%s" % [String(upgrade["name"]), level, max_level, cost, String(upgrade["description"])]
+		button.disabled = profile_ash < cost
+	button.pressed.connect(_buy_profile_upgrade.bind(upgrade_id))
+	overlay_list.add_child(button)
+
+func _buy_profile_upgrade(upgrade_id: String) -> void:
+	var upgrade: Dictionary = META_UPGRADES[upgrade_id]
+	var level := _profile_upgrade_level(upgrade_id)
+	if level >= int(upgrade["max"]):
+		return
+	var cost := _profile_upgrade_cost(upgrade_id)
+	if profile_ash < cost:
+		return
+	profile_ash -= cost
+	profile_upgrades[upgrade_id] = level + 1
+	_save_profile()
+	_show_profile_screen()
+
+func _format_history_entry(entry: Variant) -> String:
+	if typeof(entry) != TYPE_DICTIONARY:
+		return ""
+	var title := "Победа" if bool(entry.get("victory", false)) else "Смерть"
+	var time_text := _format_time(float(entry.get("time", 0.0)))
+	return "%s  %s  ур.%d  убийств:%d  +%d" % [
+		title,
+		time_text,
+		int(entry.get("level", 1)),
+		int(entry.get("kills", 0)),
+		int(entry.get("ash", 0)),
+	]
 
 func _update_hud() -> void:
 	var remaining: float = max(0.0, RUN_DURATION - elapsed)
@@ -2108,10 +2295,12 @@ func _update_hud() -> void:
 
 func _format_build_hud() -> String:
 	var lines: Array[String] = []
+	var blade_picks := _blade_upgrade_pick_count()
 	if blood_blade_evolved:
 		lines.append("БИЛД: Кровавый Клинок")
 	else:
-		lines.append("БИЛД: Клинок x%d" % max(1, _blade_upgrade_pick_count()))
+		lines.append("БИЛД: Живой Клинок")
+		lines.append("Улучшения Клинка %d/2" % min(2, blade_picks))
 	if oblivion_bell_unlocked:
 		lines.append("Колокол x%d" % int(relic_pick_counts.get("Колокол Забвения", 1)))
 	if bone_spears_unlocked:
@@ -2121,13 +2310,13 @@ func _format_build_hud() -> String:
 	if vampirism_unlocked:
 		lines.append("Цветок x%d" % vampirism_level)
 	if not blood_blade_evolved:
-		var needed_blade: int = max(0, 2 - _blade_upgrade_pick_count())
+		var needed_blade: int = max(0, 2 - blade_picks)
 		if vampirism_unlocked and needed_blade > 0:
-			lines.append("Эво: еще даров Клинка %d" % needed_blade)
-		elif not vampirism_unlocked and _blade_upgrade_pick_count() >= 2:
-			lines.append("Эво: нужен Кровавый Цветок")
+			lines.append("Эволюция: еще улучшений %d" % needed_blade)
+		elif not vampirism_unlocked and blade_picks >= 2:
+			lines.append("Эволюция: нужен Цветок")
 		elif not vampirism_unlocked:
-			lines.append("Эво: Цветок + 2 дара")
+			lines.append("Эволюция: Цветок + 2 улучшения")
 	return "\n".join(lines.slice(0, 5))
 
 func _show_boss_ui(boss: Enemy) -> void:
@@ -2475,6 +2664,7 @@ func _cast_bone_spears() -> void:
 	if target == null:
 		bone_spear_timer = 0.35
 		return
+	_flash_overlay_text("Костяные копья!")
 	var base_direction := player.global_position.direction_to(target.global_position)
 	if base_direction.length() <= 0.0:
 		base_direction = Vector2.RIGHT
@@ -2486,20 +2676,50 @@ func _cast_bone_spears() -> void:
 	_start_screen_shake(0.08, 3.0)
 
 func _cast_single_bone_spear(origin: Vector2, direction: Vector2) -> void:
-	var length := 520.0
-	var width := 28.0
+	var length := 620.0
+	var width := 42.0
 	var start := origin + direction * 42.0
 	var end := origin + direction * length
+	var spear_root := Node2D.new()
+	spear_root.z_index = 46
+	fx_layer.add_child(spear_root)
+	var shadow := Line2D.new()
+	shadow.width = 22.0
+	shadow.default_color = Color(0.03, 0.015, 0.02, 0.48)
+	shadow.points = PackedVector2Array([start - direction * 10.0, end])
+	spear_root.add_child(shadow)
 	var spear := Line2D.new()
-	spear.width = 7.0
-	spear.default_color = Color(0.86, 0.92, 0.78, 0.88)
+	spear.width = 15.0
+	spear.default_color = Color(0.86, 0.88, 0.68, 0.95)
 	spear.points = PackedVector2Array([start, end])
-	fx_layer.add_child(spear)
+	spear_root.add_child(spear)
 	var core := Line2D.new()
-	core.width = 2.0
-	core.default_color = Color(0.35, 0.12, 0.16, 0.95)
+	core.width = 5.0
+	core.default_color = Color(1.0, 0.98, 0.82, 1.0)
 	core.points = PackedVector2Array([start + direction * 20.0, end])
-	fx_layer.add_child(core)
+	spear_root.add_child(core)
+	var head := Polygon2D.new()
+	var side := direction.orthogonal()
+	head.color = Color(0.96, 0.94, 0.72, 0.98)
+	head.polygon = PackedVector2Array([
+		end + direction * 36.0,
+		end - direction * 28.0 + side * 22.0,
+		end - direction * 12.0,
+		end - direction * 28.0 - side * 22.0,
+	])
+	spear_root.add_child(head)
+	for j in range(4):
+		var shard := Polygon2D.new()
+		var shard_direction := direction.rotated(randf_range(-0.34, 0.34))
+		var shard_side := shard_direction.orthogonal()
+		var shard_center := start.lerp(end, randf_range(0.25, 0.92))
+		shard.color = Color(0.78, 0.82, 0.64, 0.72)
+		shard.polygon = PackedVector2Array([
+			shard_center + shard_direction * 15.0,
+			shard_center - shard_direction * 9.0 + shard_side * 5.0,
+			shard_center - shard_direction * 9.0 - shard_side * 5.0,
+		])
+		spear_root.add_child(shard)
 	for enemy in enemies:
 		if not is_instance_valid(enemy):
 			continue
@@ -2508,10 +2728,9 @@ func _cast_single_bone_spear(origin: Vector2, direction: Vector2) -> void:
 			enemy.take_damage(_scaled_player_damage(bone_spear_damage), origin, 230.0)
 	var tween := create_tween()
 	tween.set_parallel(true)
-	tween.tween_property(spear, "modulate:a", 0.0, 0.2)
-	tween.tween_property(core, "modulate:a", 0.0, 0.16)
-	tween.chain().tween_callback(spear.queue_free)
-	tween.tween_callback(core.queue_free)
+	tween.tween_property(spear_root, "modulate:a", 0.0, 0.42)
+	tween.tween_property(spear_root, "scale", Vector2(1.03, 1.03), 0.42)
+	tween.chain().tween_callback(spear_root.queue_free)
 
 func _update_oblivion_bell(delta: float) -> void:
 	if not oblivion_bell_unlocked or player == null:

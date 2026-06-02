@@ -180,8 +180,12 @@ scripts/
 - Incoming damage now shows red numbers over the player, throttled for continuous contact/hazard damage so it does not spam the screen.
 - Runs now have a start screen, XP bar, 3:00 survival goal, miniboss event, victory screen, death screen, and restart button.
 - Result screens should summarize the run: time survived, level, kills, XP progress, and selected relic build with duplicate counts.
+- Result screens award `Пепел`, persist it locally, and offer a path into the profile screen.
+- Local profile data is saved to `user://save.json`; in Web/TWA this is browser/WebView local storage, not a backend-backed account.
+- The profile screen shows total `Пепел`, permanent upgrades, and a short history of recent runs.
+- Permanent upgrades currently include stronger starting HP, starting Living Blade damage, starting XP magnet range, and faster Nova charge.
 - During runs, the HUD should show a compact active build summary with key weapons/relic counts and short evolution hints.
-- Relic choice descriptions can include short evolution hints when they affect a known evolution, but must stay phone-readable.
+- Relic choice descriptions can include short evolution hints when they affect a known evolution, but must stay phone-readable and avoid unclear shorthand such as `Эво`.
 - Level-ups automatically increase max HP, heal the player, and add a small global player damage bonus on top of relic choices.
 - Relics can unlock Shadow Spirit, a secondary auto-skill that cuts through enemies in a beam.
 - Relics can unlock `Колокол Забвения`, an auto-weapon that periodically emits a radial shockwave around the player; repeat picks increase damage/radius and reduce cooldown.
