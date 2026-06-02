@@ -4,7 +4,9 @@ extends Node2D
 var owner_player: Node2D
 var fx_layer: Node2D
 var damage := 1
+var level_damage_bonus := 0.0
 var grave_king_damage_multiplier := 1.65
+var blood_evolved := false
 var cooldown := 0.72
 var attack_range := 230.0
 var dash_speed := 820.0
@@ -51,6 +53,19 @@ func tick(delta: float, enemies: Array) -> void:
 func increase_damage() -> void:
 	damage += 1
 
+func set_level_damage_bonus(bonus: float) -> void:
+	level_damage_bonus = bonus
+
+func evolve_blood_blade() -> void:
+	if blood_evolved:
+		return
+	blood_evolved = true
+	damage += 2
+	cooldown = max(0.22, cooldown - 0.12)
+	dash_speed += 120.0
+	return_speed += 90.0
+	blade_sprite.modulate = Color(1.0, 0.48, 0.56)
+
 func quicken() -> void:
 	cooldown = max(0.22, cooldown - 0.08)
 
@@ -93,10 +108,12 @@ func _hit_target() -> void:
 	if has_hit_target or not is_instance_valid(target_enemy):
 		return
 	has_hit_target = true
-	var hit_damage := damage
+	var hit_damage: int = max(1, int(ceil(float(damage) * (1.0 + level_damage_bonus))))
 	if "enemy_kind" in target_enemy and target_enemy.enemy_kind == "grave_king":
-		hit_damage = int(ceil(float(damage) * grave_king_damage_multiplier))
+		hit_damage = int(ceil(float(hit_damage) * grave_king_damage_multiplier))
 	target_enemy.take_damage(hit_damage, owner_player.global_position, 260.0)
+	if blood_evolved and owner_player.has_method("heal"):
+		owner_player.heal(0.75)
 	_show_impact(target_enemy.global_position)
 	blade_sprite.scale = base_blade_scale * Vector2(1.55, 0.7)
 
@@ -127,7 +144,7 @@ func _leave_trail() -> void:
 		return
 	var trail := Line2D.new()
 	trail.width = 3.0
-	trail.default_color = Color(0.72, 1.0, 0.84, 0.45)
+	trail.default_color = Color(1.0, 0.34, 0.48, 0.55) if blood_evolved else Color(0.72, 1.0, 0.84, 0.45)
 	var back := Vector2.UP.rotated(rotation) * 26.0
 	trail.points = PackedVector2Array([global_position - back, global_position])
 	fx_layer.add_child(trail)
@@ -139,8 +156,8 @@ func _show_impact(target_position: Vector2) -> void:
 	if fx_layer == null:
 		return
 	var slash := Line2D.new()
-	slash.width = 8.0
-	slash.default_color = Color(0.72, 1.0, 0.83, 0.95)
+	slash.width = 10.0 if blood_evolved else 8.0
+	slash.default_color = Color(1.0, 0.3, 0.42, 0.95) if blood_evolved else Color(0.72, 1.0, 0.83, 0.95)
 	var slash_direction := Vector2.RIGHT.rotated(rotation)
 	slash.points = PackedVector2Array([
 		target_position - slash_direction * 34.0,

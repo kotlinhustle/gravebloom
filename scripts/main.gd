@@ -28,6 +28,9 @@ const ENEMY_SPAWN_SCREEN_PADDING := 64.0
 const MAX_RELIC_CHOICES := 3
 const HEALTH_PACK_DROP_CHANCE := 0.07
 const HEALTH_PACK_HEAL := 16.0
+const PLAYER_LEVEL_HEALTH_GAIN := 6.0
+const PLAYER_LEVEL_HEAL := 18.0
+const PLAYER_LEVEL_DAMAGE_STEP := 0.07
 const SPITTER_PROJECTILE_DAMAGE := 8.0
 const PLAYER_DAMAGE_NUMBER_INTERVAL := 0.48
 const ANTI_KITE_START_TIME := 58.0
@@ -85,6 +88,7 @@ var boss_attacks: Array[Node2D] = []
 var elapsed := 0.0
 var spawn_timer := 0.0
 var level := 1
+var player_damage_bonus := 0.0
 var xp := 0
 var xp_to_next := 14
 var shard_pull_range := 95.0
@@ -100,11 +104,17 @@ var shadow_spirit_unlocked := false
 var shadow_spirit_timer := 3.0
 var shadow_spirit_cooldown := 5.5
 var shadow_spirit_damage := 2
+var bone_spears_unlocked := false
+var bone_spear_timer := 2.8
+var bone_spear_cooldown := 3.4
+var bone_spear_damage := 2
+var bone_spear_count := 1
 var oblivion_bell_unlocked := false
 var oblivion_bell_timer := 4.0
 var oblivion_bell_cooldown := 5.8
 var oblivion_bell_damage := 1
 var oblivion_bell_radius := 138.0
+var blood_blade_evolved := false
 var shake_time := 0.0
 var shake_intensity := 0.0
 var joystick_active := false
@@ -147,6 +157,7 @@ var dread_boss_phase_two := false
 @onready var fx_layer := Node2D.new()
 @onready var ui_layer := CanvasLayer.new()
 @onready var hud := Label.new()
+@onready var build_label := Label.new()
 @onready var hp_bar := ProgressBar.new()
 @onready var xp_bar := ProgressBar.new()
 @onready var boss_name_label := Label.new()
@@ -201,6 +212,7 @@ func _process(delta: float) -> void:
 	living_blade.tick(delta, enemies)
 	_update_ultimate(delta)
 	_update_shadow_spirit(delta)
+	_update_bone_spears(delta)
 	_update_enemy_projectiles(delta)
 	_update_hazard_zones(delta)
 	_update_boss_attacks(delta)
@@ -526,6 +538,14 @@ func _build_ui() -> void:
 	hud.add_theme_font_size_override("font_size", 24)
 	hud.add_theme_color_override("font_color", Color(0.88, 0.84, 0.73))
 	ui_layer.add_child(hud)
+	build_label.position = Vector2(18, 230)
+	build_label.size = Vector2(504, 118)
+	build_label.add_theme_font_size_override("font_size", 16)
+	build_label.add_theme_color_override("font_color", Color(0.74, 0.88, 0.78, 0.92))
+	build_label.add_theme_color_override("font_shadow_color", Color(0.02, 0.015, 0.02, 0.9))
+	build_label.add_theme_constant_override("shadow_offset_x", 2)
+	build_label.add_theme_constant_override("shadow_offset_y", 2)
+	ui_layer.add_child(build_label)
 	hp_bar.position = Vector2(18, 96)
 	hp_bar.size = Vector2(504, 32)
 	hp_bar.max_value = 100.0
@@ -620,6 +640,7 @@ func _reset_run() -> void:
 	elapsed = 0.0
 	spawn_timer = 0.0
 	level = 1
+	player_damage_bonus = 0.0
 	xp = 0
 	xp_to_next = 14
 	shard_pull_range = 95.0
@@ -635,11 +656,17 @@ func _reset_run() -> void:
 	shadow_spirit_timer = 3.0
 	shadow_spirit_cooldown = 5.5
 	shadow_spirit_damage = 2
+	bone_spears_unlocked = false
+	bone_spear_timer = 2.8
+	bone_spear_cooldown = 3.4
+	bone_spear_damage = 2
+	bone_spear_count = 1
 	oblivion_bell_unlocked = false
 	oblivion_bell_timer = 4.0
 	oblivion_bell_cooldown = 5.8
 	oblivion_bell_damage = 1
 	oblivion_bell_radius = 138.0
+	blood_blade_evolved = false
 	ultimate_charge = 0.0
 	ultimate_ready = false
 	ultimate_cooldown = ULTIMATE_COOLDOWN
@@ -1718,7 +1745,7 @@ func _trigger_thorn_bloom(origin: Vector2) -> void:
 		if not is_instance_valid(enemy):
 			continue
 		if enemy.global_position.distance_to(player.global_position) < 96.0:
-			enemy.take_damage(1, origin, 190.0)
+			enemy.take_damage(_scaled_player_damage(1), origin, 190.0)
 
 func _check_enemy_contact(delta: float) -> void:
 	for enemy in enemies:
@@ -1772,14 +1799,24 @@ func _clamp_to_arena(position: Vector2) -> Vector2:
 		clamp(position.y, -ARENA_LIMIT_Y, ARENA_LIMIT_Y)
 	)
 
+func _scaled_player_damage(base_damage: int) -> int:
+	return max(1, int(ceil(float(base_damage) * (1.0 + player_damage_bonus))))
+
 func _level_up() -> void:
 	level += 1
+	player_damage_bonus = float(level - 1) * PLAYER_LEVEL_DAMAGE_STEP
+	if is_instance_valid(living_blade):
+		living_blade.set_level_damage_bonus(player_damage_bonus)
+	player.max_health += PLAYER_LEVEL_HEALTH_GAIN
+	player.heal(PLAYER_LEVEL_HEAL + PLAYER_LEVEL_HEALTH_GAIN)
 	xp -= xp_to_next
 	xp_to_next = int(xp_to_next * 1.55) + 8
 	CombatFxScript.ring(fx_layer, player.global_position, Color(0.7, 1.0, 0.84, 0.85), 170.0, 0.55)
 	CombatFxScript.burst(fx_layer, player.global_position, Color(0.78, 1.0, 0.9, 0.9), 24)
+	CombatFxScript.damage_number(fx_layer, player.global_position + Vector2(0.0, -42.0), int(PLAYER_LEVEL_HEAL + PLAYER_LEVEL_HEALTH_GAIN), Color(0.55, 1.0, 0.62), 22)
 	paused_for_upgrade = true
 	game_state = "upgrade"
+	build_label.visible = false
 	joystick_base.visible = false
 	ultimate_button.visible = false
 	ultimate_bar.visible = false
@@ -1798,24 +1835,55 @@ func _show_upgrades() -> void:
 
 func _roll_relics() -> Array:
 	var bell_relic := {"name": "Колокол Забвения", "description": "Автооружие: волны вокруг Маски", "method": "_upgrade_oblivion_bell"}
+	var blood_relic := {"name": "Кровавый Цветок", "description": "Вампиризм. Эво: Цветок+2 дара Клинка", "method": "_upgrade_vampirism"}
+	var blade_relics := [
+		{"name": "Заточить Живой Клинок", "description": "Урон клинка выше. Эво: Цветок+2 дара", "method": "_upgrade_damage"},
+		{"name": "Ускорить проклятие", "description": "Клинок чаще. Эво: Цветок+2 дара", "method": "_upgrade_cooldown"},
+		{"name": "Расширить бледный радиус", "description": "Клинок дальше. Эво: Цветок+2 дара", "method": "_upgrade_range"},
+	]
 	var relics := [
-		{"name": "Заточить Живой Клинок", "description": "Урон клинка выше", "method": "_upgrade_damage"},
-		{"name": "Ускорить проклятие", "description": "Клинок атакует чаще", "method": "_upgrade_cooldown"},
-		{"name": "Расширить бледный радиус", "description": "Клинок летит дальше", "method": "_upgrade_range"},
 		{"name": "Призвать Тень", "description": "Автооружие: луч сквозь толпу", "method": "_upgrade_shadow_spirit"},
+		{"name": "Костяные Копья", "description": "Автооружие: пронзают линию", "method": "_upgrade_bone_spears"},
 		{"name": "Могильный Магнит", "description": "Опыт притягивается дальше", "method": "_upgrade_magnet"},
-		{"name": "Кровавый Цветок", "description": "Вампиризм. Повтор сильнее", "method": "_upgrade_vampirism"},
 		{"name": "Сердце Новы", "description": "Нова быстрее, шире, сильнее", "method": "_upgrade_nova"},
 		{"name": "Шипастый Венец", "description": "Ответный урон рядом", "method": "_upgrade_thorns"},
 	]
+	relics.append_array(blade_relics)
+	relics.append(blood_relic)
 	relics.shuffle()
 	if not oblivion_bell_unlocked:
 		var choices := [bell_relic]
 		choices.append_array(relics.slice(0, MAX_RELIC_CHOICES - 1))
 		return choices
+	var forced_relic := _evolution_hint_relic(blade_relics, blood_relic)
+	if not forced_relic.is_empty() and randf() < 0.72:
+		relics = _without_relic_name(relics, String(forced_relic["name"]))
+		relics.insert(0, forced_relic)
 	relics.append(bell_relic)
-	relics.shuffle()
 	return relics.slice(0, MAX_RELIC_CHOICES)
+
+func _evolution_hint_relic(blade_relics: Array, blood_relic: Dictionary) -> Dictionary:
+	if blood_blade_evolved:
+		return {}
+	var blade_picks := _blade_upgrade_pick_count()
+	if vampirism_unlocked and blade_picks < 2:
+		var missing_blade_relics: Array = []
+		for relic in blade_relics:
+			if int(relic_pick_counts.get(String(relic["name"]), 0)) <= 0:
+				missing_blade_relics.append(relic)
+		if missing_blade_relics.is_empty():
+			missing_blade_relics = blade_relics
+		return missing_blade_relics[randi() % missing_blade_relics.size()]
+	if blade_picks >= 2 and not vampirism_unlocked:
+		return blood_relic
+	return {}
+
+func _without_relic_name(relics: Array, relic_name: String) -> Array:
+	var filtered: Array = []
+	for relic in relics:
+		if String(relic["name"]) != relic_name:
+			filtered.append(relic)
+	return filtered
 
 func _add_upgrade_button(text: String, description: String, method_name: String) -> void:
 	var button := Button.new()
@@ -1833,6 +1901,7 @@ func _on_upgrade_button_pressed(button: Button) -> void:
 		_record_relic_pick(relic_name)
 		call(method_name)
 		_flash_overlay_text(_relic_lore_echo(method_name))
+		_check_relic_evolutions()
 	upgrade_panel.visible = false
 	joystick_base.visible = true
 	ultimate_button.visible = true
@@ -1859,6 +1928,8 @@ func _relic_lore_echo(method_name: String) -> String:
 			return "Бледный радиус коснулся дальних могил"
 		"_upgrade_shadow_spirit":
 			return "За Маской встал второй силуэт"
+		"_upgrade_bone_spears":
+			return "Кости старой стражи встали на приказ"
 		"_upgrade_oblivion_bell":
 			return "В руинах снова ударил похоронный звон"
 		"_upgrade_magnet":
@@ -1888,6 +1959,16 @@ func _upgrade_shadow_spirit() -> void:
 		shadow_spirit_unlocked = true
 		shadow_spirit_timer = 0.35
 	_flash_overlay_text("Тень пробудилась")
+
+func _upgrade_bone_spears() -> void:
+	if bone_spears_unlocked:
+		bone_spear_damage += 1
+		bone_spear_count = min(4, bone_spear_count + 1)
+		bone_spear_cooldown = maxf(1.55, bone_spear_cooldown - 0.34)
+	else:
+		bone_spears_unlocked = true
+		bone_spear_timer = 0.45
+	_flash_overlay_text("Костяные копья поднялись")
 
 func _upgrade_oblivion_bell() -> void:
 	if oblivion_bell_unlocked:
@@ -1924,6 +2005,23 @@ func _upgrade_thorns() -> void:
 	thorn_bloom_unlocked = true
 	_flash_overlay_text("Шипастый Венец пробудился")
 
+func _check_relic_evolutions() -> void:
+	if blood_blade_evolved:
+		return
+	var blade_picks := _blade_upgrade_pick_count()
+	if blade_picks >= 2 and vampirism_unlocked and is_instance_valid(living_blade):
+		blood_blade_evolved = true
+		living_blade.evolve_blood_blade()
+		vampirism_heal_amount += 2.0
+		vampirism_kills_required = max(5, vampirism_kills_required - 1)
+		_flash_overlay_text("Эволюция: Кровавый Клинок")
+
+func _blade_upgrade_pick_count() -> int:
+	var blade_picks := int(relic_pick_counts.get("Заточить Живой Клинок", 0))
+	blade_picks += int(relic_pick_counts.get("Ускорить проклятие", 0))
+	blade_picks += int(relic_pick_counts.get("Расширить бледный радиус", 0))
+	return blade_picks
+
 func _update_lore_events() -> void:
 	if lore_event_index >= LORE_EVENTS.size():
 		return
@@ -1938,6 +2036,7 @@ func _show_game_over() -> void:
 	game_state = "game_over"
 	last_run_result = "Маска треснула, но проклятие запомнило тебя"
 	last_run_lore = _pick_lore_line(DEATH_LORE_LINES)
+	build_label.visible = false
 	joystick_base.visible = false
 	ultimate_button.visible = false
 	ultimate_bar.visible = false
@@ -1950,6 +2049,7 @@ func _show_victory() -> void:
 	game_state = "victory"
 	last_run_result = "На миг Gravebloom отступил от сердца руин"
 	last_run_lore = _pick_lore_line(VICTORY_LORE_LINES)
+	build_label.visible = false
 	joystick_base.visible = false
 	ultimate_button.visible = false
 	ultimate_bar.visible = false
@@ -1974,6 +2074,8 @@ func _show_result_screen(victory: bool) -> void:
 
 func _format_relic_summary() -> String:
 	var parts: Array[String] = []
+	if blood_blade_evolved:
+		parts.append("Кровавый Клинок")
 	for relic_name in relic_pick_order:
 		var count := int(relic_pick_counts.get(relic_name, 0))
 		if count <= 0:
@@ -1999,8 +2101,34 @@ func _update_hud() -> void:
 	hp_bar.value = health_value
 	xp_bar.max_value = xp_to_next
 	xp_bar.value = xp
+	build_label.text = _format_build_hud()
+	build_label.visible = game_state == "running" and not build_label.text.is_empty()
 	_update_boss_ui()
 	_update_ultimate_ui()
+
+func _format_build_hud() -> String:
+	var lines: Array[String] = []
+	if blood_blade_evolved:
+		lines.append("БИЛД: Кровавый Клинок")
+	else:
+		lines.append("БИЛД: Клинок x%d" % max(1, _blade_upgrade_pick_count()))
+	if oblivion_bell_unlocked:
+		lines.append("Колокол x%d" % int(relic_pick_counts.get("Колокол Забвения", 1)))
+	if bone_spears_unlocked:
+		lines.append("Копья x%d" % int(relic_pick_counts.get("Костяные Копья", 1)))
+	if shadow_spirit_unlocked:
+		lines.append("Тень x%d" % int(relic_pick_counts.get("Призвать Тень", 1)))
+	if vampirism_unlocked:
+		lines.append("Цветок x%d" % vampirism_level)
+	if not blood_blade_evolved:
+		var needed_blade: int = max(0, 2 - _blade_upgrade_pick_count())
+		if vampirism_unlocked and needed_blade > 0:
+			lines.append("Эво: еще даров Клинка %d" % needed_blade)
+		elif not vampirism_unlocked and _blade_upgrade_pick_count() >= 2:
+			lines.append("Эво: нужен Кровавый Цветок")
+		elif not vampirism_unlocked:
+			lines.append("Эво: Цветок + 2 дара")
+	return "\n".join(lines.slice(0, 5))
 
 func _show_boss_ui(boss: Enemy) -> void:
 	if boss == null:
@@ -2181,11 +2309,11 @@ func _cast_ultimate() -> void:
 			continue
 		var distance := origin.distance_to(enemy.global_position)
 		if distance <= ultimate_radius:
-			var damage := ultimate_damage
+			var damage := _scaled_player_damage(ultimate_damage)
 			if enemy.enemy_kind == "grave_king":
-				damage = int(ceil(float(ultimate_damage) * 1.35))
+				damage = int(ceil(float(damage) * 1.35))
 			elif enemy.is_miniboss:
-				damage = int(ceil(float(ultimate_damage) * 0.65))
+				damage = int(ceil(float(damage) * 0.65))
 			enemy.take_damage(damage, origin, 520.0)
 	nova_damage_active = false
 	_update_ultimate_ui()
@@ -2330,8 +2458,60 @@ func _cast_shadow_spirit(target_position: Vector2) -> void:
 			continue
 		var distance_to_beam := _distance_to_segment(enemy.global_position, start, end)
 		if distance_to_beam <= 34.0:
-			enemy.take_damage(shadow_spirit_damage, start, 180.0)
+			enemy.take_damage(_scaled_player_damage(shadow_spirit_damage), start, 180.0)
 	_start_screen_shake(0.1, 3.5)
+
+func _update_bone_spears(delta: float) -> void:
+	if not bone_spears_unlocked or player == null:
+		return
+	bone_spear_timer -= delta
+	if bone_spear_timer > 0.0:
+		return
+	_cast_bone_spears()
+	bone_spear_timer = bone_spear_cooldown
+
+func _cast_bone_spears() -> void:
+	var target := _nearest_enemy_for_spirit()
+	if target == null:
+		bone_spear_timer = 0.35
+		return
+	var base_direction := player.global_position.direction_to(target.global_position)
+	if base_direction.length() <= 0.0:
+		base_direction = Vector2.RIGHT
+	var spread_step := 0.22
+	var start_offset := -float(bone_spear_count - 1) * spread_step * 0.5
+	for i in range(bone_spear_count):
+		var direction := base_direction.rotated(start_offset + float(i) * spread_step)
+		_cast_single_bone_spear(player.global_position, direction)
+	_start_screen_shake(0.08, 3.0)
+
+func _cast_single_bone_spear(origin: Vector2, direction: Vector2) -> void:
+	var length := 520.0
+	var width := 28.0
+	var start := origin + direction * 42.0
+	var end := origin + direction * length
+	var spear := Line2D.new()
+	spear.width = 7.0
+	spear.default_color = Color(0.86, 0.92, 0.78, 0.88)
+	spear.points = PackedVector2Array([start, end])
+	fx_layer.add_child(spear)
+	var core := Line2D.new()
+	core.width = 2.0
+	core.default_color = Color(0.35, 0.12, 0.16, 0.95)
+	core.points = PackedVector2Array([start + direction * 20.0, end])
+	fx_layer.add_child(core)
+	for enemy in enemies:
+		if not is_instance_valid(enemy):
+			continue
+		var distance_to_spear := _distance_to_segment(enemy.global_position, start, end)
+		if distance_to_spear <= width:
+			enemy.take_damage(_scaled_player_damage(bone_spear_damage), origin, 230.0)
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(spear, "modulate:a", 0.0, 0.2)
+	tween.tween_property(core, "modulate:a", 0.0, 0.16)
+	tween.chain().tween_callback(spear.queue_free)
+	tween.tween_callback(core.queue_free)
 
 func _update_oblivion_bell(delta: float) -> void:
 	if not oblivion_bell_unlocked or player == null:
@@ -2352,7 +2532,7 @@ func _cast_oblivion_bell() -> void:
 		if not is_instance_valid(enemy):
 			continue
 		if enemy.global_position.distance_to(origin) <= oblivion_bell_radius:
-			enemy.take_damage(oblivion_bell_damage, origin, 260.0)
+			enemy.take_damage(_scaled_player_damage(oblivion_bell_damage), origin, 260.0)
 			hit_count += 1
 	if hit_count > 0:
 		_start_screen_shake(0.08, 3.2)

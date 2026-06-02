@@ -180,8 +180,13 @@ scripts/
 - Incoming damage now shows red numbers over the player, throttled for continuous contact/hazard damage so it does not spam the screen.
 - Runs now have a start screen, XP bar, 3:00 survival goal, miniboss event, victory screen, death screen, and restart button.
 - Result screens should summarize the run: time survived, level, kills, XP progress, and selected relic build with duplicate counts.
+- During runs, the HUD should show a compact active build summary with key weapons/relic counts and short evolution hints.
+- Relic choice descriptions can include short evolution hints when they affect a known evolution, but must stay phone-readable.
+- Level-ups automatically increase max HP, heal the player, and add a small global player damage bonus on top of relic choices.
 - Relics can unlock Shadow Spirit, a secondary auto-skill that cuts through enemies in a beam.
 - Relics can unlock `Колокол Забвения`, an auto-weapon that periodically emits a radial shockwave around the player; repeat picks increase damage/radius and reduce cooldown.
+- Relics can unlock `Костяные Копья`, an auto-weapon that fires piercing bone-line attacks toward enemies; repeat picks increase damage, spear count, and tempo.
+- Relic evolution exists in a small first form: any 2 Living Blade upgrades plus `Кровавый Цветок` evolves the blade into `Кровавый Клинок`, making it stronger, faster, red-tinted, and lightly vampiric on hits. Keep this reachable inside a normal 3-minute run.
 - `Колокол Забвения` should be guaranteed in the first relic choice until unlocked, so players discover the second auto-weapon instead of waiting for random rolls.
 - Gravebloom Nova is an automatic ultimate: it charges over time, shows a visible `NOVA` indicator with percent progress, gives peripheral visual/audio cues from 85% onward, then fires by itself and blasts nearby enemies.
 - Nova readiness should be readable without staring at HUD: faint aura at 85%, rotating Gravebloom ring at 90%, stronger warning at 97%, then a distinct burst cue at cast.
