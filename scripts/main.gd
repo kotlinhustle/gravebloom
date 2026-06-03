@@ -84,6 +84,20 @@ const VICTORY_LORE_LINES := [
 	"Корни отступили. Ненадолго.",
 	"Клинок уснул, насытившись мертвыми.",
 ]
+const RUN_GOAL_COUNT := 3
+const RUN_GOALS := [
+	{"id": "kill_45", "title": "Сорвать 45 мертвых", "description": "Убей 45 врагов", "reward": 12, "type": "kills", "target": 45},
+	{"id": "kill_80", "title": "Очистить двор", "description": "Убей 80 врагов", "reward": 20, "type": "kills", "target": 80},
+	{"id": "level_5", "title": "Маска крепнет", "description": "Достигни 5 уровня", "reward": 14, "type": "level", "target": 5},
+	{"id": "level_7", "title": "Клятва глубже", "description": "Достигни 7 уровня", "reward": 22, "type": "level", "target": 7},
+	{"id": "meet_king", "title": "Увидеть пустой трон", "description": "Доживи до Короля-Могилы", "reward": 18, "type": "boss_spawned", "target": 1},
+	{"id": "kill_king", "title": "Сломать корону", "description": "Убей Короля-Могилу", "reward": 45, "type": "boss_killed", "target": 1},
+	{"id": "blood_blade", "title": "Разбудить кровь", "description": "Собери Кровавый Клинок", "reward": 24, "type": "blood_blade", "target": 1},
+	{"id": "bone_spears", "title": "Поднять старую стражу", "description": "Возьми Костяные Копья", "reward": 12, "type": "bone_spears", "target": 1},
+	{"id": "bell", "title": "Позвонить мертвым", "description": "Возьми Колокол Забвения", "reward": 10, "type": "bell", "target": 1},
+	{"id": "nova_3", "title": "Трижды раскрыть цветок", "description": "Нова сработает 3 раза", "reward": 18, "type": "nova_casts", "target": 3},
+	{"id": "health_3", "title": "Не отдать тепло", "description": "Собери 3 аптечки", "reward": 12, "type": "health_packs", "target": 3},
+]
 
 var player: Player
 var living_blade: Node2D
@@ -107,12 +121,15 @@ var miniboss_spawned := false
 var last_run_result := ""
 var last_run_lore := ""
 var last_run_ash := 0
+var last_run_goal_ash := 0
 var run_reward_recorded := false
 var profile_ash := 0
 var profile_upgrades: Dictionary = {}
 var run_history: Array = []
 var relic_pick_counts: Dictionary = {}
 var relic_pick_order: Array[String] = []
+var active_run_goals: Array = []
+var completed_goal_ids: Dictionary = {}
 var shadow_spirit_unlocked := false
 var shadow_spirit_timer := 3.0
 var shadow_spirit_cooldown := 5.5
@@ -148,6 +165,9 @@ var vampirism_level := 0
 var vampirism_heal_amount := 5.0
 var vampirism_kills_required := 9
 var kill_count := 0
+var nova_cast_count := 0
+var health_pack_count := 0
+var grave_king_killed := false
 var nova_damage_active := false
 var nova_vampirism_healed := 0.0
 var nova_charge_stage := 0
@@ -237,6 +257,7 @@ func _process(delta: float) -> void:
 	_check_enemy_contact(delta)
 	_keep_player_inside_arena()
 	_update_oblivion_bell(delta)
+	_update_run_goals()
 	_update_hud()
 
 func _build_arena() -> void:
@@ -638,6 +659,7 @@ func _make_bar_style(fill: Color, border_color: Color) -> StyleBoxFlat:
 
 func _show_start_screen() -> void:
 	_clear_world_entities()
+	_prepare_run_goals()
 	game_state = "start"
 	get_tree().paused = true
 	build_label.visible = false
@@ -648,17 +670,23 @@ func _show_start_screen() -> void:
 	joystick_base.visible = false
 	ultimate_button.visible = false
 	ultimate_bar.visible = false
+	_configure_overlay(Vector2(28, 116), Vector2(484, 720))
 	overlay_panel.visible = true
 	_clear_container(overlay_list)
 	_add_overlay_label("GRAVEBLOOM", 42)
+	_add_overlay_label("Цели забега", 22)
+	for goal in active_run_goals:
+		var goal_data: Dictionary = goal
+		_add_overlay_label("%s: %s  +%d" % [String(goal_data["title"]), String(goal_data["description"]), int(goal_data["reward"])], 16)
 	_add_overlay_label("Королевство умерло, но его цветы продолжают расти.", 19)
-	_add_overlay_label("Маска помнит путь к сердцу проклятия.", 19)
 	_add_overlay_label("Продержись до рассвета.", 22)
 	_add_overlay_label("Пепел: %d" % profile_ash, 18)
 	_add_overlay_button("Начать забег", _start_run)
 	_add_overlay_button("Профиль", _show_profile_screen)
 
 func _start_run() -> void:
+	if game_state != "start":
+		_prepare_run_goals()
 	_reset_run()
 	overlay_panel.visible = false
 	hp_bar.visible = true
@@ -681,6 +709,7 @@ func _show_profile_screen() -> void:
 	joystick_base.visible = false
 	ultimate_button.visible = false
 	ultimate_bar.visible = false
+	_configure_overlay(Vector2(28, 118), Vector2(484, 704))
 	overlay_panel.visible = true
 	_clear_container(overlay_list)
 	_add_overlay_label("Профиль Маски", 32)
@@ -713,7 +742,9 @@ func _reset_run() -> void:
 	last_run_result = ""
 	last_run_lore = ""
 	last_run_ash = 0
+	last_run_goal_ash = 0
 	run_reward_recorded = false
+	completed_goal_ids.clear()
 	relic_pick_counts.clear()
 	relic_pick_order.clear()
 	shadow_spirit_unlocked = false
@@ -746,6 +777,9 @@ func _reset_run() -> void:
 	vampirism_heal_amount = 5.0
 	vampirism_kills_required = 9
 	kill_count = 0
+	nova_cast_count = 0
+	health_pack_count = 0
+	grave_king_killed = false
 	nova_damage_active = false
 	nova_vampirism_healed = 0.0
 	player_damage_number_cooldown = 0.0
@@ -1307,6 +1341,7 @@ func _on_enemy_died(enemy_position: Vector2, xp_value: int = 1, was_miniboss: bo
 	if was_miniboss:
 		_flash_overlay_text("Король-Могила пал" if xp_value >= 20 else "Могильный Страж повержен")
 		if xp_value >= 20:
+			grave_king_killed = true
 			_hide_boss_ui()
 	_compact_enemies()
 
@@ -1348,6 +1383,7 @@ func _update_health_packs(delta: float) -> void:
 		pack.scale = Vector2.ONE * (1.0 + sin(age * 4.0) * 0.05)
 		if player != null and pack.global_position.distance_to(player.global_position) < 34.0:
 			player.heal(HEALTH_PACK_HEAL)
+			health_pack_count += 1
 			CombatFxScript.ring(fx_layer, pack.global_position, Color(1.0, 0.26, 0.34, 0.72), 70.0, 0.26)
 			_flash_overlay_text("+%d здоровье" % int(HEALTH_PACK_HEAL))
 			pack.queue_free()
@@ -2124,14 +2160,16 @@ func _show_victory() -> void:
 	_show_result_screen(true)
 
 func _show_result_screen(victory: bool) -> void:
+	_configure_overlay(Vector2(28, 104), Vector2(484, 744))
 	overlay_panel.visible = true
 	_clear_container(overlay_list)
 	_add_overlay_label("Победа" if victory else "Забег окончен", 34)
 	_add_overlay_label(last_run_result, 20)
 	_add_overlay_label(last_run_lore, 18)
 	_add_overlay_label("Время: %s   Уровень: %d   Убийства: %d" % [_format_time(elapsed), level, kill_count], 18)
-	_add_overlay_label("Получено пепла: %d   Всего: %d" % [last_run_ash, profile_ash], 18)
+	_add_overlay_label("Получено пепла: %d   Цели: +%d   Всего: %d" % [last_run_ash, last_run_goal_ash, profile_ash], 18)
 	_add_overlay_label("Осколки: %d/%d" % [xp, xp_to_next], 16)
+	_add_overlay_label("Цели:\n%s" % _format_goal_summary(false), 15)
 	var build_summary := _format_relic_summary()
 	if not build_summary.is_empty():
 		_add_overlay_label("Реликвии: %s" % build_summary, 16)
@@ -2144,7 +2182,9 @@ func _finish_run(victory: bool) -> void:
 	if run_reward_recorded:
 		return
 	run_reward_recorded = true
-	last_run_ash = _calculate_ash_reward(victory)
+	_update_run_goals()
+	last_run_goal_ash = _calculate_goal_reward()
+	last_run_ash = _calculate_ash_reward(victory) + last_run_goal_ash
 	profile_ash += last_run_ash
 	var history_entry := {
 		"victory": victory,
@@ -2152,6 +2192,8 @@ func _finish_run(victory: bool) -> void:
 		"level": level,
 		"kills": kill_count,
 		"ash": last_run_ash,
+		"goal_ash": last_run_goal_ash,
+		"goals": _format_goal_summary(true),
 		"build": _format_relic_summary(),
 		"date": Time.get_datetime_string_from_system(false, true),
 	}
@@ -2180,6 +2222,70 @@ func _format_relic_summary() -> String:
 			continue
 		parts.append("%s x%d" % [relic_name, count] if count > 1 else relic_name)
 	return ", ".join(parts)
+
+func _prepare_run_goals() -> void:
+	active_run_goals.clear()
+	completed_goal_ids.clear()
+	var pool: Array = RUN_GOALS.duplicate()
+	pool.shuffle()
+	for goal in pool.slice(0, RUN_GOAL_COUNT):
+		var goal_data: Dictionary = goal
+		active_run_goals.append(goal_data)
+
+func _update_run_goals() -> void:
+	for goal in active_run_goals:
+		var goal_data: Dictionary = goal
+		var goal_id := String(goal_data["id"])
+		if completed_goal_ids.has(goal_id):
+			continue
+		var progress := _run_goal_progress(goal_data)
+		if progress >= int(goal_data["target"]):
+			completed_goal_ids[goal_id] = true
+			_flash_overlay_text("Цель выполнена: %s" % String(goal_data["title"]))
+
+func _run_goal_progress(goal: Dictionary) -> int:
+	match String(goal["type"]):
+		"kills":
+			return kill_count
+		"level":
+			return level
+		"boss_spawned":
+			return 1 if dread_boss_spawned else 0
+		"boss_killed":
+			return 1 if grave_king_killed else 0
+		"blood_blade":
+			return 1 if blood_blade_evolved else 0
+		"bone_spears":
+			return 1 if bone_spears_unlocked else 0
+		"bell":
+			return 1 if oblivion_bell_unlocked else 0
+		"nova_casts":
+			return nova_cast_count
+		"health_packs":
+			return health_pack_count
+	return 0
+
+func _calculate_goal_reward() -> int:
+	var reward := 0
+	for goal in active_run_goals:
+		var goal_data: Dictionary = goal
+		if completed_goal_ids.has(String(goal_data["id"])):
+			reward += int(goal_data["reward"])
+	return reward
+
+func _format_goal_summary(completed_only: bool = false) -> String:
+	var parts: Array[String] = []
+	for goal in active_run_goals:
+		var goal_data: Dictionary = goal
+		var is_completed := completed_goal_ids.has(String(goal_data["id"]))
+		if completed_only and not is_completed:
+			continue
+		var progress: int = min(_run_goal_progress(goal_data), int(goal_data["target"]))
+		var marker := "✓" if is_completed else "·"
+		parts.append("%s %s %d/%d" % [marker, String(goal_data["title"]), progress, int(goal_data["target"])])
+	if parts.is_empty():
+		return "Нет выполненных целей"
+	return "\n".join(parts)
 
 func _pick_lore_line(lines: Array) -> String:
 	if lines.is_empty():
@@ -2267,12 +2373,13 @@ func _format_history_entry(entry: Variant) -> String:
 		return ""
 	var title := "Победа" if bool(entry.get("victory", false)) else "Смерть"
 	var time_text := _format_time(float(entry.get("time", 0.0)))
-	return "%s  %s  ур.%d  убийств:%d  +%d" % [
+	return "%s  %s  ур.%d  убийств:%d  +%d  цели:+%d" % [
 		title,
 		time_text,
 		int(entry.get("level", 1)),
 		int(entry.get("kills", 0)),
 		int(entry.get("ash", 0)),
+		int(entry.get("goal_ash", 0)),
 	]
 
 func _update_hud() -> void:
@@ -2479,6 +2586,7 @@ func _cast_ultimate() -> void:
 		return
 	ultimate_ready = false
 	ultimate_charge = 0.0
+	nova_cast_count += 1
 	nova_charge_stage = 0
 	nova_charge_fx.visible = false
 	var origin := player.global_position
@@ -2830,6 +2938,11 @@ func _add_overlay_button(text: String, callback: Callable) -> void:
 	button.custom_minimum_size = Vector2(360, 62)
 	button.pressed.connect(callback)
 	overlay_list.add_child(button)
+
+func _configure_overlay(position: Vector2, size: Vector2) -> void:
+	overlay_panel.position = position
+	overlay_panel.size = size
+	overlay_panel.custom_minimum_size = size
 
 func _flash_overlay_text(text: String) -> void:
 	var label := _make_label(text, 26)
