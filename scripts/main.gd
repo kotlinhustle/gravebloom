@@ -98,6 +98,18 @@ const RUN_GOALS := [
 	{"id": "nova_3", "title": "Трижды раскрыть цветок", "description": "Нова сработает 3 раза", "reward": 18, "type": "nova_casts", "target": 3},
 	{"id": "health_3", "title": "Не отдать тепло", "description": "Собери 3 аптечки", "reward": 12, "type": "health_packs", "target": 3},
 ]
+const CODEX_ENTRIES := [
+	{"id": "first_death", "title": "Первая трещина", "text": "Маска треснула. Руины запомнили звук.", "reward": 8},
+	{"id": "first_victory", "title": "Первый рассвет", "text": "Gravebloom отступил, но корни не умерли.", "reward": 18},
+	{"id": "king_seen", "title": "Пустой трон", "text": "Король-Могила встал без подданных и без лица.", "reward": 12},
+	{"id": "king_killed", "title": "Сломанная корона", "text": "Корона упала, а земля все еще ждала приказа.", "reward": 30},
+	{"id": "blood_blade", "title": "Клинок пьет", "text": "Живой Клинок вспомнил кровь и стал голоднее Маски.", "reward": 18},
+	{"id": "bone_spears", "title": "Старая стража", "text": "Кости поднялись не ради жизни, а ради последнего приказа.", "reward": 12},
+	{"id": "bell", "title": "Звон забвения", "text": "Колокол прозвучал там, где больше некому было скорбеть.", "reward": 12},
+	{"id": "three_runs", "title": "Третья клятва", "text": "Трижды Маска входила в руины. На четвертый раз руины ждали.", "reward": 10},
+	{"id": "hundred_kills", "title": "Сад мертвых", "text": "Сто тел легли в землю. Цветы стали выше.", "reward": 16},
+	{"id": "nova_ten", "title": "Сердце цветка", "text": "Нова раскрывалась снова и снова, как зеленая звезда под кожей.", "reward": 14},
+]
 
 var player: Player
 var living_blade: Node2D
@@ -122,9 +134,13 @@ var last_run_result := ""
 var last_run_lore := ""
 var last_run_ash := 0
 var last_run_goal_ash := 0
+var last_run_codex_ash := 0
+var last_run_codex_unlocks: Array[String] = []
 var run_reward_recorded := false
 var profile_ash := 0
 var profile_upgrades: Dictionary = {}
+var profile_stats: Dictionary = {}
+var codex_unlocked: Dictionary = {}
 var run_history: Array = []
 var relic_pick_counts: Dictionary = {}
 var relic_pick_order: Array[String] = []
@@ -683,6 +699,7 @@ func _show_start_screen() -> void:
 	_add_overlay_label("Пепел: %d" % profile_ash, 18)
 	_add_overlay_button("Начать забег", _start_run)
 	_add_overlay_button("Профиль", _show_profile_screen)
+	_add_overlay_button("Летопись", _show_codex_screen)
 
 func _start_run() -> void:
 	if game_state != "start":
@@ -724,6 +741,37 @@ func _show_profile_screen() -> void:
 		var history_count: int = min(HISTORY_LIMIT, run_history.size())
 		for entry in run_history.slice(0, history_count):
 			_add_overlay_label(_format_history_entry(entry), 15)
+	_add_overlay_button("Летопись", _show_codex_screen)
+	_add_overlay_button("Назад", _show_start_screen)
+
+func _show_codex_screen() -> void:
+	_clear_world_entities()
+	game_state = "codex"
+	get_tree().paused = true
+	build_label.visible = false
+	hp_bar.visible = false
+	xp_bar.visible = false
+	_hide_boss_ui()
+	upgrade_panel.visible = false
+	joystick_base.visible = false
+	ultimate_button.visible = false
+	ultimate_bar.visible = false
+	_configure_overlay(Vector2(24, 72), Vector2(492, 820))
+	overlay_panel.visible = true
+	_clear_container(overlay_list)
+	_add_overlay_label("Летопись Маски", 32)
+	_add_overlay_label(_format_codex_stats(), 16)
+	_add_overlay_label("Открытые записи", 20)
+	var opened := 0
+	for entry in CODEX_ENTRIES:
+		var entry_data: Dictionary = entry
+		if codex_unlocked.has(String(entry_data["id"])):
+			opened += 1
+			_add_overlay_label("%s\n%s" % [String(entry_data["title"]), String(entry_data["text"])], 15)
+	if opened <= 0:
+		_add_overlay_label("Руины пока молчат. Вернись после забега.", 16)
+	_add_overlay_label("Открыто: %d/%d" % [opened, CODEX_ENTRIES.size()], 16)
+	_add_overlay_button("Профиль", _show_profile_screen)
 	_add_overlay_button("Назад", _show_start_screen)
 
 func _reset_run() -> void:
@@ -743,6 +791,8 @@ func _reset_run() -> void:
 	last_run_lore = ""
 	last_run_ash = 0
 	last_run_goal_ash = 0
+	last_run_codex_ash = 0
+	last_run_codex_unlocks.clear()
 	run_reward_recorded = false
 	completed_goal_ids.clear()
 	relic_pick_counts.clear()
@@ -2167,9 +2217,12 @@ func _show_result_screen(victory: bool) -> void:
 	_add_overlay_label(last_run_result, 20)
 	_add_overlay_label(last_run_lore, 18)
 	_add_overlay_label("Время: %s   Уровень: %d   Убийства: %d" % [_format_time(elapsed), level, kill_count], 18)
-	_add_overlay_label("Получено пепла: %d   Цели: +%d   Всего: %d" % [last_run_ash, last_run_goal_ash, profile_ash], 18)
+	_add_overlay_label("Пепел: %d   Цели:+%d   Летопись:+%d" % [last_run_ash, last_run_goal_ash, last_run_codex_ash], 18)
+	_add_overlay_label("Всего пепла: %d" % profile_ash, 18)
 	_add_overlay_label("Осколки: %d/%d" % [xp, xp_to_next], 16)
 	_add_overlay_label("Цели:\n%s" % _format_goal_summary(false), 15)
+	if not last_run_codex_unlocks.is_empty():
+		_add_overlay_label("Летопись открыла: %s" % ", ".join(last_run_codex_unlocks), 15)
 	var build_summary := _format_relic_summary()
 	if not build_summary.is_empty():
 		_add_overlay_label("Реликвии: %s" % build_summary, 16)
@@ -2184,7 +2237,8 @@ func _finish_run(victory: bool) -> void:
 	run_reward_recorded = true
 	_update_run_goals()
 	last_run_goal_ash = _calculate_goal_reward()
-	last_run_ash = _calculate_ash_reward(victory) + last_run_goal_ash
+	last_run_codex_ash = _update_codex_after_run(victory)
+	last_run_ash = _calculate_ash_reward(victory) + last_run_goal_ash + last_run_codex_ash
 	profile_ash += last_run_ash
 	var history_entry := {
 		"victory": victory,
@@ -2193,7 +2247,9 @@ func _finish_run(victory: bool) -> void:
 		"kills": kill_count,
 		"ash": last_run_ash,
 		"goal_ash": last_run_goal_ash,
+		"codex_ash": last_run_codex_ash,
 		"goals": _format_goal_summary(true),
+		"codex": ", ".join(last_run_codex_unlocks),
 		"build": _format_relic_summary(),
 		"date": Time.get_datetime_string_from_system(false, true),
 	}
@@ -2287,6 +2343,80 @@ func _format_goal_summary(completed_only: bool = false) -> String:
 		return "Нет выполненных целей"
 	return "\n".join(parts)
 
+func _update_codex_after_run(victory: bool) -> int:
+	_increment_profile_stat("runs", 1)
+	_increment_profile_stat("victories" if victory else "deaths", 1)
+	_increment_profile_stat("kills_total", kill_count)
+	_increment_profile_stat("nova_casts_total", nova_cast_count)
+	_increment_profile_stat("health_packs_total", health_pack_count)
+	_increment_profile_stat("objectives_completed", completed_goal_ids.size())
+	if grave_king_killed:
+		_increment_profile_stat("grave_king_kills", 1)
+	if blood_blade_evolved:
+		_increment_profile_stat("blood_blade_evolutions", 1)
+	_set_profile_stat_max("best_level", level)
+	_set_profile_stat_max("best_kills", kill_count)
+	_set_profile_stat_max("best_time", int(floor(elapsed)))
+
+	var reward := 0
+	if not victory:
+		reward += _unlock_codex_entry("first_death")
+	if victory:
+		reward += _unlock_codex_entry("first_victory")
+	if dread_boss_spawned:
+		reward += _unlock_codex_entry("king_seen")
+	if grave_king_killed:
+		reward += _unlock_codex_entry("king_killed")
+	if blood_blade_evolved:
+		reward += _unlock_codex_entry("blood_blade")
+	if bone_spears_unlocked:
+		reward += _unlock_codex_entry("bone_spears")
+	if oblivion_bell_unlocked:
+		reward += _unlock_codex_entry("bell")
+	if int(profile_stats.get("runs", 0)) >= 3:
+		reward += _unlock_codex_entry("three_runs")
+	if int(profile_stats.get("kills_total", 0)) >= 100:
+		reward += _unlock_codex_entry("hundred_kills")
+	if int(profile_stats.get("nova_casts_total", 0)) >= 10:
+		reward += _unlock_codex_entry("nova_ten")
+	return reward
+
+func _unlock_codex_entry(entry_id: String) -> int:
+	if codex_unlocked.has(entry_id):
+		return 0
+	var entry := _codex_entry_by_id(entry_id)
+	if entry.is_empty():
+		return 0
+	codex_unlocked[entry_id] = true
+	last_run_codex_unlocks.append(String(entry["title"]))
+	return int(entry["reward"])
+
+func _codex_entry_by_id(entry_id: String) -> Dictionary:
+	for entry in CODEX_ENTRIES:
+		var entry_data: Dictionary = entry
+		if String(entry_data["id"]) == entry_id:
+			return entry_data
+	return {}
+
+func _increment_profile_stat(stat_id: String, amount: int) -> void:
+	profile_stats[stat_id] = int(profile_stats.get(stat_id, 0)) + amount
+
+func _set_profile_stat_max(stat_id: String, value: int) -> void:
+	profile_stats[stat_id] = max(int(profile_stats.get(stat_id, 0)), value)
+
+func _format_codex_stats() -> String:
+	return "Забеги:%d  Победы:%d  Смерти:%d\nЛучший ур:%d  Убийств:%d  Король:%d\nВсего убийств:%d  Нова:%d  Цели:%d" % [
+		int(profile_stats.get("runs", 0)),
+		int(profile_stats.get("victories", 0)),
+		int(profile_stats.get("deaths", 0)),
+		int(profile_stats.get("best_level", 1)),
+		int(profile_stats.get("best_kills", 0)),
+		int(profile_stats.get("grave_king_kills", 0)),
+		int(profile_stats.get("kills_total", 0)),
+		int(profile_stats.get("nova_casts_total", 0)),
+		int(profile_stats.get("objectives_completed", 0)),
+	]
+
 func _pick_lore_line(lines: Array) -> String:
 	if lines.is_empty():
 		return ""
@@ -2308,15 +2438,28 @@ func _load_profile() -> void:
 	if typeof(upgrades) == TYPE_DICTIONARY:
 		for upgrade_id in META_UPGRADES.keys():
 			profile_upgrades[String(upgrade_id)] = int(upgrades.get(String(upgrade_id), 0))
+	var stats: Variant = data.get("stats", {})
+	if typeof(stats) == TYPE_DICTIONARY:
+		var stats_data: Dictionary = stats
+		for stat_id in stats_data.keys():
+			profile_stats[String(stat_id)] = int(stats_data.get(stat_id, 0))
+	var codex: Variant = data.get("codex", {})
+	if typeof(codex) == TYPE_DICTIONARY:
+		var codex_data: Dictionary = codex
+		for entry_id in codex_data.keys():
+			if bool(codex_data.get(entry_id, false)):
+				codex_unlocked[String(entry_id)] = true
 	var history: Variant = data.get("history", [])
 	if typeof(history) == TYPE_ARRAY:
 		run_history = history
 
 func _save_profile() -> void:
 	var data := {
-		"version": 1,
+		"version": 2,
 		"ash": profile_ash,
 		"upgrades": profile_upgrades,
+		"stats": profile_stats,
+		"codex": codex_unlocked,
 		"history": run_history.slice(0, HISTORY_LIMIT),
 	}
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
@@ -2329,6 +2472,21 @@ func _reset_profile_defaults() -> void:
 	profile_upgrades.clear()
 	for upgrade_id in META_UPGRADES.keys():
 		profile_upgrades[String(upgrade_id)] = 0
+	profile_stats = {
+		"runs": 0,
+		"victories": 0,
+		"deaths": 0,
+		"kills_total": 0,
+		"best_level": 1,
+		"best_kills": 0,
+		"best_time": 0,
+		"grave_king_kills": 0,
+		"blood_blade_evolutions": 0,
+		"nova_casts_total": 0,
+		"health_packs_total": 0,
+		"objectives_completed": 0,
+	}
+	codex_unlocked.clear()
 	run_history.clear()
 
 func _profile_upgrade_level(upgrade_id: String) -> int:
@@ -2373,13 +2531,14 @@ func _format_history_entry(entry: Variant) -> String:
 		return ""
 	var title := "Победа" if bool(entry.get("victory", false)) else "Смерть"
 	var time_text := _format_time(float(entry.get("time", 0.0)))
-	return "%s  %s  ур.%d  убийств:%d  +%d  цели:+%d" % [
+	return "%s  %s  ур.%d  убийств:%d  +%d  цели:+%d  лет:+%d" % [
 		title,
 		time_text,
 		int(entry.get("level", 1)),
 		int(entry.get("kills", 0)),
 		int(entry.get("ash", 0)),
 		int(entry.get("goal_ash", 0)),
+		int(entry.get("codex_ash", 0)),
 	]
 
 func _update_hud() -> void:
