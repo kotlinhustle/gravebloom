@@ -40,6 +40,57 @@ static func burst(parent: Node, position: Vector2, color: Color, count: int = 10
 		tween.tween_property(particle, "modulate:a", 0.0, 0.32)
 		tween.chain().tween_callback(particle.queue_free)
 
+static func gore_burst(parent: Node, position: Vector2, execution: bool = false) -> void:
+	var count := 28 if execution else 16
+	for i in range(count):
+		var shard := Polygon2D.new()
+		var long_side := randf_range(7.0, 18.0) if execution else randf_range(5.0, 12.0)
+		var short_side := randf_range(3.0, 8.0)
+		var palette_roll := randf()
+		if palette_roll < 0.52:
+			shard.color = Color(0.58, 1.0, 0.46, randf_range(0.74, 0.98))
+		elif palette_roll < 0.82:
+			shard.color = Color(0.98, 0.74, 0.22, randf_range(0.68, 0.92))
+		else:
+			shard.color = Color(0.42, 0.16, 0.58, randf_range(0.62, 0.86))
+		shard.polygon = PackedVector2Array([
+			Vector2(0.0, -short_side),
+			Vector2(long_side, 0.0),
+			Vector2(0.0, short_side),
+			Vector2(-short_side, 0.0),
+		])
+		shard.global_position = position
+		shard.rotation = randf() * TAU
+		shard.z_index = 90
+		parent.add_child(shard)
+		var direction := Vector2.RIGHT.rotated(randf() * TAU)
+		var distance := randf_range(52.0, 132.0) if execution else randf_range(28.0, 82.0)
+		var tween := parent.create_tween()
+		tween.set_parallel(true)
+		tween.tween_property(shard, "global_position", position + direction * distance, 0.42 if execution else 0.3)
+		tween.tween_property(shard, "rotation", shard.rotation + randf_range(-2.4, 2.4), 0.42 if execution else 0.3)
+		tween.tween_property(shard, "scale", Vector2.ZERO, 0.42 if execution else 0.3)
+		tween.tween_property(shard, "modulate:a", 0.0, 0.42 if execution else 0.3)
+		tween.chain().tween_callback(shard.queue_free)
+
+static func combat_text(parent: Node, position: Vector2, text: String, color: Color = Color(1.0, 0.92, 0.72), font_size: int = 28) -> void:
+	var label := Label.new()
+	label.text = text
+	label.global_position = position + Vector2(randf_range(-20.0, 20.0), -58.0)
+	label.z_index = 120
+	label.add_theme_font_size_override("font_size", font_size)
+	label.add_theme_color_override("font_color", color)
+	label.add_theme_color_override("font_shadow_color", Color(0.02, 0.0, 0.0, 0.95))
+	label.add_theme_constant_override("shadow_offset_x", 3)
+	label.add_theme_constant_override("shadow_offset_y", 3)
+	parent.add_child(label)
+	var tween := parent.create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(label, "global_position", label.global_position + Vector2(0.0, -46.0), 0.58)
+	tween.tween_property(label, "scale", Vector2.ONE * 1.12, 0.18)
+	tween.tween_property(label, "modulate:a", 0.0, 0.58)
+	tween.chain().tween_callback(label.queue_free)
+
 static func ring(parent: Node, position: Vector2, color: Color, radius: float, duration: float = 0.42) -> void:
 	var ring_line := Line2D.new()
 	ring_line.width = 4.0

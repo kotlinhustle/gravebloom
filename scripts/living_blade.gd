@@ -111,11 +111,17 @@ func _hit_target() -> void:
 	var hit_damage: int = max(1, int(ceil(float(damage) * (1.0 + level_damage_bonus))))
 	if "enemy_kind" in target_enemy and target_enemy.enemy_kind == "grave_king":
 		hit_damage = int(ceil(float(hit_damage) * grave_king_damage_multiplier))
-	target_enemy.take_damage(hit_damage, owner_player.global_position, 260.0)
+	var is_execution := false
+	if "health" in target_enemy and "is_miniboss" in target_enemy and "enemy_kind" in target_enemy:
+		is_execution = int(target_enemy.health) <= hit_damage and not bool(target_enemy.is_miniboss) and target_enemy.enemy_kind != "grave_king"
+	if is_execution:
+		target_enemy.set_meta("execution_death", true)
+		target_enemy.set_meta("execution_source", "blade")
+	target_enemy.take_damage(hit_damage, owner_player.global_position, 360.0 if is_execution else 260.0, "blade")
 	if blood_evolved and owner_player.has_method("heal"):
 		owner_player.heal(0.75)
-	_show_impact(target_enemy.global_position)
-	blade_sprite.scale = base_blade_scale * Vector2(1.55, 0.7)
+	_show_impact(target_enemy.global_position, is_execution)
+	blade_sprite.scale = base_blade_scale * (Vector2(1.95, 0.55) if is_execution else Vector2(1.55, 0.7))
 
 func _begin_return() -> void:
 	state = "return"
@@ -144,7 +150,7 @@ func _leave_trail() -> void:
 		return
 	var trail := Line2D.new()
 	trail.width = 3.0
-	trail.default_color = Color(1.0, 0.34, 0.48, 0.55) if blood_evolved else Color(0.72, 1.0, 0.84, 0.45)
+	trail.default_color = Color(0.98, 0.72, 0.24, 0.58) if blood_evolved else Color(0.72, 1.0, 0.84, 0.45)
 	var back := Vector2.UP.rotated(rotation) * 26.0
 	trail.points = PackedVector2Array([global_position - back, global_position])
 	fx_layer.add_child(trail)
@@ -152,19 +158,20 @@ func _leave_trail() -> void:
 	tween.tween_property(trail, "modulate:a", 0.0, 0.16)
 	tween.tween_callback(trail.queue_free)
 
-func _show_impact(target_position: Vector2) -> void:
+func _show_impact(target_position: Vector2, is_execution: bool = false) -> void:
 	if fx_layer == null:
 		return
 	var slash := Line2D.new()
-	slash.width = 10.0 if blood_evolved else 8.0
-	slash.default_color = Color(1.0, 0.3, 0.42, 0.95) if blood_evolved else Color(0.72, 1.0, 0.83, 0.95)
+	slash.width = 16.0 if is_execution else (10.0 if blood_evolved else 8.0)
+	slash.default_color = Color(0.96, 0.76, 0.24, 0.95) if blood_evolved else Color(0.72, 1.0, 0.83, 0.95)
 	var slash_direction := Vector2.RIGHT.rotated(rotation)
+	var slash_length := 58.0 if is_execution else 34.0
 	slash.points = PackedVector2Array([
-		target_position - slash_direction * 34.0,
+		target_position - slash_direction * slash_length,
 		target_position,
-		target_position + slash_direction * 34.0
+		target_position + slash_direction * slash_length
 	])
 	fx_layer.add_child(slash)
 	var tween := create_tween()
-	tween.tween_property(slash, "modulate:a", 0.0, 0.18)
+	tween.tween_property(slash, "modulate:a", 0.0, 0.26 if is_execution else 0.18)
 	tween.tween_callback(slash.queue_free)

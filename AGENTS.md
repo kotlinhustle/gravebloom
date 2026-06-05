@@ -111,6 +111,7 @@ scripts/
 - Король-Могила has a dedicated top HUD boss HP bar that appears on spawn, updates with damage, flashes on phase two, and hides on boss death/result screens.
 - Keeps the player inside visible ruined arena bounds and caps live enemy pressure for early readability.
 - Visible UI text is Russian-first; keep menus, HUD, result screens, upgrade choices, and combat notices localized.
+- Player-facing terms should explain themselves in-game. Keep `Справка Маски` available from menus and add short local explanations near terms like `Пепел`, `Реликвии`, `Летопись`, objectives, and HUD counters.
 - Micro-lore is embedded through the start screen, timed run notices, relic descriptions, relic-pick echo lines, boss entrance lines, and result text.
 - Relic cards should keep the lore phrase, then add a short mechanical effect so choices stay understandable.
 - Relic choice text must fit on a 540px-wide phone screen; keep descriptions short and mechanical enough to avoid clipped button text.
@@ -177,6 +178,8 @@ scripts/
 - Mouse drag means: hold left mouse button, drag away from the starting point, release to stop.
 - The green object around the hero is the Living Blade; it now flies out to hunt enemies and returns.
 - Hits now show damage numbers, enemy flash/squash, knockback, and death bursts.
+- Combat has a first "meaty" layer: Living Blade finishing hits create stronger bug/Gravebloom death bursts without execution text; use toxic green, amber, and dark violet rather than human-blood red. Kill streaks appear at milestones, and taking damage breaks the streak.
+- Living Blade executions lightly heal the player, add a little Nova charge, and have a higher chance to drop a health pack, so aggressive close-range kills feel like a resource loop.
 - Incoming damage now shows red numbers over the player, throttled for continuous contact/hazard damage so it does not spam the screen.
 - Runs now have a start screen, XP bar, 3:00 survival goal, miniboss event, victory screen, death screen, and restart button.
 - Result screens should summarize the run: time survived, level, kills, XP progress, and selected relic build with duplicate counts.
@@ -188,6 +191,7 @@ scripts/
 - Completed run objectives award bonus `Пепел`, appear on the result screen, and store their bonus in run history.
 - `Летопись Маски` is a profile/codex screen available from the start screen and profile. It stores cumulative stats in `user://save.json`, unlocks short lore entries for milestone achievements, and gives one-time `Пепел` rewards for new entries.
 - During runs, the HUD should show a compact active build summary with key weapons/relic counts and short evolution hints.
+- Avoid abstract build labels in the combat HUD and relic cards. Show concrete active tools instead: `Клинок`, `Копья`, `Колокол`, `Тень`, `Цветок`, `Серия`. Named builds can remain internal/history data until they have real gameplay bonuses.
 - Relic choice descriptions can include short evolution hints when they affect a known evolution, but must stay phone-readable and avoid unclear shorthand such as `Эво`.
 - Level-ups automatically increase max HP, heal the player, and add a small global player damage bonus on top of relic choices.
 - Relics can unlock Shadow Spirit, a secondary auto-skill that cuts through enemies in a beam.

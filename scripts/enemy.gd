@@ -5,6 +5,7 @@ signal died(enemy_position: Vector2)
 signal damaged(enemy_position: Vector2, amount: int)
 signal spitting(enemy_position: Vector2, direction: Vector2)
 
+var last_hit_source := ""
 var target: Node2D
 var speed := 70.0
 var max_health := 2
@@ -118,9 +119,10 @@ func _animate_role_markers(delta: float) -> void:
 		left_wing.modulate.a = wing_alpha
 		right_wing.modulate.a = wing_alpha
 
-func take_damage(amount: int, hit_origin: Vector2 = Vector2.ZERO, knockback_force: float = 170.0) -> void:
+func take_damage(amount: int, hit_origin: Vector2 = Vector2.ZERO, knockback_force: float = 170.0, hit_source: String = "") -> void:
 	if is_dead:
 		return
+	last_hit_source = hit_source
 	health -= amount
 	damaged.emit(global_position, amount)
 	if hit_origin != Vector2.ZERO:

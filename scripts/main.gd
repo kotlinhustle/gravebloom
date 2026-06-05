@@ -27,6 +27,8 @@ const ENEMY_SPAWN_OFFSCREEN_MARGIN := 180.0
 const ENEMY_SPAWN_SCREEN_PADDING := 64.0
 const MAX_RELIC_CHOICES := 3
 const HEALTH_PACK_DROP_CHANCE := 0.07
+const EXECUTION_HEALTH_PACK_CHANCE := 0.34
+const KILL_STREAK_WINDOW := 3.2
 const HEALTH_PACK_HEAL := 16.0
 const PLAYER_LEVEL_HEALTH_GAIN := 6.0
 const PLAYER_LEVEL_HEAL := 18.0
@@ -60,6 +62,8 @@ const BOSS_ATTACK_ARM_TIME := 1.0
 const BOSS_ATTACK_ACTIVE_TIME := 0.45
 const SAVE_PATH := "user://save.json"
 const HISTORY_LIMIT := 8
+const PROFILE_HISTORY_VISIBLE := 3
+const CODEX_VISIBLE_ENTRIES := 4
 const META_UPGRADES := {
 	"mask": {"name": "Крепче Маска", "description": "+5 стартового HP", "base_cost": 24, "cost_step": 18, "max": 8},
 	"blade": {"name": "Острее Клинок", "description": "+1 стартовый урон клинка", "base_cost": 38, "cost_step": 28, "max": 4},
@@ -110,6 +114,13 @@ const CODEX_ENTRIES := [
 	{"id": "hundred_kills", "title": "Сад мертвых", "text": "Сто тел легли в землю. Цветы стали выше.", "reward": 16},
 	{"id": "nova_ten", "title": "Сердце цветка", "text": "Нова раскрывалась снова и снова, как зеленая звезда под кожей.", "reward": 14},
 ]
+const BUILD_PATH_DESCRIPTIONS := {
+	"Кровавый Клинок": "ближний урон, вампиризм и охота на босса",
+	"Костяная Стража": "Копья и Колокол держат толпу на расстоянии",
+	"Сердце Gravebloom": "Нова и Цветок превращают толпу во взрыв",
+	"Тень Маски": "луч, магнит и позиционирование вокруг толпы",
+	"Живой Клинок": "базовый путь Маски и охотящегося клинка",
+}
 
 var player: Player
 var living_blade: Node2D
@@ -181,6 +192,9 @@ var vampirism_level := 0
 var vampirism_heal_amount := 5.0
 var vampirism_kills_required := 9
 var kill_count := 0
+var kill_streak := 0
+var best_kill_streak := 0
+var kill_streak_timer := 0.0
 var nova_cast_count := 0
 var health_pack_count := 0
 var grave_king_killed := false
@@ -245,6 +259,7 @@ func _process(delta: float) -> void:
 	elapsed += delta
 	thorn_bloom_cooldown = max(0.0, thorn_bloom_cooldown - delta)
 	player_damage_number_cooldown = max(0.0, player_damage_number_cooldown - delta)
+	_update_kill_streak(delta)
 	if elapsed >= RUN_DURATION:
 		_show_victory()
 		return
@@ -686,18 +701,20 @@ func _show_start_screen() -> void:
 	joystick_base.visible = false
 	ultimate_button.visible = false
 	ultimate_bar.visible = false
-	_configure_overlay(Vector2(28, 116), Vector2(484, 720))
+	_configure_overlay(Vector2(24, 72), Vector2(492, 820))
 	overlay_panel.visible = true
 	_clear_container(overlay_list)
 	_add_overlay_label("GRAVEBLOOM", 42)
 	_add_overlay_label("Цели забега", 22)
+	_add_overlay_label("Выполни их во время забега, чтобы получить больше Пепла.", 15)
 	for goal in active_run_goals:
 		var goal_data: Dictionary = goal
 		_add_overlay_label("%s: %s  +%d" % [String(goal_data["title"]), String(goal_data["description"]), int(goal_data["reward"])], 16)
 	_add_overlay_label("Королевство умерло, но его цветы продолжают расти.", 19)
 	_add_overlay_label("Продержись до рассвета.", 22)
-	_add_overlay_label("Пепел: %d" % profile_ash, 18)
+	_add_overlay_label("Пепел профиля: %d" % profile_ash, 18)
 	_add_overlay_button("Начать забег", _start_run)
+	_add_overlay_button("Справка", _show_help_screen)
 	_add_overlay_button("Профиль", _show_profile_screen)
 	_add_overlay_button("Летопись", _show_codex_screen)
 
@@ -726,11 +743,12 @@ func _show_profile_screen() -> void:
 	joystick_base.visible = false
 	ultimate_button.visible = false
 	ultimate_bar.visible = false
-	_configure_overlay(Vector2(28, 118), Vector2(484, 704))
+	_configure_overlay(Vector2(24, 72), Vector2(492, 820))
 	overlay_panel.visible = true
 	_clear_container(overlay_list)
 	_add_overlay_label("Профиль Маски", 32)
 	_add_overlay_label("Пепел: %d" % profile_ash, 22)
+	_add_overlay_label("Пепел сохраняется между забегами. Трать его здесь на постоянные усиления.", 15)
 	_add_overlay_label("Постоянные дары", 20)
 	for upgrade_id in ["mask", "blade", "magnet", "nova"]:
 		_add_profile_upgrade_button(upgrade_id)
@@ -738,10 +756,36 @@ func _show_profile_screen() -> void:
 	if run_history.is_empty():
 		_add_overlay_label("Пока руины молчат.", 16)
 	else:
-		var history_count: int = min(HISTORY_LIMIT, run_history.size())
+		var history_count: int = min(PROFILE_HISTORY_VISIBLE, run_history.size())
 		for entry in run_history.slice(0, history_count):
 			_add_overlay_label(_format_history_entry(entry), 15)
+		if run_history.size() > history_count:
+			_add_overlay_label("Еще забегов в памяти: %d" % (run_history.size() - history_count), 14)
+	_add_overlay_button("Справка", _show_help_screen)
 	_add_overlay_button("Летопись", _show_codex_screen)
+	_add_overlay_button("Назад", _show_start_screen)
+
+func _show_help_screen() -> void:
+	_clear_world_entities()
+	game_state = "help"
+	get_tree().paused = true
+	build_label.visible = false
+	hp_bar.visible = false
+	xp_bar.visible = false
+	_hide_boss_ui()
+	upgrade_panel.visible = false
+	joystick_base.visible = false
+	ultimate_button.visible = false
+	ultimate_bar.visible = false
+	_configure_overlay(Vector2(24, 76), Vector2(492, 812))
+	overlay_panel.visible = true
+	_clear_container(overlay_list)
+	_add_overlay_label("Справка Маски", 32)
+	_add_overlay_label("Как играть\nДвигайся и выживай 3 минуты. Атаки срабатывают сами, ты управляешь только позицией.", 16)
+	_add_overlay_label("Пепел\nВалюта профиля. Получаешь после забега, тратишь на постоянные усиления.", 16)
+	_add_overlay_label("Реликвии\nВременные улучшения одного забега. Выбираются при новом уровне и сбрасываются после смерти.", 16)
+	_add_overlay_label("Летопись\nДостижения, статистика и короткие записи мира. Новые записи дают разовый Пепел.", 16)
+	_add_overlay_label("Счетчики сверху\nУровень, время забега и сколько осталось до конца. Полоски: здоровье и опыт.", 16)
 	_add_overlay_button("Назад", _show_start_screen)
 
 func _show_codex_screen() -> void:
@@ -760,16 +804,22 @@ func _show_codex_screen() -> void:
 	overlay_panel.visible = true
 	_clear_container(overlay_list)
 	_add_overlay_label("Летопись Маски", 32)
+	_add_overlay_label("Здесь хранятся достижения, статистика и открытые записи мира.", 15)
 	_add_overlay_label(_format_codex_stats(), 16)
-	_add_overlay_label("Открытые записи", 20)
+	_add_overlay_label("Последние открытые записи", 20)
 	var opened := 0
+	var shown := 0
 	for entry in CODEX_ENTRIES:
 		var entry_data: Dictionary = entry
 		if codex_unlocked.has(String(entry_data["id"])):
 			opened += 1
-			_add_overlay_label("%s\n%s" % [String(entry_data["title"]), String(entry_data["text"])], 15)
+			if shown < CODEX_VISIBLE_ENTRIES:
+				shown += 1
+				_add_overlay_label("%s\n%s" % [String(entry_data["title"]), String(entry_data["text"])], 15)
 	if opened <= 0:
 		_add_overlay_label("Руины пока молчат. Вернись после забега.", 16)
+	elif opened > shown:
+		_add_overlay_label("Еще записей открыто: %d" % (opened - shown), 14)
 	_add_overlay_label("Открыто: %d/%d" % [opened, CODEX_ENTRIES.size()], 16)
 	_add_overlay_button("Профиль", _show_profile_screen)
 	_add_overlay_button("Назад", _show_start_screen)
@@ -827,6 +877,9 @@ func _reset_run() -> void:
 	vampirism_heal_amount = 5.0
 	vampirism_kills_required = 9
 	kill_count = 0
+	kill_streak = 0
+	best_kill_streak = 0
+	kill_streak_timer = 0.0
 	nova_cast_count = 0
 	health_pack_count = 0
 	grave_king_killed = false
@@ -1058,7 +1111,7 @@ func _spawn_enemy(enemy_kind: String, is_miniboss: bool, spawn_position := Vecto
 	enemy.add_to_group("enemies")
 	enemy.damaged.connect(_on_enemy_damaged)
 	enemy.spitting.connect(_on_enemy_spitting)
-	enemy.died.connect(_on_enemy_died.bind(enemy.xp_value, enemy.is_miniboss))
+	enemy.died.connect(_on_enemy_died.bind(enemy, enemy.xp_value, enemy.is_miniboss))
 	enemies.append(enemy)
 	world.add_child(enemy)
 
@@ -1366,10 +1419,16 @@ func _make_spitter_projectile(direction: Vector2) -> Node2D:
 	projectile.add_child(seed)
 	return projectile
 
-func _on_enemy_died(enemy_position: Vector2, xp_value: int = 1, was_miniboss: bool = false) -> void:
+func _on_enemy_died(enemy_position: Vector2, enemy_ref: Enemy = null, xp_value: int = 1, was_miniboss: bool = false) -> void:
 	kill_count += 1
-	CombatFxScript.burst(fx_layer, enemy_position, Color(0.55, 1.0, 0.72, 0.9), 18 if was_miniboss else 12)
-	_start_screen_shake(0.18 if was_miniboss else 0.06, 7.0 if was_miniboss else 2.5)
+	var was_execution := _enemy_died_by_execution(enemy_ref)
+	var enemy_kind := enemy_ref.enemy_kind if enemy_ref != null else ""
+	_register_kill_streak(enemy_position, was_execution, was_miniboss)
+	_add_enemy_death_fx(enemy_position, enemy_kind, was_execution, was_miniboss)
+	_start_screen_shake(0.26 if was_execution else (0.18 if was_miniboss else 0.07), 11.0 if was_execution else (7.0 if was_miniboss else 3.0))
+	if was_execution and player != null:
+		player.heal(2.0)
+		ultimate_charge = min(ultimate_cooldown, ultimate_charge + 1.1)
 	if vampirism_unlocked and player != null and kill_count % vampirism_kills_required == 0:
 		var heal_amount: float = vampirism_heal_amount
 		if nova_damage_active:
@@ -1379,7 +1438,8 @@ func _on_enemy_died(enemy_position: Vector2, xp_value: int = 1, was_miniboss: bo
 		if heal_amount > 0.0:
 			player.health = min(player.max_health, player.health + heal_amount)
 			CombatFxScript.sparkle(fx_layer, player.global_position, Color(1.0, 0.45, 0.62, 0.9), 0.36)
-	if not was_miniboss and randf() < HEALTH_PACK_DROP_CHANCE:
+	var pack_chance := EXECUTION_HEALTH_PACK_CHANCE if was_execution else HEALTH_PACK_DROP_CHANCE
+	if not was_miniboss and randf() < pack_chance:
 		_spawn_health_pack(enemy_position)
 	var shard: XPShard = XPShardScene.instantiate()
 	shard.position = enemy_position
@@ -1421,6 +1481,60 @@ func _spawn_health_pack(pack_position: Vector2) -> void:
 	pack.set_meta("age", 0.0)
 	health_packs.append(pack)
 	world.add_child(pack)
+
+func _enemy_died_by_execution(enemy_ref: Enemy) -> bool:
+	if enemy_ref == null:
+		return false
+	if enemy_ref.is_miniboss or enemy_ref.enemy_kind == "grave_king":
+		return false
+	return bool(enemy_ref.get_meta("execution_death", false)) or enemy_ref.last_hit_source == "blade"
+
+func _register_kill_streak(enemy_position: Vector2, was_execution: bool, was_miniboss: bool) -> void:
+	kill_streak += 1
+	kill_streak_timer = KILL_STREAK_WINDOW
+	best_kill_streak = max(best_kill_streak, kill_streak)
+	if kill_streak in [10, 25, 50, 75, 100] or (kill_streak > 0 and kill_streak % 50 == 0):
+		CombatFxScript.combat_text(fx_layer, enemy_position + Vector2(0.0, -34.0), "СЕРИЯ x%d" % kill_streak, Color(1.0, 0.88, 0.46), 30)
+		ultimate_charge = min(ultimate_cooldown, ultimate_charge + (2.0 if was_miniboss else 1.2))
+		_start_screen_shake(0.14, 5.8)
+
+func _update_kill_streak(delta: float) -> void:
+	if kill_streak <= 0:
+		return
+	kill_streak_timer -= delta
+	if kill_streak_timer <= 0.0:
+		kill_streak = 0
+
+func _break_kill_streak() -> void:
+	if kill_streak < 10:
+		kill_streak = 0
+		kill_streak_timer = 0.0
+		return
+	CombatFxScript.combat_text(fx_layer, player.global_position, "СЕРИЯ СБИТА", Color(1.0, 0.36, 0.42), 22)
+	kill_streak = 0
+	kill_streak_timer = 0.0
+
+func _add_enemy_death_fx(enemy_position: Vector2, enemy_kind: String, was_execution: bool, was_miniboss: bool) -> void:
+	var color := Color(0.55, 1.0, 0.72, 0.9)
+	match enemy_kind:
+		"spitter":
+			color = Color(0.78, 0.48, 1.0, 0.92)
+		"exploder":
+			color = Color(1.0, 0.5, 0.24, 0.94)
+		"brute":
+			color = Color(0.9, 0.88, 0.68, 0.92)
+		"grave_king":
+			color = Color(0.9, 0.1, 0.2, 0.95)
+	CombatFxScript.burst(fx_layer, enemy_position, color, 28 if was_miniboss else (24 if was_execution else 14))
+	CombatFxScript.gore_burst(fx_layer, enemy_position, was_execution or was_miniboss)
+	if was_execution:
+		CombatFxScript.ring(fx_layer, enemy_position, Color(0.68, 1.0, 0.34, 0.72), 96.0, 0.24)
+	elif was_miniboss:
+		CombatFxScript.ring(fx_layer, enemy_position, Color(0.9, 0.55, 0.72, 0.78), 150.0, 0.38)
+	if enemy_kind == "spitter":
+		CombatFxScript.ring(fx_layer, enemy_position, Color(0.72, 0.42, 1.0, 0.46), 82.0, 0.32)
+	elif enemy_kind == "exploder":
+		CombatFxScript.ring(fx_layer, enemy_position, Color(1.0, 0.48, 0.18, 0.64), 118.0, 0.28)
 
 func _update_health_packs(delta: float) -> void:
 	var alive_packs: Array[Node2D] = []
@@ -1919,6 +2033,8 @@ func _check_enemy_contact(delta: float) -> void:
 func _damage_player(amount: float, display_amount: float = -1.0, force_number: bool = false) -> void:
 	if player == null or player.is_dead:
 		return
+	if amount > 0.0:
+		_break_kill_streak()
 	player.take_damage(amount)
 	if display_amount < 0.0:
 		display_amount = amount
@@ -1978,6 +2094,7 @@ func _show_upgrades() -> void:
 	_clear_container(upgrade_list)
 	var title := _make_label("Выбери реликвию", 26)
 	upgrade_list.add_child(title)
+	upgrade_list.add_child(_make_label("Реликвии работают только в этом забеге", 15))
 	var relics := _roll_relics()
 	for relic in relics:
 		_add_upgrade_button(relic["name"], relic["description"], relic["method"])
@@ -2038,7 +2155,7 @@ func _without_relic_name(relics: Array, relic_name: String) -> Array:
 func _add_upgrade_button(text: String, description: String, method_name: String) -> void:
 	var button := Button.new()
 	button.text = "%s\n%s" % [text, description]
-	button.custom_minimum_size = Vector2(430, 70)
+	button.custom_minimum_size = Vector2(430, 74)
 	button.set_meta("upgrade_method", String(method_name))
 	button.set_meta("relic_name", text)
 	button.pressed.connect(_on_upgrade_button_pressed.bind(button))
@@ -2216,11 +2333,11 @@ func _show_result_screen(victory: bool) -> void:
 	_add_overlay_label("Победа" if victory else "Забег окончен", 34)
 	_add_overlay_label(last_run_result, 20)
 	_add_overlay_label(last_run_lore, 18)
-	_add_overlay_label("Время: %s   Уровень: %d   Убийства: %d" % [_format_time(elapsed), level, kill_count], 18)
+	_add_overlay_label("Время: %s   Уровень: %d   Убийства: %d   Серия: x%d" % [_format_time(elapsed), level, kill_count, best_kill_streak], 18)
 	_add_overlay_label("Пепел: %d   Цели:+%d   Летопись:+%d" % [last_run_ash, last_run_goal_ash, last_run_codex_ash], 18)
 	_add_overlay_label("Всего пепла: %d" % profile_ash, 18)
 	_add_overlay_label("Осколки: %d/%d" % [xp, xp_to_next], 16)
-	_add_overlay_label("Цели:\n%s" % _format_goal_summary(false), 15)
+	_add_overlay_label("Цели забега:\n%s" % _format_goal_summary(false), 15)
 	if not last_run_codex_unlocks.is_empty():
 		_add_overlay_label("Летопись открыла: %s" % ", ".join(last_run_codex_unlocks), 15)
 	var build_summary := _format_relic_summary()
@@ -2245,12 +2362,14 @@ func _finish_run(victory: bool) -> void:
 		"time": elapsed,
 		"level": level,
 		"kills": kill_count,
+		"best_streak": best_kill_streak,
 		"ash": last_run_ash,
 		"goal_ash": last_run_goal_ash,
 		"codex_ash": last_run_codex_ash,
 		"goals": _format_goal_summary(true),
 		"codex": ", ".join(last_run_codex_unlocks),
 		"build": _format_relic_summary(),
+		"build_path": _current_build_path(true),
 		"date": Time.get_datetime_string_from_system(false, true),
 	}
 	run_history.insert(0, history_entry)
@@ -2278,6 +2397,31 @@ func _format_relic_summary() -> String:
 			continue
 		parts.append("%s x%d" % [relic_name, count] if count > 1 else relic_name)
 	return ", ".join(parts)
+
+func _current_build_path(include_default: bool = false) -> String:
+	var blade_picks := _blade_upgrade_pick_count()
+	var nova_picks := int(relic_pick_counts.get("Сердце Новы", 0))
+	var magnet_picks := int(relic_pick_counts.get("Могильный Магнит", 0))
+	if blood_blade_evolved or (vampirism_unlocked and blade_picks > 0) or blade_picks >= 2:
+		return "Кровавый Клинок"
+	if bone_spears_unlocked and (oblivion_bell_unlocked or thorn_bloom_unlocked):
+		return "Костяная Стража"
+	if nova_picks > 0 and vampirism_unlocked:
+		return "Сердце Gravebloom"
+	if shadow_spirit_unlocked and magnet_picks > 0:
+		return "Тень Маски"
+	if bone_spears_unlocked or oblivion_bell_unlocked or thorn_bloom_unlocked:
+		return "Костяная Стража"
+	if nova_picks > 0:
+		return "Сердце Gravebloom"
+	if shadow_spirit_unlocked or magnet_picks > 0:
+		return "Тень Маски"
+	return "Живой Клинок" if include_default else ""
+
+func _format_build_path_summary() -> String:
+	var path_name := _current_build_path(true)
+	var description := String(BUILD_PATH_DESCRIPTIONS.get(path_name, ""))
+	return "%s: %s" % [path_name, description] if not description.is_empty() else path_name
 
 func _prepare_run_goals() -> void:
 	active_run_goals.clear()
@@ -2356,6 +2500,7 @@ func _update_codex_after_run(victory: bool) -> int:
 		_increment_profile_stat("blood_blade_evolutions", 1)
 	_set_profile_stat_max("best_level", level)
 	_set_profile_stat_max("best_kills", kill_count)
+	_set_profile_stat_max("best_streak", best_kill_streak)
 	_set_profile_stat_max("best_time", int(floor(elapsed)))
 
 	var reward := 0
@@ -2405,12 +2550,13 @@ func _set_profile_stat_max(stat_id: String, value: int) -> void:
 	profile_stats[stat_id] = max(int(profile_stats.get(stat_id, 0)), value)
 
 func _format_codex_stats() -> String:
-	return "Забеги:%d  Победы:%d  Смерти:%d\nЛучший ур:%d  Убийств:%d  Король:%d\nВсего убийств:%d  Нова:%d  Цели:%d" % [
+	return "Забеги:%d  Победы:%d  Смерти:%d\nЛучший ур:%d  Убийств:%d  Серия:x%d  Король:%d\nВсего убийств:%d  Нова:%d  Цели:%d" % [
 		int(profile_stats.get("runs", 0)),
 		int(profile_stats.get("victories", 0)),
 		int(profile_stats.get("deaths", 0)),
 		int(profile_stats.get("best_level", 1)),
 		int(profile_stats.get("best_kills", 0)),
+		int(profile_stats.get("best_streak", 0)),
 		int(profile_stats.get("grave_king_kills", 0)),
 		int(profile_stats.get("kills_total", 0)),
 		int(profile_stats.get("nova_casts_total", 0)),
@@ -2479,6 +2625,7 @@ func _reset_profile_defaults() -> void:
 		"kills_total": 0,
 		"best_level": 1,
 		"best_kills": 0,
+		"best_streak": 0,
 		"best_time": 0,
 		"grave_king_kills": 0,
 		"blood_blade_evolutions": 0,
@@ -2531,14 +2678,13 @@ func _format_history_entry(entry: Variant) -> String:
 		return ""
 	var title := "Победа" if bool(entry.get("victory", false)) else "Смерть"
 	var time_text := _format_time(float(entry.get("time", 0.0)))
-	return "%s  %s  ур.%d  убийств:%d  +%d  цели:+%d  лет:+%d" % [
+	return "%s  %s  ур.%d  убийств:%d  серия:x%d  +%d" % [
 		title,
 		time_text,
 		int(entry.get("level", 1)),
 		int(entry.get("kills", 0)),
+		int(entry.get("best_streak", 0)),
 		int(entry.get("ash", 0)),
-		int(entry.get("goal_ash", 0)),
-		int(entry.get("codex_ash", 0)),
 	]
 
 func _update_hud() -> void:
@@ -2546,7 +2692,7 @@ func _update_hud() -> void:
 	var health_value := 0
 	if player != null:
 		health_value = int(ceil(player.health))
-	hud.text = "GRAVEBLOOM\nУР %d   ВРЕМЯ %s   ОСТАЛОСЬ %s" % [
+	hud.text = "GRAVEBLOOM\nУровень %d   Забег %s   До конца %s" % [
 		level,
 		_format_time(elapsed),
 		_format_time(remaining)
@@ -2563,10 +2709,9 @@ func _format_build_hud() -> String:
 	var lines: Array[String] = []
 	var blade_picks := _blade_upgrade_pick_count()
 	if blood_blade_evolved:
-		lines.append("БИЛД: Кровавый Клинок")
+		lines.append("Кровавый Клинок")
 	else:
-		lines.append("БИЛД: Живой Клинок")
-		lines.append("Улучшения Клинка %d/2" % min(2, blade_picks))
+		lines.append("Клинок: улучшений %d/2" % min(2, blade_picks))
 	if oblivion_bell_unlocked:
 		lines.append("Колокол x%d" % int(relic_pick_counts.get("Колокол Забвения", 1)))
 	if bone_spears_unlocked:
@@ -2575,14 +2720,16 @@ func _format_build_hud() -> String:
 		lines.append("Тень x%d" % int(relic_pick_counts.get("Призвать Тень", 1)))
 	if vampirism_unlocked:
 		lines.append("Цветок x%d" % vampirism_level)
+	if kill_streak >= 5:
+		lines.append("Серия x%d" % kill_streak)
 	if not blood_blade_evolved:
 		var needed_blade: int = max(0, 2 - blade_picks)
 		if vampirism_unlocked and needed_blade > 0:
-			lines.append("Эволюция: еще улучшений %d" % needed_blade)
+			lines.append("До Кровавого Клинка: %d" % needed_blade)
 		elif not vampirism_unlocked and blade_picks >= 2:
-			lines.append("Эволюция: нужен Цветок")
+			lines.append("До Кровавого Клинка: нужен Цветок")
 		elif not vampirism_unlocked:
-			lines.append("Эволюция: Цветок + 2 улучшения")
+			lines.append("Кровавый Клинок: Цветок + 2 улучшения")
 	return "\n".join(lines.slice(0, 5))
 
 func _show_boss_ui(boss: Enemy) -> void:
