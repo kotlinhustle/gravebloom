@@ -88,6 +88,92 @@ const VICTORY_LORE_LINES := [
 	"Корни отступили. Ненадолго.",
 	"Клинок уснул, насытившись мертвыми.",
 ]
+const CHAPTERS := [
+	{
+		"id": "dead_garden",
+		"name": "Мертвый Сад",
+		"subtitle": "Руины первого двора, где Gravebloom пустил корни.",
+		"goal": "Продержись до рассвета.",
+		"palette": {
+			"bg": Color(0.028, 0.031, 0.034),
+			"floor": Color(0.064, 0.065, 0.074, 0.92),
+			"stain": Color(0.02, 0.025, 0.026, 0.25),
+			"stone": Color(0.13, 0.14, 0.15, 0.9),
+			"rubble": Color(0.12, 0.12, 0.135, 0.55),
+			"glow": Color(0.55, 1.0, 0.72, 0.34),
+			"flower": Color(0.62, 1.0, 0.72, 0.68),
+			"fog": Color(0.45, 0.56, 0.52, 0.1),
+		},
+		"lore_events": [
+			{"time": 12.0, "text": "Руины проснулись"},
+			{"time": 45.0, "text": "Gravebloom тянется к крови"},
+			{"time": 90.0, "text": "Маска шепчет: не останавливайся"},
+			{"time": 130.0, "text": "Клинок вспоминает старую клятву"},
+		],
+		"death_lines": [
+			"Цветы сомкнулись над следами Маски.",
+			"Руины не отпускают тех, кто вспомнил их имя.",
+			"Клинок вернулся один.",
+			"Gravebloom выпил еще одну клятву.",
+		],
+		"victory_lines": [
+			"Рассвет не исцелил королевство, но заставил его замолчать.",
+			"Маска вынесла из руин еще один вдох.",
+			"Корни отступили. Ненадолго.",
+			"Клинок уснул, насытившись мертвыми.",
+		],
+		"boss_name": "КОРОЛЬ-МОГИЛА",
+		"boss_enter": "Король-Могила встал",
+		"boss_lore": "За ним не осталось живых подданных",
+		"boss_dead": "Король-Могила пал",
+		"enemy_speed": 1.0,
+		"enemy_health": 0,
+		"spitter_bonus": 0.0,
+		"runner_bonus": 0.0,
+	},
+	{
+		"id": "ashen_chapel",
+		"name": "Пепельная Часовня",
+		"subtitle": "Сгоревший храм, где колокол звенит без руки.",
+		"goal": "Выживи под пеплом и не дай звону сомкнуться.",
+		"palette": {
+			"bg": Color(0.036, 0.032, 0.038),
+			"floor": Color(0.078, 0.071, 0.077, 0.92),
+			"stain": Color(0.035, 0.028, 0.033, 0.3),
+			"stone": Color(0.16, 0.145, 0.15, 0.92),
+			"rubble": Color(0.17, 0.135, 0.13, 0.58),
+			"glow": Color(1.0, 0.68, 0.42, 0.36),
+			"flower": Color(0.98, 0.72, 0.42, 0.68),
+			"fog": Color(0.62, 0.52, 0.45, 0.11),
+		},
+		"lore_events": [
+			{"time": 10.0, "text": "Пепел лег на Маску"},
+			{"time": 42.0, "text": "Часовня считает каждый шаг"},
+			{"time": 82.0, "text": "Колокол звенит из-под пола"},
+			{"time": 128.0, "text": "Огонь здесь умер последним"},
+		],
+		"death_lines": [
+			"Пепел заполнил трещину в Маске.",
+			"Часовня закрыла двери без звука.",
+			"Клинок потускнел в сером алтаре.",
+			"Звон нашел еще одно имя.",
+		],
+		"victory_lines": [
+			"Колокол смолк, но пепел не осел.",
+			"Маска вышла из часовни теплее смерти.",
+			"Алтарь треснул, и корни отступили.",
+			"Пепел запомнил форму клинка.",
+		],
+		"boss_name": "ИГУМЕН ПЕПЛА",
+		"boss_enter": "Игумен Пепла поднялся",
+		"boss_lore": "Он молился, пока храм не сгорел",
+		"boss_dead": "Игумен Пепла рассыпался",
+		"enemy_speed": 1.08,
+		"enemy_health": 1,
+		"spitter_bonus": 0.04,
+		"runner_bonus": 0.05,
+	},
+]
 const RUN_GOAL_COUNT := 3
 const RUN_GOALS := [
 	{"id": "kill_45", "title": "Сорвать 45 мертвых", "description": "Убей 45 врагов", "reward": 12, "type": "kills", "target": 45},
@@ -157,6 +243,7 @@ var relic_pick_counts: Dictionary = {}
 var relic_pick_order: Array[String] = []
 var active_run_goals: Array = []
 var completed_goal_ids: Dictionary = {}
+var current_chapter_index := 0
 var shadow_spirit_unlocked := false
 var shadow_spirit_timer := 3.0
 var shadow_spirit_cooldown := 5.5
@@ -242,12 +329,65 @@ func _ready() -> void:
 	randomize()
 	add_child(world)
 	add_child(fx_layer)
+	_load_profile()
 	_build_arena()
 	_build_ui()
 	_build_nova_charge_fx()
 	_build_nova_audio()
-	_load_profile()
 	_show_start_screen()
+
+func _current_chapter() -> Dictionary:
+	var index: int = clampi(current_chapter_index, 0, CHAPTERS.size() - 1)
+	var chapter: Dictionary = CHAPTERS[index]
+	return chapter
+
+func _chapter_palette() -> Dictionary:
+	var palette: Variant = _current_chapter().get("palette", {})
+	if typeof(palette) == TYPE_DICTIONARY:
+		return palette
+	return {}
+
+func _chapter_color(color_id: String, fallback: Color) -> Color:
+	var palette := _chapter_palette()
+	var color: Variant = palette.get(color_id, fallback)
+	if typeof(color) == TYPE_COLOR:
+		return color
+	return fallback
+
+func _chapter_lore_events() -> Array:
+	var events: Variant = _current_chapter().get("lore_events", LORE_EVENTS)
+	if typeof(events) == TYPE_ARRAY:
+		return events
+	return LORE_EVENTS
+
+func _chapter_death_lines() -> Array:
+	var lines: Variant = _current_chapter().get("death_lines", DEATH_LORE_LINES)
+	if typeof(lines) == TYPE_ARRAY:
+		return lines
+	return DEATH_LORE_LINES
+
+func _chapter_victory_lines() -> Array:
+	var lines: Variant = _current_chapter().get("victory_lines", VICTORY_LORE_LINES)
+	if typeof(lines) == TYPE_ARRAY:
+		return lines
+	return VICTORY_LORE_LINES
+
+func _chapter_enemy_speed_multiplier() -> float:
+	return float(_current_chapter().get("enemy_speed", 1.0))
+
+func _chapter_enemy_health_bonus() -> int:
+	return int(_current_chapter().get("enemy_health", 0))
+
+func _chapter_chance_bonus(bonus_id: String) -> float:
+	return float(_current_chapter().get(bonus_id, 0.0))
+
+func _rebuild_arena() -> void:
+	for child in world.get_children():
+		if child != player and child != living_blade:
+			child.queue_free()
+	ambient_glows.clear()
+	fog_wisps.clear()
+	_build_arena()
 
 func _process(delta: float) -> void:
 	_update_screen_shake(delta)
@@ -293,7 +433,7 @@ func _process(delta: float) -> void:
 
 func _build_arena() -> void:
 	var bg := ColorRect.new()
-	bg.color = Color(0.028, 0.031, 0.034)
+	bg.color = _chapter_color("bg", Color(0.028, 0.031, 0.034))
 	bg.size = Vector2(4600, 4600)
 	bg.position = Vector2(-2300, -2300)
 	world.add_child(bg)
@@ -304,21 +444,22 @@ func _build_arena() -> void:
 	_build_cursed_runes()
 	_build_boundary_markers()
 	_build_fog_wisps()
-	_build_screen_vignette()
 
 func _build_floor_tiles() -> void:
 	var tile_size := 176.0
+	var base_floor := _chapter_color("floor", Color(0.064, 0.065, 0.074, 0.92))
+	var stain_color := _chapter_color("stain", Color(0.02, 0.025, 0.026, 0.25))
 	for x in range(-11, 12):
 		for y in range(-7, 8):
 			var tile := ColorRect.new()
 			var shade := randf_range(-0.012, 0.016)
-			tile.color = Color(0.064 + shade, 0.065 + shade, 0.074 + shade, 0.92)
+			tile.color = Color(base_floor.r + shade, base_floor.g + shade, base_floor.b + shade, base_floor.a)
 			tile.size = Vector2(tile_size - 7.0, tile_size - 7.0)
 			tile.position = Vector2(x * tile_size, y * tile_size) + Vector2(randf_range(-3.0, 3.0), randf_range(-3.0, 3.0))
 			tile.rotation = randf_range(-0.012, 0.012)
 			world.add_child(tile)
 	for i in range(90):
-		var stain := _make_ellipse(randf_range(10.0, 34.0), randf_range(5.0, 18.0), Color(0.02, 0.025, 0.026, randf_range(0.16, 0.34)), 12)
+		var stain := _make_ellipse(randf_range(10.0, 34.0), randf_range(5.0, 18.0), Color(stain_color.r, stain_color.g, stain_color.b, randf_range(0.16, 0.34)), 12)
 		stain.position = Vector2(randf_range(-1850.0, 1850.0), randf_range(-1200.0, 1200.0))
 		stain.rotation = randf() * TAU
 		world.add_child(stain)
@@ -353,19 +494,47 @@ func _build_ruins() -> void:
 			_add_gravestone(base_position, randf_range(0.8, 1.35))
 	for i in range(48):
 		var rubble := ColorRect.new()
-		rubble.color = Color(0.12, 0.12, 0.135, randf_range(0.35, 0.7))
+		var rubble_color := _chapter_color("rubble", Color(0.12, 0.12, 0.135, 0.55))
+		rubble.color = Color(rubble_color.r, rubble_color.g, rubble_color.b, randf_range(0.35, 0.7))
 		rubble.size = Vector2(randf_range(12.0, 42.0), randf_range(7.0, 18.0))
 		rubble.position = Vector2(randf_range(-1900.0, 1900.0), randf_range(-1250.0, 1250.0))
 		rubble.rotation = randf() * TAU
 		world.add_child(rubble)
+	if String(_current_chapter().get("id", "")) == "ashen_chapel":
+		_build_chapel_debris()
+
+func _build_chapel_debris() -> void:
+	for i in range(14):
+		var arch := Line2D.new()
+		arch.width = randf_range(6.0, 10.0)
+		arch.default_color = Color(0.24, 0.19, 0.18, randf_range(0.42, 0.68))
+		arch.points = PackedVector2Array([
+			Vector2(-42.0, 34.0),
+			Vector2(-32.0, -18.0),
+			Vector2(0.0, -48.0),
+			Vector2(32.0, -18.0),
+			Vector2(42.0, 34.0),
+		])
+		arch.position = Vector2(randf_range(-1720.0, 1720.0), randf_range(-1040.0, 1040.0))
+		if arch.position.length() < 300.0:
+			arch.position += arch.position.normalized() * 360.0
+		arch.rotation = randf_range(-0.35, 0.35)
+		world.add_child(arch)
+	for i in range(26):
+		var ember := _make_ellipse(randf_range(5.0, 12.0), randf_range(2.0, 5.0), Color(1.0, 0.56, 0.24, randf_range(0.28, 0.5)), 8)
+		ember.position = Vector2(randf_range(-1860.0, 1860.0), randf_range(-1180.0, 1180.0))
+		ember.rotation = randf() * TAU
+		world.add_child(ember)
+		ambient_glows.append(ember)
 
 func _add_broken_column(base_position: Vector2) -> void:
 	var shadow := _make_ellipse(58.0, 18.0, Color(0.0, 0.0, 0.0, 0.24), 16)
 	shadow.position = base_position + Vector2(8.0, 22.0)
 	world.add_child(shadow)
+	var stone_color := _chapter_color("stone", Color(0.16, 0.155, 0.17, 0.88))
 	for piece_index in range(randi_range(2, 4)):
 		var piece := ColorRect.new()
-		piece.color = Color(0.16, 0.155, 0.17, randf_range(0.74, 0.94))
+		piece.color = Color(stone_color.r + 0.03, stone_color.g + 0.015, stone_color.b + 0.02, randf_range(0.74, 0.94))
 		piece.size = Vector2(randf_range(34.0, 74.0), randf_range(18.0, 34.0))
 		piece.position = base_position + Vector2(piece_index * randf_range(18.0, 36.0), piece_index * randf_range(-5.0, 9.0))
 		piece.rotation = randf_range(-0.7, 0.7)
@@ -377,6 +546,7 @@ func _add_gravestone(base_position: Vector2, scale_value: float) -> void:
 	world.add_child(shadow)
 	var stone := Polygon2D.new()
 	stone.color = Color(0.13, 0.14, 0.15, 0.9)
+	stone.color = _chapter_color("stone", Color(0.13, 0.14, 0.15, 0.9))
 	var width := 34.0 * scale_value
 	var height := 58.0 * scale_value
 	var shape := PackedVector2Array()
@@ -392,13 +562,15 @@ func _add_gravestone(base_position: Vector2, scale_value: float) -> void:
 	stone.rotation = randf_range(-0.18, 0.18)
 	world.add_child(stone)
 	var rune := ColorRect.new()
-	rune.color = Color(0.55, 1.0, 0.72, randf_range(0.22, 0.36))
+	var glow_color := _chapter_color("glow", Color(0.55, 1.0, 0.72, 0.34))
+	rune.color = Color(glow_color.r, glow_color.g, glow_color.b, randf_range(0.22, 0.36))
 	rune.size = Vector2(4.0 * scale_value, 20.0 * scale_value)
 	rune.position = base_position + Vector2(-2.0 * scale_value, -8.0 * scale_value)
 	world.add_child(rune)
 	ambient_glows.append(rune)
 
 func _build_graveblooms() -> void:
+	var flower_color := _chapter_color("flower", Color(0.62, 1.0, 0.72, 0.68))
 	for i in range(70):
 		var center := Vector2(randf_range(-1850.0, 1850.0), randf_range(-1200.0, 1200.0))
 		var stem := ColorRect.new()
@@ -406,7 +578,7 @@ func _build_graveblooms() -> void:
 		stem.size = Vector2(3.0, randf_range(10.0, 20.0))
 		stem.position = center + Vector2(-1.5, -2.0)
 		world.add_child(stem)
-		var bloom := _make_ellipse(randf_range(5.0, 9.0), randf_range(4.0, 7.0), Color(0.62, 1.0, 0.72, randf_range(0.48, 0.82)), 8)
+		var bloom := _make_ellipse(randf_range(5.0, 9.0), randf_range(4.0, 7.0), Color(flower_color.r, flower_color.g, flower_color.b, randf_range(0.48, 0.82)), 8)
 		bloom.position = center + Vector2(0.0, -7.0)
 		world.add_child(bloom)
 		ambient_glows.append(bloom)
@@ -416,7 +588,8 @@ func _build_cursed_runes() -> void:
 		var rune := Line2D.new()
 		rune.width = 3.0
 		rune.closed = true
-		rune.default_color = Color(0.48, 1.0, 0.75, randf_range(0.28, 0.48))
+		var glow_color := _chapter_color("glow", Color(0.48, 1.0, 0.75, 0.42))
+		rune.default_color = Color(glow_color.r, glow_color.g, glow_color.b, randf_range(0.28, 0.48))
 		var radius := randf_range(18.0, 42.0)
 		var points := PackedVector2Array()
 		for point_index in range(6):
@@ -429,7 +602,8 @@ func _build_cursed_runes() -> void:
 
 func _build_boundary_markers() -> void:
 	var border_color := Color(0.11, 0.105, 0.12, 0.86)
-	var glow_color := Color(0.48, 1.0, 0.72, 0.28)
+	var base_glow := _chapter_color("glow", Color(0.48, 1.0, 0.72, 0.28))
+	var glow_color := Color(base_glow.r, base_glow.g, base_glow.b, 0.28)
 	for x in range(-10, 11):
 		_add_boundary_stone(Vector2(x * 205.0, -ARENA_LIMIT_Y - 36.0), randf_range(-0.12, 0.12), border_color)
 		_add_boundary_stone(Vector2(x * 205.0, ARENA_LIMIT_Y + 36.0), randf_range(-0.12, 0.12), border_color)
@@ -459,10 +633,11 @@ func _add_boundary_stone(position: Vector2, rotation: float, color: Color) -> vo
 	world.add_child(stone)
 
 func _build_fog_wisps() -> void:
+	var fog_color := _chapter_color("fog", Color(0.45, 0.56, 0.52, 0.1))
 	for i in range(18):
 		var wisp := Line2D.new()
 		wisp.width = randf_range(12.0, 24.0)
-		wisp.default_color = Color(0.45, 0.56, 0.52, randf_range(0.06, 0.13))
+		wisp.default_color = Color(fog_color.r, fog_color.g, fog_color.b, randf_range(0.06, 0.13))
 		var points := PackedVector2Array()
 		for point_index in range(6):
 			points.append(Vector2(point_index * randf_range(36.0, 58.0), sin(point_index * 1.7) * randf_range(10.0, 22.0)))
@@ -610,6 +785,7 @@ func _apply_profile_start_bonuses() -> void:
 func _build_ui() -> void:
 	add_child(ui_layer)
 	ui_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	_build_screen_vignette()
 	hud.position = Vector2(18, 18)
 	hud.add_theme_font_size_override("font_size", 24)
 	hud.add_theme_color_override("font_color", Color(0.88, 0.84, 0.73))
@@ -704,19 +880,53 @@ func _show_start_screen() -> void:
 	_configure_overlay(Vector2(24, 72), Vector2(492, 820))
 	overlay_panel.visible = true
 	_clear_container(overlay_list)
+	var chapter := _current_chapter()
 	_add_overlay_label("GRAVEBLOOM", 42)
+	_add_overlay_label("Глава: %s" % String(chapter["name"]), 23)
+	_add_overlay_label(String(chapter["subtitle"]), 15)
 	_add_overlay_label("Цели забега", 22)
 	_add_overlay_label("Выполни их во время забега, чтобы получить больше Пепла.", 15)
 	for goal in active_run_goals:
 		var goal_data: Dictionary = goal
 		_add_overlay_label("%s: %s  +%d" % [String(goal_data["title"]), String(goal_data["description"]), int(goal_data["reward"])], 16)
 	_add_overlay_label("Королевство умерло, но его цветы продолжают расти.", 19)
-	_add_overlay_label("Продержись до рассвета.", 22)
+	_add_overlay_label(String(chapter["goal"]), 20)
 	_add_overlay_label("Пепел профиля: %d" % profile_ash, 18)
 	_add_overlay_button("Начать забег", _start_run)
+	_add_overlay_button("Выбрать главу", _show_chapter_screen)
 	_add_overlay_button("Справка", _show_help_screen)
 	_add_overlay_button("Профиль", _show_profile_screen)
 	_add_overlay_button("Летопись", _show_codex_screen)
+
+func _show_chapter_screen() -> void:
+	_clear_world_entities()
+	game_state = "chapter_select"
+	get_tree().paused = true
+	build_label.visible = false
+	hp_bar.visible = false
+	xp_bar.visible = false
+	_hide_boss_ui()
+	upgrade_panel.visible = false
+	joystick_base.visible = false
+	ultimate_button.visible = false
+	ultimate_bar.visible = false
+	_configure_overlay(Vector2(24, 76), Vector2(492, 812))
+	overlay_panel.visible = true
+	_clear_container(overlay_list)
+	_add_overlay_label("Выбор главы", 32)
+	_add_overlay_label("Каждая глава меняет арену, темп врагов и голос руин.", 16)
+	for i in range(CHAPTERS.size()):
+		var chapter: Dictionary = CHAPTERS[i]
+		var marker := ">> " if i == current_chapter_index else ""
+		_add_overlay_button("%s%s\n%s" % [marker, String(chapter["name"]), String(chapter["subtitle"])], _select_chapter.bind(i))
+	_add_overlay_button("Назад", _show_start_screen)
+
+func _select_chapter(chapter_index: int) -> void:
+	current_chapter_index = clampi(chapter_index, 0, CHAPTERS.size() - 1)
+	_save_profile()
+	_rebuild_arena()
+	_prepare_run_goals()
+	_show_start_screen()
 
 func _start_run() -> void:
 	if game_state != "start":
@@ -1038,9 +1248,9 @@ func _pick_enemy_kind() -> String:
 		return "flanker"
 	if elapsed > 70.0 and randf() < 0.08:
 		return "exploder"
-	if elapsed > 46.0 and randf() < min(0.16, 0.04 + elapsed / 650.0):
+	if elapsed > 46.0 and randf() < min(0.22, 0.04 + elapsed / 650.0 + _chapter_chance_bonus("spitter_bonus")):
 		return "spitter"
-	if elapsed > 28.0 and randf() < min(0.18, 0.05 + elapsed / 620.0):
+	if elapsed > 28.0 and randf() < min(0.24, 0.05 + elapsed / 620.0 + _chapter_chance_bonus("runner_bonus")):
 		return "runner"
 	if randf() < min(0.26, 0.04 + elapsed / 420.0):
 		return "brute"
@@ -1049,8 +1259,8 @@ func _pick_enemy_kind() -> String:
 func _spawn_enemy(enemy_kind: String, is_miniboss: bool, spawn_position := Vector2.INF) -> void:
 	var enemy: Enemy = EnemyScene.instantiate()
 	enemy.enemy_kind = enemy_kind
-	enemy.max_health = 2 + int(elapsed / 52.0)
-	enemy.speed = randf_range(56.0, 84.0) + elapsed * 0.14
+	enemy.max_health = 2 + int(elapsed / 52.0) + _chapter_enemy_health_bonus()
+	enemy.speed = (randf_range(56.0, 84.0) + elapsed * 0.14) * _chapter_enemy_speed_multiplier()
 	enemy.xp_value = 1
 	enemy.contact_damage = 18.0
 	if enemy_kind == "brute":
@@ -1086,8 +1296,8 @@ func _spawn_enemy(enemy_kind: String, is_miniboss: bool, spawn_position := Vecto
 		enemy.contact_damage = 30.0
 		enemy.xp_value = 2
 	elif enemy_kind == "grave_king":
-		enemy.max_health = 78 + int(elapsed / 6.0)
-		enemy.speed = 142.0
+		enemy.max_health = 78 + int(elapsed / 6.0) + _chapter_enemy_health_bonus() * 8
+		enemy.speed = 142.0 * _chapter_enemy_speed_multiplier()
 		enemy.scale = Vector2.ONE * 1.0
 		enemy.contact_damage = 52.0
 		enemy.xp_value = 24
@@ -1367,8 +1577,8 @@ func _spawn_dread_boss() -> void:
 	_show_boss_ui(_get_dread_boss())
 	CombatFxScript.ring(fx_layer, player.global_position, Color(0.64, 1.0, 0.56, 0.92), 360.0, 0.9)
 	CombatFxScript.ring(fx_layer, player.global_position, Color(0.95, 0.5, 0.8, 0.72), 220.0, 0.7)
-	_flash_overlay_text("Король-Могила встал")
-	_flash_overlay_text("За ним не осталось живых подданных")
+	_flash_overlay_text(String(_current_chapter().get("boss_enter", "Король-Могила встал")))
+	_flash_overlay_text(String(_current_chapter().get("boss_lore", "За ним не осталось живых подданных")))
 	_start_screen_shake(0.64, 12.0)
 	for i in range(3):
 		_spawn_hazard_zone(player.position + Vector2.RIGHT.rotated(TAU * float(i) / 3.0 + randf_range(-0.35, 0.35)) * randf_range(170.0, 310.0))
@@ -1449,7 +1659,7 @@ func _on_enemy_died(enemy_position: Vector2, enemy_ref: Enemy = null, xp_value: 
 	shards.append(shard)
 	world.add_child(shard)
 	if was_miniboss:
-		_flash_overlay_text("Король-Могила пал" if xp_value >= 20 else "Могильный Страж повержен")
+		_flash_overlay_text(String(_current_chapter().get("boss_dead", "Король-Могила пал")) if xp_value >= 20 else "Могильный Страж повержен")
 		if xp_value >= 20:
 			grave_king_killed = true
 			_hide_boss_ui()
@@ -2290,9 +2500,10 @@ func _blade_upgrade_pick_count() -> int:
 	return blade_picks
 
 func _update_lore_events() -> void:
-	if lore_event_index >= LORE_EVENTS.size():
+	var events := _chapter_lore_events()
+	if lore_event_index >= events.size():
 		return
-	var lore_event: Dictionary = LORE_EVENTS[lore_event_index]
+	var lore_event: Dictionary = events[lore_event_index]
 	if elapsed >= float(lore_event["time"]):
 		lore_event_index += 1
 		_flash_overlay_text(String(lore_event["text"]))
@@ -2302,7 +2513,7 @@ func _show_game_over() -> void:
 		return
 	game_state = "game_over"
 	last_run_result = "Маска треснула, но проклятие запомнило тебя"
-	last_run_lore = _pick_lore_line(DEATH_LORE_LINES)
+	last_run_lore = _pick_lore_line(_chapter_death_lines())
 	_finish_run(false)
 	build_label.visible = false
 	joystick_base.visible = false
@@ -2316,7 +2527,7 @@ func _show_game_over() -> void:
 func _show_victory() -> void:
 	game_state = "victory"
 	last_run_result = "На миг Gravebloom отступил от сердца руин"
-	last_run_lore = _pick_lore_line(VICTORY_LORE_LINES)
+	last_run_lore = _pick_lore_line(_chapter_victory_lines())
 	_finish_run(true)
 	build_label.visible = false
 	joystick_base.visible = false
@@ -2331,6 +2542,7 @@ func _show_result_screen(victory: bool) -> void:
 	overlay_panel.visible = true
 	_clear_container(overlay_list)
 	_add_overlay_label("Победа" if victory else "Забег окончен", 34)
+	_add_overlay_label("Глава: %s" % String(_current_chapter()["name"]), 18)
 	_add_overlay_label(last_run_result, 20)
 	_add_overlay_label(last_run_lore, 18)
 	_add_overlay_label("Время: %s   Уровень: %d   Убийства: %d   Серия: x%d" % [_format_time(elapsed), level, kill_count, best_kill_streak], 18)
@@ -2370,6 +2582,7 @@ func _finish_run(victory: bool) -> void:
 		"codex": ", ".join(last_run_codex_unlocks),
 		"build": _format_relic_summary(),
 		"build_path": _current_build_path(true),
+		"chapter": String(_current_chapter()["name"]),
 		"date": Time.get_datetime_string_from_system(false, true),
 	}
 	run_history.insert(0, history_entry)
@@ -2580,6 +2793,7 @@ func _load_profile() -> void:
 		return
 	var data: Dictionary = parsed
 	profile_ash = int(data.get("ash", 0))
+	current_chapter_index = clampi(int(data.get("chapter_index", 0)), 0, CHAPTERS.size() - 1)
 	var upgrades: Variant = data.get("upgrades", {})
 	if typeof(upgrades) == TYPE_DICTIONARY:
 		for upgrade_id in META_UPGRADES.keys():
@@ -2603,6 +2817,7 @@ func _save_profile() -> void:
 	var data := {
 		"version": 2,
 		"ash": profile_ash,
+		"chapter_index": current_chapter_index,
 		"upgrades": profile_upgrades,
 		"stats": profile_stats,
 		"codex": codex_unlocked,
@@ -2635,6 +2850,7 @@ func _reset_profile_defaults() -> void:
 	}
 	codex_unlocked.clear()
 	run_history.clear()
+	current_chapter_index = 0
 
 func _profile_upgrade_level(upgrade_id: String) -> int:
 	return int(profile_upgrades.get(upgrade_id, 0))
@@ -2678,8 +2894,9 @@ func _format_history_entry(entry: Variant) -> String:
 		return ""
 	var title := "Победа" if bool(entry.get("victory", false)) else "Смерть"
 	var time_text := _format_time(float(entry.get("time", 0.0)))
-	return "%s  %s  ур.%d  убийств:%d  серия:x%d  +%d" % [
+	return "%s  %s  %s  ур.%d  убийств:%d  серия:x%d  +%d" % [
 		title,
+		String(entry.get("chapter", "Мертвый Сад")),
 		time_text,
 		int(entry.get("level", 1)),
 		int(entry.get("kills", 0)),
@@ -2692,7 +2909,8 @@ func _update_hud() -> void:
 	var health_value := 0
 	if player != null:
 		health_value = int(ceil(player.health))
-	hud.text = "GRAVEBLOOM\nУровень %d   Забег %s   До конца %s" % [
+	hud.text = "%s\nУровень %d   Забег %s   До конца %s" % [
+		String(_current_chapter()["name"]),
 		level,
 		_format_time(elapsed),
 		_format_time(remaining)
@@ -2735,6 +2953,7 @@ func _format_build_hud() -> String:
 func _show_boss_ui(boss: Enemy) -> void:
 	if boss == null:
 		return
+	boss_name_label.text = String(_current_chapter().get("boss_name", "КОРОЛЬ-МОГИЛА"))
 	boss_name_label.visible = true
 	boss_hp_bar.visible = true
 	boss_hp_bar.max_value = max(1, boss.max_health)
@@ -3241,7 +3460,7 @@ func _add_overlay_label(text: String, font_size: int) -> void:
 func _add_overlay_button(text: String, callback: Callable) -> void:
 	var button := Button.new()
 	button.text = text
-	button.custom_minimum_size = Vector2(360, 62)
+	button.custom_minimum_size = Vector2(410, 78) if text.contains("\n") else Vector2(360, 62)
 	button.pressed.connect(callback)
 	overlay_list.add_child(button)
 

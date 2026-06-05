@@ -14,7 +14,7 @@ Core fantasy:
 Core gameplay loop:
 
 ```text
-Start run -> move -> kite enemies -> auto-attack -> collect XP shards -> level up -> choose relic upgrades -> survive 3:00
+Choose chapter -> start run -> move -> kite enemies -> auto-attack -> collect XP shards -> level up -> choose relic upgrades -> survive 3:00
 ```
 
 ## Tech
@@ -93,7 +93,12 @@ scripts/
 
 `Main`:
 
+- Supports chapter selection before a run. The current first chapters are `Мертвый Сад` and `Пепельная Часовня`.
+- The selected chapter changes arena palette/decor, run lore lines, boss title/entrance/death lines, and light enemy pacing modifiers.
+- The selected chapter is saved in the local profile as `chapter_index`, so Web/TWA players keep their last chosen map.
+- New chapters should be real gameplay variants, not only menu labels: each chapter should eventually get its own palette, decor motifs, enemy pressure bias, boss identity, and short lore.
 - Builds a procedural ruined arena: stone floor tiles, cracks, rubble, gravestones, broken columns, graveblooms, cursed runes, drifting fog, and screen vignette.
+- `Пепельная Часовня` adds warmer ash tones, chapel arch debris, ember glows, faster enemies, and a higher runner/spitter chance.
 - Manages run states: start, running, upgrade, game_over, victory.
 - Spawns the player.
 - Spawns enemy waves.
