@@ -274,6 +274,7 @@ var joystick_direction := Vector2.ZERO
 var joystick_radius := 67.0
 var ambient_glows: Array[CanvasItem] = []
 var fog_wisps: Array[CanvasItem] = []
+var chapel_obstacles: Array[Rect2] = []
 var ambience_time := 0.0
 var ultimate_charge := 0.0
 var ultimate_ready := false
@@ -398,6 +399,7 @@ func _rebuild_arena() -> void:
 			child.queue_free()
 	ambient_glows.clear()
 	fog_wisps.clear()
+	chapel_obstacles.clear()
 	_build_arena()
 
 func _process(delta: float) -> void:
@@ -495,15 +497,17 @@ func _make_crack_points(length: float, point_count: int) -> PackedVector2Array:
 	return points
 
 func _build_ruins() -> void:
-	for i in range(22):
-		var base_position := Vector2(randf_range(-1750.0, 1750.0), randf_range(-1050.0, 1050.0))
-		if base_position.length() < 280.0:
-			base_position += base_position.normalized() * 320.0
-		if randf() < 0.48:
-			_add_broken_column(base_position)
-		else:
-			_add_gravestone(base_position, randf_range(0.8, 1.35))
-	for i in range(48):
+	if not _is_ashen_chapel():
+		for i in range(22):
+			var base_position := Vector2(randf_range(-1750.0, 1750.0), randf_range(-1050.0, 1050.0))
+			if base_position.length() < 280.0:
+				base_position += base_position.normalized() * 320.0
+			if randf() < 0.48:
+				_add_broken_column(base_position)
+			else:
+				_add_gravestone(base_position, randf_range(0.8, 1.35))
+	var rubble_count := 28 if _is_ashen_chapel() else 48
+	for i in range(rubble_count):
 		var rubble := ColorRect.new()
 		var rubble_color := _chapter_color("rubble", Color(0.12, 0.12, 0.135, 0.55))
 		rubble.color = Color(rubble_color.r, rubble_color.g, rubble_color.b, randf_range(0.35, 0.7))
@@ -515,59 +519,103 @@ func _build_ruins() -> void:
 		_build_chapel_debris()
 
 func _build_chapel_debris() -> void:
-	for aisle_index in range(-2, 3):
-		var aisle := Line2D.new()
-		aisle.width = 58.0 if aisle_index == 0 else 34.0
-		aisle.default_color = Color(0.12, 0.095, 0.1, 0.72)
-		aisle.points = PackedVector2Array([
-			Vector2(-1820.0, float(aisle_index) * 390.0),
-			Vector2(1820.0, float(aisle_index) * 390.0),
-		])
-		world.add_child(aisle)
-	for row in [-1, 1]:
-		for column_index in range(-8, 9):
-			var column_position := Vector2(float(column_index) * 220.0, float(row) * 410.0)
-			var shadow := _make_ellipse(54.0, 18.0, Color(0.0, 0.0, 0.0, 0.34), 16)
-			shadow.position = column_position + Vector2(10.0, 22.0)
-			world.add_child(shadow)
-			var column := Polygon2D.new()
-			column.color = Color(0.22, 0.18, 0.18, 0.92)
-			column.polygon = PackedVector2Array([
-				Vector2(-28.0, 34.0),
-				Vector2(-22.0, -42.0),
-				Vector2(-12.0, -62.0),
-				Vector2(12.0, -62.0),
-				Vector2(22.0, -42.0),
-				Vector2(28.0, 34.0),
-			])
-			column.position = column_position
-			world.add_child(column)
-			var column_glow := _make_ellipse(9.0, 5.0, Color(1.0, 0.55, 0.24, 0.5), 10)
-			column_glow.position = column_position + Vector2(0.0, -48.0)
-			world.add_child(column_glow)
-			ambient_glows.append(column_glow)
-	for i in range(14):
-		var arch := Line2D.new()
-		arch.width = randf_range(6.0, 10.0)
-		arch.default_color = Color(0.24, 0.19, 0.18, randf_range(0.42, 0.68))
-		arch.points = PackedVector2Array([
-			Vector2(-42.0, 34.0),
-			Vector2(-32.0, -18.0),
-			Vector2(0.0, -48.0),
-			Vector2(32.0, -18.0),
-			Vector2(42.0, 34.0),
-		])
-		arch.position = Vector2(randf_range(-1720.0, 1720.0), randf_range(-1040.0, 1040.0))
-		if arch.position.length() < 300.0:
-			arch.position += arch.position.normalized() * 360.0
-		arch.rotation = randf_range(-0.35, 0.35)
-		world.add_child(arch)
+	# The nave is the fast route. Side aisles and the transept give room to
+	# circle enemies, while pews and columns break up endless open kiting.
+	_add_chapel_floor_band(Vector2(0.0, 0.0), Vector2(3820.0, 330.0), Color(0.18, 0.125, 0.115, 0.56))
+	_add_chapel_floor_band(Vector2(0.0, -680.0), Vector2(3820.0, 250.0), Color(0.105, 0.078, 0.082, 0.7))
+	_add_chapel_floor_band(Vector2(0.0, 680.0), Vector2(3820.0, 250.0), Color(0.105, 0.078, 0.082, 0.7))
+	_add_chapel_floor_band(Vector2(260.0, 0.0), Vector2(430.0, 2360.0), Color(0.155, 0.105, 0.1, 0.5))
+	_add_chapel_floor_band(Vector2(1540.0, 0.0), Vector2(610.0, 920.0), Color(0.21, 0.135, 0.105, 0.62))
+
+	for side in [-1.0, 1.0]:
+		for x in [-1320.0, -940.0, -560.0]:
+			_add_chapel_obstacle(Vector2(x, side * 300.0), Vector2(245.0, 105.0), "pew")
+		for x in [-1540.0, -1120.0, -700.0, -280.0, 680.0, 1100.0]:
+			_add_chapel_obstacle(Vector2(x, side * 525.0), Vector2(92.0, 92.0), "column")
+		_add_chapel_obstacle(Vector2(520.0, side * 845.0), Vector2(600.0, 105.0), "wall")
+		_add_chapel_obstacle(Vector2(1280.0, side * 670.0), Vector2(420.0, 105.0), "wall")
+
+	_add_chapel_obstacle(Vector2(1785.0, -390.0), Vector2(170.0, 520.0), "altar_wall")
+	_add_chapel_obstacle(Vector2(1785.0, 390.0), Vector2(170.0, 520.0), "altar_wall")
+	_add_chapel_obstacle(Vector2(1580.0, 0.0), Vector2(250.0, 150.0), "altar")
+	_add_chapel_landmarks()
+
 	for i in range(26):
 		var ember := _make_ellipse(randf_range(5.0, 12.0), randf_range(2.0, 5.0), Color(1.0, 0.56, 0.24, randf_range(0.28, 0.5)), 8)
 		ember.position = Vector2(randf_range(-1860.0, 1860.0), randf_range(-1180.0, 1180.0))
 		ember.rotation = randf() * TAU
 		world.add_child(ember)
 		ambient_glows.append(ember)
+
+func _add_chapel_floor_band(center: Vector2, size: Vector2, color: Color) -> void:
+	var band := ColorRect.new()
+	band.color = color
+	band.size = size
+	band.position = center - size * 0.5
+	world.add_child(band)
+	var edge := Line2D.new()
+	edge.width = 4.0
+	edge.closed = true
+	edge.default_color = Color(0.52, 0.31, 0.22, 0.42)
+	edge.points = PackedVector2Array([
+		Vector2(-size.x, -size.y) * 0.5,
+		Vector2(size.x, -size.y) * 0.5,
+		Vector2(size.x, size.y) * 0.5,
+		Vector2(-size.x, size.y) * 0.5,
+	])
+	edge.position = center
+	world.add_child(edge)
+
+func _add_chapel_obstacle(center: Vector2, size: Vector2, kind: String) -> void:
+	var body := StaticBody2D.new()
+	body.position = center
+	body.collision_layer = 1
+	body.collision_mask = 0
+	world.add_child(body)
+	var collision := CollisionShape2D.new()
+	var shape := RectangleShape2D.new()
+	shape.size = size
+	collision.shape = shape
+	body.add_child(collision)
+	chapel_obstacles.append(Rect2(center - size * 0.5, size))
+
+	var shadow := ColorRect.new()
+	shadow.color = Color(0.0, 0.0, 0.0, 0.34)
+	shadow.size = size + Vector2(18.0, 18.0)
+	shadow.position = -shadow.size * 0.5 + Vector2(12.0, 18.0)
+	body.add_child(shadow)
+	var stone := ColorRect.new()
+	stone.color = Color(0.23, 0.17, 0.16, 0.96) if kind != "altar" else Color(0.32, 0.19, 0.14, 0.98)
+	stone.size = size
+	stone.position = -size * 0.5
+	body.add_child(stone)
+	var cap := ColorRect.new()
+	cap.color = Color(0.42, 0.27, 0.21, 0.72)
+	cap.size = Vector2(size.x, minf(14.0, size.y * 0.24))
+	cap.position = Vector2(-size.x * 0.5, -size.y * 0.5)
+	body.add_child(cap)
+	if kind in ["column", "altar"]:
+		var glow := _make_ellipse(minf(14.0, size.x * 0.18), 7.0, Color(1.0, 0.5, 0.2, 0.58), 12)
+		glow.position = Vector2(0.0, -size.y * 0.34)
+		body.add_child(glow)
+		ambient_glows.append(glow)
+
+func _add_chapel_landmarks() -> void:
+	for x in [-1780.0, 260.0, 1360.0]:
+		var threshold := Line2D.new()
+		threshold.width = 10.0
+		threshold.default_color = Color(0.62, 0.35, 0.22, 0.62)
+		threshold.points = PackedVector2Array([Vector2(0.0, -245.0), Vector2(0.0, 245.0)])
+		threshold.position = Vector2(x, 0.0)
+		world.add_child(threshold)
+	var altar_rune := Line2D.new()
+	altar_rune.width = 7.0
+	altar_rune.closed = true
+	altar_rune.default_color = Color(1.0, 0.48, 0.2, 0.66)
+	altar_rune.points = _make_ring_points(235.0, 24)
+	altar_rune.position = Vector2(1580.0, 0.0)
+	world.add_child(altar_rune)
+	ambient_glows.append(altar_rune)
 
 func _add_broken_column(base_position: Vector2) -> void:
 	var shadow := _make_ellipse(58.0, 18.0, Color(0.0, 0.0, 0.0, 0.24), 16)
@@ -1651,6 +1699,8 @@ func _spawn_dread_boss() -> void:
 	dread_boss_spawned = true
 	var spawn_direction := _get_player_motion_direction(Vector2.RIGHT.rotated(randf() * TAU))
 	var spawn_position := _get_offscreen_spawn_position(ENEMY_SPAWN_OFFSCREEN_MARGIN * 1.25, spawn_direction)
+	if _is_ashen_chapel():
+		spawn_position = Vector2(1350.0, 0.0)
 	_spawn_enemy("grave_king", true, spawn_position)
 	_show_boss_ui(_get_dread_boss())
 	CombatFxScript.ring(fx_layer, player.global_position, Color(1.0, 0.55, 0.22, 0.94) if _is_ashen_chapel() else Color(0.64, 1.0, 0.56, 0.92), 360.0, 0.9)
@@ -2412,9 +2462,36 @@ func _keep_player_inside_arena() -> void:
 	player.global_position = _clamp_to_arena(player.global_position)
 
 func _clamp_to_arena(position: Vector2) -> Vector2:
-	return Vector2(
+	var clamped := Vector2(
 		clamp(position.x, -ARENA_LIMIT_X, ARENA_LIMIT_X),
 		clamp(position.y, -ARENA_LIMIT_Y, ARENA_LIMIT_Y)
+	)
+	if not _is_ashen_chapel():
+		return clamped
+	return _push_out_of_chapel_obstacles(clamped, 42.0)
+
+func _push_out_of_chapel_obstacles(position: Vector2, clearance: float) -> Vector2:
+	var adjusted := position
+	for obstacle in chapel_obstacles:
+		var blocked := obstacle.grow(clearance)
+		if not blocked.has_point(adjusted):
+			continue
+		var left_distance := adjusted.x - blocked.position.x
+		var right_distance := blocked.end.x - adjusted.x
+		var top_distance := adjusted.y - blocked.position.y
+		var bottom_distance := blocked.end.y - adjusted.y
+		var nearest := minf(minf(left_distance, right_distance), minf(top_distance, bottom_distance))
+		if nearest == left_distance:
+			adjusted.x = blocked.position.x - 1.0
+		elif nearest == right_distance:
+			adjusted.x = blocked.end.x + 1.0
+		elif nearest == top_distance:
+			adjusted.y = blocked.position.y - 1.0
+		else:
+			adjusted.y = blocked.end.y + 1.0
+	return Vector2(
+		clamp(adjusted.x, -ARENA_LIMIT_X, ARENA_LIMIT_X),
+		clamp(adjusted.y, -ARENA_LIMIT_Y, ARENA_LIMIT_Y)
 	)
 
 func _scaled_player_damage(base_damage: int) -> int:

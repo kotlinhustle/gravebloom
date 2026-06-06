@@ -26,6 +26,8 @@ var separation_strength := 0.42
 var flank_side := 1.0
 var flank_distance := 150.0
 var flank_ahead := 135.0
+var obstacle_steer_timer := 0.0
+var obstacle_steer_direction := Vector2.ZERO
 
 @onready var art := $Art
 @onready var base_art_position: Vector2 = art.position
@@ -38,12 +40,16 @@ func _physics_process(delta: float) -> void:
 	anim_time += delta * (7.0 if not is_miniboss else 3.5)
 	var direction := global_position.direction_to(target.global_position)
 	rotation = direction.angle() + PI / 2.0
+	obstacle_steer_timer = maxf(0.0, obstacle_steer_timer - delta)
 	velocity = _movement_direction(direction, delta) * speed + knockback_velocity
 	knockback_velocity = knockback_velocity.move_toward(Vector2.ZERO, 900.0 * delta)
 	move_and_slide()
+	_update_obstacle_steering()
 	_animate_art(delta)
 
 func _movement_direction(direction: Vector2, delta: float) -> Vector2:
+	if obstacle_steer_timer > 0.0 and obstacle_steer_direction != Vector2.ZERO:
+		return _with_separation(obstacle_steer_direction)
 	if enemy_kind in ["flanker", "ash_ember"]:
 		return _flanker_direction(direction)
 	if enemy_kind not in ["spitter", "ash_bellringer"]:
@@ -58,6 +64,17 @@ func _movement_direction(direction: Vector2, delta: float) -> Vector2:
 	if distance > preferred_range:
 		return _with_separation(direction)
 	return _with_separation(Vector2.ZERO)
+
+func _update_obstacle_steering() -> void:
+	if get_slide_collision_count() <= 0 or target == null:
+		return
+	var collision := get_slide_collision(0)
+	var normal := collision.get_normal()
+	var tangent_a := normal.rotated(PI * 0.5)
+	var tangent_b := -tangent_a
+	var target_direction := global_position.direction_to(target.global_position)
+	obstacle_steer_direction = tangent_a if tangent_a.dot(target_direction) >= tangent_b.dot(target_direction) else tangent_b
+	obstacle_steer_timer = 0.42
 
 func _flanker_direction(direction: Vector2) -> Vector2:
 	var target_velocity := Vector2.ZERO

@@ -100,6 +100,8 @@ scripts/
 - New chapters should be real gameplay variants, not only menu labels: each chapter should eventually get its own palette, decor motifs, enemy pressure bias, boss identity, and short lore.
 - Builds a procedural ruined arena: stone floor tiles, cracks, rubble, gravestones, broken columns, graveblooms, cursed runes, drifting fog, and screen vignette.
 - `Пепельная Часовня` is a real gameplay variant: warmer ash tones, long nave/aisle marks, rows of chapel columns, arch debris, ember glows, faster enemies, and bell-ring hazard zones instead of Gravebloom flowers.
+- `Пепельная Часовня` now has deliberate level geometry: a fast central nave, roomy side aisles, a wide transept, an altar arena, and physical pew/column/wall obstacles. Keep every route wide enough for mobile movement and dense enemy waves; spawn positions and hazards are pushed out of obstacles.
+- Future maps should use distinct route topology, landmarks, and combat spaces rather than only different procedural decor.
 - Chapel-exclusive enemies are `Пепельный Послушник` (`ash_acolyte`, dense melee pressure), `Звонарь` (`ash_bellringer`, ranged pressure), and `Быстрый Уголь` (`ash_ember`, fast flanking explosive pressure).
 - The chapel final boss still uses the shared internal `grave_king` boss slot for compatibility, but appears as `Игумен Пепла` with its own generated `ash_abbot.png` sprite and distinct attack script: ash-wave fans, Last Bell rings, bell zones, chapel summons, and the `Кадило раскололось` second phase.
 - Manages run states: start, running, upgrade, game_over, victory.
