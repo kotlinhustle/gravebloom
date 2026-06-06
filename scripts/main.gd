@@ -101,7 +101,7 @@ const CHAPTERS := [
 		"id": "dead_garden",
 		"name": "Мертвый Сад",
 		"subtitle": "Руины первого двора, где Gravebloom пустил корни.",
-		"goal": "Продержись до рассвета.",
+		"goal": "Держись троп и не заходи глубоко в проклятые заросли.",
 		"palette": {
 			"bg": Color(0.028, 0.031, 0.034),
 			"floor": Color(0.064, 0.065, 0.074, 0.92),
@@ -274,7 +274,8 @@ var joystick_direction := Vector2.ZERO
 var joystick_radius := 67.0
 var ambient_glows: Array[CanvasItem] = []
 var fog_wisps: Array[CanvasItem] = []
-var chapel_obstacles: Array[Rect2] = []
+var arena_obstacles: Array[Rect2] = []
+var garden_thickets: Array[Node2D] = []
 var ambience_time := 0.0
 var ultimate_charge := 0.0
 var ultimate_ready := false
@@ -399,7 +400,8 @@ func _rebuild_arena() -> void:
 			child.queue_free()
 	ambient_glows.clear()
 	fog_wisps.clear()
-	chapel_obstacles.clear()
+	arena_obstacles.clear()
+	garden_thickets.clear()
 	_build_arena()
 
 func _process(delta: float) -> void:
@@ -432,6 +434,7 @@ func _process(delta: float) -> void:
 	_update_shadow_spirit(delta)
 	_update_bone_spears(delta)
 	_update_enemy_projectiles(delta)
+	_update_garden_thickets(delta)
 	_update_hazard_zones(delta)
 	_update_boss_attacks(delta)
 	_update_cluster_bloom(delta)
@@ -497,15 +500,6 @@ func _make_crack_points(length: float, point_count: int) -> PackedVector2Array:
 	return points
 
 func _build_ruins() -> void:
-	if not _is_ashen_chapel():
-		for i in range(22):
-			var base_position := Vector2(randf_range(-1750.0, 1750.0), randf_range(-1050.0, 1050.0))
-			if base_position.length() < 280.0:
-				base_position += base_position.normalized() * 320.0
-			if randf() < 0.48:
-				_add_broken_column(base_position)
-			else:
-				_add_gravestone(base_position, randf_range(0.8, 1.35))
 	var rubble_count := 28 if _is_ashen_chapel() else 48
 	for i in range(rubble_count):
 		var rubble := ColorRect.new()
@@ -517,6 +511,155 @@ func _build_ruins() -> void:
 		world.add_child(rubble)
 	if _is_ashen_chapel():
 		_build_chapel_debris()
+	else:
+		_build_dead_garden()
+
+func _build_dead_garden() -> void:
+	# The garden stays open and readable. Curved paths connect broad clearings,
+	# while short fences and dangerous thickets create choices without corridors.
+	_add_garden_path(PackedVector2Array([
+		Vector2(-1900.0, 520.0),
+		Vector2(-1250.0, 280.0),
+		Vector2(-620.0, 360.0),
+		Vector2(0.0, 80.0),
+		Vector2(720.0, -120.0),
+		Vector2(1360.0, 40.0),
+		Vector2(1920.0, -260.0),
+	]), 250.0)
+	_add_garden_path(PackedVector2Array([
+		Vector2(-1500.0, -1120.0),
+		Vector2(-1120.0, -520.0),
+		Vector2(-500.0, -180.0),
+		Vector2(0.0, 80.0),
+		Vector2(460.0, 620.0),
+		Vector2(1250.0, 1020.0),
+	]), 205.0)
+
+	for clearing in [
+		Vector2(-1220.0, 250.0),
+		Vector2(0.0, 80.0),
+		Vector2(1180.0, 20.0),
+		Vector2(520.0, 720.0),
+	]:
+		_add_garden_clearing(clearing)
+
+	_add_grave_plot(Vector2(-1220.0, -650.0), Vector2(620.0, 410.0), 10)
+	_add_grave_plot(Vector2(1040.0, 700.0), Vector2(680.0, 390.0), 11)
+	_add_grave_plot(Vector2(1320.0, -720.0), Vector2(520.0, 350.0), 8)
+	_add_grave_plot(Vector2(-520.0, 900.0), Vector2(500.0, 300.0), 7)
+
+	_add_garden_fence(Vector2(-1510.0, -470.0), Vector2(410.0, 58.0), -0.18)
+	_add_garden_fence(Vector2(-960.0, -880.0), Vector2(370.0, 58.0), 0.26)
+	_add_garden_fence(Vector2(820.0, 480.0), Vector2(390.0, 58.0), -0.22)
+	_add_garden_fence(Vector2(1420.0, 470.0), Vector2(350.0, 58.0), 0.2)
+	_add_garden_fence(Vector2(1280.0, -470.0), Vector2(310.0, 58.0), -0.12)
+
+	_add_garden_thicket(Vector2(-1680.0, 950.0), Vector2(300.0, 175.0), -0.2)
+	_add_garden_thicket(Vector2(-520.0, -920.0), Vector2(390.0, 180.0), 0.3)
+	_add_garden_thicket(Vector2(520.0, -720.0), Vector2(330.0, 165.0), -0.25)
+	_add_garden_thicket(Vector2(1660.0, 870.0), Vector2(360.0, 190.0), 0.18)
+
+func _add_garden_path(points: PackedVector2Array, width: float) -> void:
+	var border := Line2D.new()
+	border.width = width + 34.0
+	border.default_color = Color(0.025, 0.04, 0.032, 0.62)
+	border.joint_mode = Line2D.LINE_JOINT_ROUND
+	border.points = points
+	world.add_child(border)
+	var path := Line2D.new()
+	path.width = width
+	path.default_color = Color(0.12, 0.135, 0.125, 0.84)
+	path.joint_mode = Line2D.LINE_JOINT_ROUND
+	path.points = points
+	world.add_child(path)
+
+func _add_garden_clearing(center: Vector2) -> void:
+	var clearing := _make_ellipse(260.0, 175.0, Color(0.115, 0.13, 0.12, 0.68), 28)
+	clearing.position = center
+	world.add_child(clearing)
+	var ring := Line2D.new()
+	ring.width = 5.0
+	ring.closed = true
+	ring.default_color = Color(0.3, 0.38, 0.32, 0.28)
+	ring.points = _make_ring_points(205.0, 28)
+	ring.scale.y = 0.68
+	ring.position = center
+	world.add_child(ring)
+
+func _add_grave_plot(center: Vector2, size: Vector2, grave_count: int) -> void:
+	var plot := ColorRect.new()
+	plot.color = Color(0.025, 0.04, 0.032, 0.38)
+	plot.size = size
+	plot.position = center - size * 0.5
+	world.add_child(plot)
+	for i in range(grave_count):
+		var columns := maxi(2, int(ceil(sqrt(float(grave_count)))))
+		var row := i / columns
+		var column := i % columns
+		var spacing := Vector2(size.x / float(columns + 1), 112.0)
+		var grave_position := center - size * 0.5 + Vector2(spacing.x * float(column + 1), 78.0 + spacing.y * float(row))
+		grave_position += Vector2(randf_range(-16.0, 16.0), randf_range(-12.0, 12.0))
+		_add_gravestone(grave_position, randf_range(0.72, 1.05))
+
+func _add_garden_fence(center: Vector2, size: Vector2, rotation_value: float) -> void:
+	var body := StaticBody2D.new()
+	body.position = center
+	body.rotation = rotation_value
+	body.collision_layer = 1
+	body.collision_mask = 0
+	world.add_child(body)
+	var collision := CollisionShape2D.new()
+	var shape := RectangleShape2D.new()
+	shape.size = size
+	collision.shape = shape
+	body.add_child(collision)
+	for rail_y in [-15.0, 15.0]:
+		var rail := ColorRect.new()
+		rail.color = Color(0.16, 0.17, 0.17, 0.92)
+		rail.size = Vector2(size.x, 9.0)
+		rail.position = Vector2(-size.x * 0.5, rail_y - 4.5)
+		body.add_child(rail)
+	for x in range(int(-size.x * 0.5), int(size.x * 0.5) + 1, 70):
+		var post := ColorRect.new()
+		post.color = Color(0.25, 0.27, 0.26, 0.96)
+		post.size = Vector2(11.0, size.y + 18.0)
+		post.position = Vector2(float(x) - 5.5, -size.y * 0.5 - 9.0)
+		body.add_child(post)
+
+func _add_garden_thicket(center: Vector2, size: Vector2, rotation_value: float) -> void:
+	var thicket := Node2D.new()
+	thicket.position = center
+	thicket.rotation = rotation_value
+	thicket.z_index = 2
+	thicket.set_meta("size", size)
+	thicket.set_meta("phase", randf() * TAU)
+	world.add_child(thicket)
+	garden_thickets.append(thicket)
+	var shadow := _make_ellipse(size.x * 0.54, size.y * 0.54, Color(0.015, 0.055, 0.028, 0.76), 26)
+	shadow.name = "Shadow"
+	thicket.add_child(shadow)
+	var edge := Line2D.new()
+	edge.name = "Edge"
+	edge.width = 6.0
+	edge.closed = true
+	edge.default_color = Color(0.34, 0.78, 0.42, 0.58)
+	for i in range(28):
+		var angle := TAU * float(i) / 28.0
+		var wobble := 0.82 + sin(float(i) * 2.7) * 0.12
+		edge.add_point(Vector2(cos(angle) * size.x * 0.5 * wobble, sin(angle) * size.y * 0.5 * wobble))
+	thicket.add_child(edge)
+	for i in range(15):
+		var thorn := Line2D.new()
+		thorn.width = 4.0
+		thorn.default_color = Color(0.22, 0.56, 0.3, 0.8)
+		var origin := Vector2(randf_range(-size.x * 0.42, size.x * 0.42), randf_range(-size.y * 0.36, size.y * 0.36))
+		thorn.points = PackedVector2Array([origin, origin + Vector2(randf_range(-30.0, 30.0), randf_range(-38.0, 38.0))])
+		thicket.add_child(thorn)
+	for i in range(8):
+		var bloom := _make_ellipse(7.0, 5.0, Color(0.62, 1.0, 0.48, 0.72), 8)
+		bloom.position = Vector2(randf_range(-size.x * 0.38, size.x * 0.38), randf_range(-size.y * 0.32, size.y * 0.32))
+		thicket.add_child(bloom)
+		ambient_glows.append(bloom)
 
 func _build_chapel_debris() -> void:
 	# The nave is the fast route. Side aisles and the transept give room to
@@ -577,7 +720,7 @@ func _add_chapel_obstacle(center: Vector2, size: Vector2, kind: String) -> void:
 	shape.size = size
 	collision.shape = shape
 	body.add_child(collision)
-	chapel_obstacles.append(Rect2(center - size * 0.5, size))
+	arena_obstacles.append(Rect2(center - size * 0.5, size))
 
 	var shadow := ColorRect.new()
 	shadow.color = Color(0.0, 0.0, 0.0, 0.34)
@@ -1956,6 +2099,31 @@ func _update_spitter_projectile_visual(projectile: Node2D, delta: float) -> void
 	if core != null:
 		core.scale = Vector2.ONE * (1.0 + sin(age * 16.0) * 0.08)
 
+func _update_garden_thickets(delta: float) -> void:
+	if _is_ashen_chapel() or player == null:
+		return
+	for thicket in garden_thickets:
+		if not is_instance_valid(thicket):
+			continue
+		var phase := float(thicket.get_meta("phase", 0.0)) + delta * 1.4
+		thicket.set_meta("phase", phase)
+		var edge := thicket.get_node_or_null("Edge") as CanvasItem
+		if edge != null:
+			edge.modulate.a = 0.72 + sin(phase) * 0.22
+		var size := Vector2(thicket.get_meta("size", Vector2(300.0, 170.0)))
+		var local_player := thicket.to_local(player.global_position)
+		var normalized_distance := Vector2(
+			local_player.x / maxf(size.x * 0.5, 1.0),
+			local_player.y / maxf(size.y * 0.5, 1.0)
+		).length()
+		if normalized_distance >= 1.0:
+			continue
+		_damage_player(7.0 * delta)
+		if randf() < delta * 3.5:
+			CombatFxScript.sparkle(fx_layer, player.global_position, Color(0.58, 1.0, 0.42, 0.76), 0.12)
+		if player.is_dead:
+			_show_game_over()
+
 func _update_hazard_zones(delta: float) -> void:
 	if elapsed >= HAZARD_START_TIME and player != null:
 		hazard_timer -= delta
@@ -2466,13 +2634,11 @@ func _clamp_to_arena(position: Vector2) -> Vector2:
 		clamp(position.x, -ARENA_LIMIT_X, ARENA_LIMIT_X),
 		clamp(position.y, -ARENA_LIMIT_Y, ARENA_LIMIT_Y)
 	)
-	if not _is_ashen_chapel():
-		return clamped
-	return _push_out_of_chapel_obstacles(clamped, 42.0)
+	return _push_out_of_arena_obstacles(clamped, 42.0)
 
-func _push_out_of_chapel_obstacles(position: Vector2, clearance: float) -> Vector2:
+func _push_out_of_arena_obstacles(position: Vector2, clearance: float) -> Vector2:
 	var adjusted := position
-	for obstacle in chapel_obstacles:
+	for obstacle in arena_obstacles:
 		var blocked := obstacle.grow(clearance)
 		if not blocked.has_point(adjusted):
 			continue
