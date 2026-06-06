@@ -64,6 +64,7 @@ assets/
     enemy_brute.png
     grave_warden.png
     grave_king.png
+    ash_abbot.png
     living_blade.png
     xp_shard.png
 scenes/
@@ -98,13 +99,15 @@ scripts/
 - The selected chapter is saved in the local profile as `chapter_index`, so Web/TWA players keep their last chosen map.
 - New chapters should be real gameplay variants, not only menu labels: each chapter should eventually get its own palette, decor motifs, enemy pressure bias, boss identity, and short lore.
 - Builds a procedural ruined arena: stone floor tiles, cracks, rubble, gravestones, broken columns, graveblooms, cursed runes, drifting fog, and screen vignette.
-- `Пепельная Часовня` adds warmer ash tones, chapel arch debris, ember glows, faster enemies, and a higher runner/spitter chance.
+- `Пепельная Часовня` is a real gameplay variant: warmer ash tones, long nave/aisle marks, rows of chapel columns, arch debris, ember glows, faster enemies, and bell-ring hazard zones instead of Gravebloom flowers.
+- Chapel-exclusive enemies are `Пепельный Послушник` (`ash_acolyte`, dense melee pressure), `Звонарь` (`ash_bellringer`, ranged pressure), and `Быстрый Уголь` (`ash_ember`, fast flanking explosive pressure).
+- The chapel final boss still uses the shared internal `grave_king` boss slot for compatibility, but appears as `Игумен Пепла` with its own generated `ash_abbot.png` sprite and distinct attack script: ash-wave fans, Last Bell rings, bell zones, chapel summons, and the `Кадило раскололось` second phase.
 - Manages run states: start, running, upgrade, game_over, victory.
 - Spawns the player.
 - Spawns enemy waves.
 - Regular enemies should spawn just outside the current camera view and walk in from the screen edge, not materialize inside the active screen.
 - Enemy waves now mix roles: crawler, brute, fast runner, flanker, ranged spitter, explosive enemy, final-minute boss, and miniboss.
-- Enemy roles are visually marked in code: brutes get armor rings, runners get small speed wings, spitters get purple aim marks, and exploders get orange danger marks.
+- Enemy role indicators are intentionally restrained. Ordinary enemies and bellringers rely on their sprite silhouette; spitters and fast embers get only a small overhead mark, exploders keep only a muted danger ring, and miniboss/boss rings are subdued. Avoid lighting every enemy at once.
 - Enemies use light separation so they do not collapse into one harmless blob during circular kiting.
 - Spitters use predictive shots, flankers try to cut ahead/sideways, and after the first minute occasional interceptors spawn ahead of the player's movement to break endless clockwise/counterclockwise kiting.
 - A pressure director keeps the fight populated around the player: it counts nearby/on-screen threats, spawns edge pressure if the active screen goes empty, and recycles far non-boss enemies when the global enemy cap is filled by harmless distant mobs.
@@ -124,6 +127,7 @@ scripts/
 - Owns enemy and XP shard lists.
 - Updates XP collection, level-ups, randomized relic choices, HUD, XP bar, result screens, enemy contact damage, and enemy projectiles.
 - Handles screen shake, XP sparkles, and Shadow Spirit secondary weapon.
+- Screen shake is applied through `Player/Camera2D.offset`, not by moving `world` with its child camera. Low-intensity events are ignored, strong events are scaled/capped, and offsets are smoothed.
 - Handles Gravebloom Nova ultimate charge, UI indicator, staged 85/90/97% visual/audio cues around the player, radial damage, knockback, and burst FX.
 - Relics currently include blade damage/cooldown/range, Shadow Spirit, XP magnet, vampiric healing, Nova upgrades, and thorn retaliation.
 - `Кровавый Цветок` can heal from Nova kills, but Nova-triggered vampirism is capped per ultimate cast so the combo does not become a full heal button.
@@ -192,6 +196,7 @@ scripts/
 - Local profile data is saved to `user://save.json`; in Web/TWA this is browser/WebView local storage, not a backend-backed account.
 - The profile screen shows total `Пепел`, permanent upgrades, and a short history of recent runs.
 - Permanent upgrades currently include stronger starting HP, starting Living Blade damage, starting XP magnet range, and faster Nova charge.
+- Permanent upgrades remain beneficial but partially wake the ruins: total profile upgrade levels modestly increase enemy HP/speed/contact damage, late-run wave density, pressure-director targets, and boss HP. This prevents a highly upgraded profile from trivializing runs without fully cancelling progression.
 - Each run now rolls 3 short objectives shown on the start screen. Objectives track actions such as kills, level, seeing/killing `Король-Могила`, collecting health packs, casting Nova, unlocking auto-weapons, and evolving `Кровавый Клинок`.
 - Completed run objectives award bonus `Пепел`, appear on the result screen, and store their bonus in run history.
 - `Летопись Маски` is a profile/codex screen available from the start screen and profile. It stores cumulative stats in `user://save.json`, unlocks short lore entries for milestone achievements, and gives one-time `Пепел` rewards for new entries.

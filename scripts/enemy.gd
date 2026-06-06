@@ -44,9 +44,9 @@ func _physics_process(delta: float) -> void:
 	_animate_art(delta)
 
 func _movement_direction(direction: Vector2, delta: float) -> Vector2:
-	if enemy_kind == "flanker":
+	if enemy_kind in ["flanker", "ash_ember"]:
 		return _flanker_direction(direction)
-	if enemy_kind != "spitter":
+	if enemy_kind not in ["spitter", "ash_bellringer"]:
 		return _with_separation(direction)
 	var distance := global_position.distance_to(target.global_position)
 	spit_timer -= delta

@@ -9,6 +9,7 @@ const EnemyCrawlerTexture := preload("res://assets/sprites/enemy_crawler.png")
 const EnemyBruteTexture := preload("res://assets/sprites/enemy_brute.png")
 const GraveWardenTexture := preload("res://assets/sprites/grave_warden.png")
 const GraveKingTexture := preload("res://assets/sprites/grave_king.png")
+const AshAbbotTexture := preload("res://assets/sprites/ash_abbot.png")
 
 const RUN_DURATION := 180.0
 const DREAD_BOSS_TIME := 120.0
@@ -29,6 +30,13 @@ const MAX_RELIC_CHOICES := 3
 const HEALTH_PACK_DROP_CHANCE := 0.07
 const EXECUTION_HEALTH_PACK_CHANCE := 0.34
 const KILL_STREAK_WINDOW := 3.2
+const SCREEN_SHAKE_SCALE := 0.62
+const SCREEN_SHAKE_DURATION_SCALE := 0.74
+const SCREEN_SHAKE_MIN_INTENSITY := 2.8
+const SCREEN_SHAKE_MAX_INTENSITY := 8.0
+const PROFILE_DIFFICULTY_HEALTH_STEP := 0.18
+const PROFILE_DIFFICULTY_DAMAGE_STEP := 0.007
+const PROFILE_DIFFICULTY_SPEED_STEP := 0.003
 const HEALTH_PACK_HEAL := 16.0
 const PLAYER_LEVEL_HEALTH_GAIN := 6.0
 const PLAYER_LEVEL_HEAL := 18.0
@@ -381,6 +389,9 @@ func _chapter_enemy_health_bonus() -> int:
 func _chapter_chance_bonus(bonus_id: String) -> float:
 	return float(_current_chapter().get(bonus_id, 0.0))
 
+func _is_ashen_chapel() -> bool:
+	return String(_current_chapter().get("id", "")) == "ashen_chapel"
+
 func _rebuild_arena() -> void:
 	for child in world.get_children():
 		if child != player and child != living_blade:
@@ -411,7 +422,7 @@ func _process(delta: float) -> void:
 	spawn_timer -= delta
 	if spawn_timer <= 0.0:
 		_spawn_enemy_wave()
-		spawn_timer = max(0.32, 1.18 - elapsed * 0.006)
+		spawn_timer = max(0.28, 1.18 - elapsed * 0.006 - float(_profile_pressure_tier()) * 0.018)
 	_update_pressure_director(delta)
 	_update_anti_kite_pressure(delta)
 	living_blade.tick(delta, enemies)
@@ -500,10 +511,41 @@ func _build_ruins() -> void:
 		rubble.position = Vector2(randf_range(-1900.0, 1900.0), randf_range(-1250.0, 1250.0))
 		rubble.rotation = randf() * TAU
 		world.add_child(rubble)
-	if String(_current_chapter().get("id", "")) == "ashen_chapel":
+	if _is_ashen_chapel():
 		_build_chapel_debris()
 
 func _build_chapel_debris() -> void:
+	for aisle_index in range(-2, 3):
+		var aisle := Line2D.new()
+		aisle.width = 58.0 if aisle_index == 0 else 34.0
+		aisle.default_color = Color(0.12, 0.095, 0.1, 0.72)
+		aisle.points = PackedVector2Array([
+			Vector2(-1820.0, float(aisle_index) * 390.0),
+			Vector2(1820.0, float(aisle_index) * 390.0),
+		])
+		world.add_child(aisle)
+	for row in [-1, 1]:
+		for column_index in range(-8, 9):
+			var column_position := Vector2(float(column_index) * 220.0, float(row) * 410.0)
+			var shadow := _make_ellipse(54.0, 18.0, Color(0.0, 0.0, 0.0, 0.34), 16)
+			shadow.position = column_position + Vector2(10.0, 22.0)
+			world.add_child(shadow)
+			var column := Polygon2D.new()
+			column.color = Color(0.22, 0.18, 0.18, 0.92)
+			column.polygon = PackedVector2Array([
+				Vector2(-28.0, 34.0),
+				Vector2(-22.0, -42.0),
+				Vector2(-12.0, -62.0),
+				Vector2(12.0, -62.0),
+				Vector2(22.0, -42.0),
+				Vector2(28.0, 34.0),
+			])
+			column.position = column_position
+			world.add_child(column)
+			var column_glow := _make_ellipse(9.0, 5.0, Color(1.0, 0.55, 0.24, 0.5), 10)
+			column_glow.position = column_position + Vector2(0.0, -48.0)
+			world.add_child(column_glow)
+			ambient_glows.append(column_glow)
 	for i in range(14):
 		var arch := Line2D.new()
 		arch.width = randf_range(6.0, 10.0)
@@ -892,6 +934,8 @@ func _show_start_screen() -> void:
 	_add_overlay_label("Королевство умерло, но его цветы продолжают расти.", 19)
 	_add_overlay_label(String(chapter["goal"]), 20)
 	_add_overlay_label("Пепел профиля: %d" % profile_ash, 18)
+	if _profile_pressure_tier() > 0:
+		_add_overlay_label("Руины чувствуют силу Маски и отвечают более опасными волнами.", 14)
 	_add_overlay_button("Начать забег", _start_run)
 	_add_overlay_button("Выбрать главу", _show_chapter_screen)
 	_add_overlay_button("Справка", _show_help_screen)
@@ -1120,6 +1164,8 @@ func _spawn_enemy_wave() -> void:
 	if available_slots <= 0:
 		return
 	var count: int = 1 + int(elapsed / 24.0)
+	if _profile_pressure_tier() >= 4 and elapsed >= 55.0:
+		count += 1
 	count = min(count, available_slots)
 	for i in range(count):
 		_spawn_enemy(_pick_enemy_kind(), false)
@@ -1139,11 +1185,12 @@ func _update_anti_kite_pressure(delta: float) -> void:
 		interceptors = 2
 	for i in range(min(interceptors, available_slots)):
 		var roll := randf()
-		var kind := "flanker"
-		if roll < 0.24:
-			kind = "exploder"
-		elif roll < 0.58:
-			kind = "runner"
+		var kind := "ash_ember" if _is_ashen_chapel() else "flanker"
+		if not _is_ashen_chapel():
+			if roll < 0.24:
+				kind = "exploder"
+			elif roll < 0.58:
+				kind = "runner"
 		_spawn_enemy(kind, false, _get_interceptor_position(i))
 
 func _update_pressure_director(delta: float) -> void:
@@ -1181,13 +1228,14 @@ func _count_active_threats_near_player() -> int:
 	return count
 
 func _target_active_threats() -> int:
+	var profile_pressure: int = mini(4, int(_profile_pressure_tier() / 2))
 	if elapsed >= DREAD_BOSS_TIME:
-		return 14
+		return 14 + profile_pressure
 	if elapsed >= 90.0:
-		return 10
+		return 10 + profile_pressure
 	if elapsed >= 58.0:
-		return 7
-	return 5
+		return 7 + profile_pressure
+	return 5 + mini(2, profile_pressure)
 
 func _recycle_far_pressure_enemies(needed_slots: int) -> int:
 	if needed_slots <= 0:
@@ -1220,6 +1268,12 @@ func _get_far_recyclable_enemies() -> Array[Enemy]:
 	return far_enemies
 
 func _pick_pressure_enemy_kind(index: int) -> String:
+	if _is_ashen_chapel():
+		if elapsed >= DREAD_BOSS_TIME:
+			return "ash_ember" if index == 0 else ("ash_bellringer" if randf() < 0.52 else "ash_acolyte")
+		if elapsed >= 75.0 and randf() < 0.5:
+			return "ash_ember" if index % 2 == 0 else "ash_bellringer"
+		return _pick_enemy_kind()
 	if elapsed >= DREAD_BOSS_TIME:
 		if index == 0:
 			return "flanker"
@@ -1244,6 +1298,15 @@ func _get_pressure_spawn_position(index: int) -> Vector2:
 	return _get_offscreen_spawn_position(ENEMY_SPAWN_OFFSCREEN_MARGIN * 0.58, direction)
 
 func _pick_enemy_kind() -> String:
+	if _is_ashen_chapel():
+		var chapel_roll := randf()
+		if elapsed > 64.0 and chapel_roll < min(0.2, 0.07 + elapsed / 900.0):
+			return "ash_ember"
+		if elapsed > 38.0 and chapel_roll < min(0.42, 0.15 + elapsed / 650.0):
+			return "ash_bellringer"
+		if chapel_roll < 0.76:
+			return "ash_acolyte"
+		return "brute"
 	if elapsed > 58.0 and randf() < min(0.18, 0.05 + elapsed / 760.0):
 		return "flanker"
 	if elapsed > 70.0 and randf() < 0.08:
@@ -1295,6 +1358,29 @@ func _spawn_enemy(enemy_kind: String, is_miniboss: bool, spawn_position := Vecto
 		enemy.scale = Vector2.ONE * 1.05
 		enemy.contact_damage = 30.0
 		enemy.xp_value = 2
+	elif enemy_kind == "ash_acolyte":
+		enemy.max_health += 2
+		enemy.speed *= 0.92
+		enemy.scale = Vector2.ONE * 1.08
+		enemy.contact_damage = 21.0
+	elif enemy_kind == "ash_bellringer":
+		enemy.max_health += 4
+		enemy.speed *= 0.7
+		enemy.scale = Vector2.ONE * 1.28
+		enemy.xp_value = 2
+		enemy.contact_damage = 13.0
+		enemy.preferred_range = 340.0
+		enemy.spit_cooldown = randf_range(2.6, 3.4)
+		enemy.spit_timer = randf_range(0.9, 1.8)
+	elif enemy_kind == "ash_ember":
+		enemy.max_health += 1
+		enemy.speed *= 1.72
+		enemy.scale = Vector2.ONE * 0.72
+		enemy.contact_damage = 34.0
+		enemy.xp_value = 2
+		enemy.flank_side = -1.0 if randf() < 0.5 else 1.0
+		enemy.flank_distance = randf_range(70.0, 120.0)
+		enemy.flank_ahead = randf_range(155.0, 240.0)
 	elif enemy_kind == "grave_king":
 		enemy.max_health = 78 + int(elapsed / 6.0) + _chapter_enemy_health_bonus() * 8
 		enemy.speed = 142.0 * _chapter_enemy_speed_multiplier()
@@ -1310,6 +1396,12 @@ func _spawn_enemy(enemy_kind: String, is_miniboss: bool, spawn_position := Vecto
 			enemy.scale = Vector2.ONE * 2.25
 			enemy.xp_value = 12
 			enemy.contact_damage = 32.0
+	var profile_power := _profile_power_level()
+	enemy.max_health += int(floor(float(profile_power) * PROFILE_DIFFICULTY_HEALTH_STEP))
+	enemy.speed *= 1.0 + float(profile_power) * PROFILE_DIFFICULTY_SPEED_STEP
+	enemy.contact_damage *= 1.0 + float(profile_power) * PROFILE_DIFFICULTY_DAMAGE_STEP
+	if enemy.enemy_kind == "grave_king":
+		enemy.max_health += profile_power * 2
 	_set_enemy_art(enemy, enemy.enemy_kind, is_miniboss)
 	enemy.base_scale = enemy.scale
 	enemy.health = enemy.max_health
@@ -1418,12 +1510,26 @@ func _set_enemy_art(enemy: Enemy, enemy_kind: String, is_miniboss: bool) -> void
 	if art == null:
 		return
 	if enemy_kind == "grave_king":
-		art.texture = GraveKingTexture
-		art.scale = Vector2(0.24, 0.24)
-		art.modulate = Color(0.82, 0.92, 0.86)
+		art.texture = AshAbbotTexture if _is_ashen_chapel() else GraveKingTexture
+		art.scale = Vector2(0.235, 0.235) if _is_ashen_chapel() else Vector2(0.24, 0.24)
+		art.modulate = Color.WHITE if _is_ashen_chapel() else Color(0.82, 0.92, 0.86)
 	elif is_miniboss:
 		art.texture = GraveWardenTexture
 		art.scale = Vector2(0.2, 0.2)
+		if _is_ashen_chapel():
+			art.modulate = Color(0.88, 0.58, 0.38)
+	elif enemy_kind == "ash_acolyte":
+		art.texture = GraveWardenTexture
+		art.scale = Vector2(0.105, 0.105)
+		art.modulate = Color(0.68, 0.55, 0.5)
+	elif enemy_kind == "ash_bellringer":
+		art.texture = EnemyBruteTexture
+		art.scale = Vector2(0.17, 0.17)
+		art.modulate = Color(0.94, 0.62, 0.32)
+	elif enemy_kind == "ash_ember":
+		art.texture = EnemyCrawlerTexture
+		art.scale = Vector2(0.18, 0.18)
+		art.modulate = Color(1.0, 0.42, 0.18)
 	elif enemy_kind == "brute":
 		art.texture = EnemyBruteTexture
 		art.scale = Vector2(0.19, 0.19)
@@ -1450,61 +1556,33 @@ func _set_enemy_art(enemy: Enemy, enemy_kind: String, is_miniboss: bool) -> void
 
 func _add_enemy_role_markers(enemy: Enemy, enemy_kind: String) -> void:
 	match enemy_kind:
-		"brute":
-			_add_enemy_ring(enemy, Color(0.95, 0.58, 0.72, 0.55), 31.0, 4.0)
-			_add_enemy_mark(enemy, Color(0.95, 0.58, 0.72, 0.86), PackedVector2Array([
-				Vector2(-14, -35),
-				Vector2(14, -35),
-				Vector2(8, -27),
-				Vector2(-8, -27),
-			]))
-		"runner":
-			_add_enemy_speed_wings(enemy, Color(0.68, 1.0, 0.92, 0.62))
-			_add_enemy_mark(enemy, Color(0.68, 1.0, 0.92, 0.92), PackedVector2Array([
-				Vector2(0, -42),
-				Vector2(13, -28),
-				Vector2(3, -31),
-				Vector2(7, -20),
-				Vector2(-10, -35),
-			]))
-		"flanker":
-			_add_enemy_speed_wings(enemy, Color(1.0, 0.92, 0.58, 0.62))
-			_add_enemy_mark(enemy, Color(1.0, 0.9, 0.52, 0.9), PackedVector2Array([
-				Vector2(-13, -36),
-				Vector2(13, -36),
-				Vector2(3, -24),
-				Vector2(13, -16),
-				Vector2(-13, -16),
-				Vector2(-3, -24),
-			]))
 		"spitter":
-			_add_enemy_ring(enemy, Color(0.82, 0.52, 1.0, 0.58), 27.0, 3.0)
-			_add_enemy_mark(enemy, Color(0.86, 0.62, 1.0, 0.9), PackedVector2Array([
+			_add_enemy_mark(enemy, Color(0.86, 0.62, 1.0, 0.72), PackedVector2Array([
 				Vector2(0, -43),
-				Vector2(13, -31),
-				Vector2(0, -25),
-				Vector2(-13, -31),
+				Vector2(8, -33),
+				Vector2(0, -29),
+				Vector2(-8, -33),
 			]))
 		"exploder":
-			_add_enemy_ring(enemy, Color(1.0, 0.58, 0.28, 0.72), 34.0, 5.0)
-			_add_enemy_mark(enemy, Color(1.0, 0.72, 0.34, 0.95), PackedVector2Array([
-				Vector2(0, -45),
-				Vector2(9, -34),
-				Vector2(20, -33),
-				Vector2(11, -25),
-				Vector2(14, -14),
-				Vector2(0, -20),
-				Vector2(-14, -14),
-				Vector2(-11, -25),
-				Vector2(-20, -33),
-				Vector2(-9, -34),
+			_add_enemy_ring(enemy, Color(1.0, 0.58, 0.28, 0.48), 34.0, 4.0)
+		"ash_bellringer":
+			pass
+		"ash_ember":
+			_add_enemy_mark(enemy, Color(1.0, 0.58, 0.2, 0.78), PackedVector2Array([
+				Vector2(0, -48),
+				Vector2(8, -34),
+				Vector2(2, -36),
+				Vector2(8, -24),
+				Vector2(-7, -33),
 			]))
 		"miniboss":
-			_add_enemy_ring(enemy, Color(0.9, 0.48, 0.72, 0.7), 45.0, 5.0)
+			_add_enemy_ring(enemy, Color(0.9, 0.48, 0.72, 0.48), 45.0, 4.0)
 		"grave_king":
-			_add_enemy_ring(enemy, Color(0.62, 1.0, 0.58, 0.82), 62.0, 7.0)
-			_add_enemy_ring(enemy, Color(0.95, 0.52, 0.86, 0.58), 78.0, 4.0)
-			_add_enemy_mark(enemy, Color(0.76, 1.0, 0.62, 0.96), PackedVector2Array([
+			var boss_primary := Color(1.0, 0.55, 0.24, 0.88) if _is_ashen_chapel() else Color(0.62, 1.0, 0.58, 0.82)
+			var boss_secondary := Color(0.5, 0.16, 0.08, 0.72) if _is_ashen_chapel() else Color(0.95, 0.52, 0.86, 0.58)
+			_add_enemy_ring(enemy, Color(boss_primary.r, boss_primary.g, boss_primary.b, 0.56), 62.0, 5.0)
+			_add_enemy_ring(enemy, Color(boss_secondary.r, boss_secondary.g, boss_secondary.b, 0.38), 78.0, 3.0)
+			_add_enemy_mark(enemy, boss_primary, PackedVector2Array([
 				Vector2(0, -76),
 				Vector2(18, -48),
 				Vector2(9, -52),
@@ -1564,9 +1642,9 @@ func _add_enemy_speed_wings(enemy: Enemy, color: Color) -> void:
 func _spawn_miniboss() -> void:
 	miniboss_spawned = true
 	_spawn_enemy("miniboss", true)
-	CombatFxScript.ring(fx_layer, player.global_position, Color(0.9, 0.55, 0.72, 0.9), 260.0, 0.7)
-	_flash_overlay_text("Могильный Страж пробудился")
-	_flash_overlay_text("Он все еще охраняет пустой трон")
+	CombatFxScript.ring(fx_layer, player.global_position, Color(1.0, 0.62, 0.28, 0.9) if _is_ashen_chapel() else Color(0.9, 0.55, 0.72, 0.9), 260.0, 0.7)
+	_flash_overlay_text("Пепельный Дьякон поднялся" if _is_ashen_chapel() else "Могильный Страж пробудился")
+	_flash_overlay_text("Он несет последний уголь" if _is_ashen_chapel() else "Он все еще охраняет пустой трон")
 	_start_screen_shake(0.34, 8.0)
 
 func _spawn_dread_boss() -> void:
@@ -1575,13 +1653,15 @@ func _spawn_dread_boss() -> void:
 	var spawn_position := _get_offscreen_spawn_position(ENEMY_SPAWN_OFFSCREEN_MARGIN * 1.25, spawn_direction)
 	_spawn_enemy("grave_king", true, spawn_position)
 	_show_boss_ui(_get_dread_boss())
-	CombatFxScript.ring(fx_layer, player.global_position, Color(0.64, 1.0, 0.56, 0.92), 360.0, 0.9)
-	CombatFxScript.ring(fx_layer, player.global_position, Color(0.95, 0.5, 0.8, 0.72), 220.0, 0.7)
+	CombatFxScript.ring(fx_layer, player.global_position, Color(1.0, 0.55, 0.22, 0.94) if _is_ashen_chapel() else Color(0.64, 1.0, 0.56, 0.92), 360.0, 0.9)
+	CombatFxScript.ring(fx_layer, player.global_position, Color(0.48, 0.12, 0.06, 0.8) if _is_ashen_chapel() else Color(0.95, 0.5, 0.8, 0.72), 220.0, 0.7)
 	_flash_overlay_text(String(_current_chapter().get("boss_enter", "Король-Могила встал")))
 	_flash_overlay_text(String(_current_chapter().get("boss_lore", "За ним не осталось живых подданных")))
 	_start_screen_shake(0.64, 12.0)
 	for i in range(3):
 		_spawn_hazard_zone(player.position + Vector2.RIGHT.rotated(TAU * float(i) / 3.0 + randf_range(-0.35, 0.35)) * randf_range(170.0, 310.0))
+	if _is_ashen_chapel():
+		_spawn_abbot_ash_wave(_get_dread_boss())
 
 func _on_enemy_damaged(enemy_position: Vector2, amount: int) -> void:
 	CombatFxScript.damage_number(fx_layer, enemy_position, amount)
@@ -1595,20 +1675,22 @@ func _on_enemy_spitting(enemy_position: Vector2, direction: Vector2) -> void:
 	projectile.z_index = 6
 	enemy_projectiles.append(projectile)
 	world.add_child(projectile)
-	CombatFxScript.sparkle(fx_layer, enemy_position, Color(0.82, 0.55, 1.0, 0.72), 0.22)
+	CombatFxScript.sparkle(fx_layer, enemy_position, Color(1.0, 0.62, 0.28, 0.8) if _is_ashen_chapel() else Color(0.82, 0.55, 1.0, 0.72), 0.22)
 
 func _make_spitter_projectile(direction: Vector2) -> Node2D:
 	var projectile := Node2D.new()
 	projectile.rotation = direction.angle()
+	var ash_projectile := _is_ashen_chapel()
+	projectile.set_meta("ash_projectile", ash_projectile)
 
 	var tail := Line2D.new()
 	tail.name = "Tail"
 	tail.width = 7.0
-	tail.default_color = Color(0.46, 0.95, 0.86, 0.5)
+	tail.default_color = Color(1.0, 0.5, 0.18, 0.58) if ash_projectile else Color(0.46, 0.95, 0.86, 0.5)
 	tail.points = PackedVector2Array([Vector2(-34.0, 0.0), Vector2(-10.0, 0.0)])
 	projectile.add_child(tail)
 
-	var halo := _make_ellipse(15.0, 11.0, Color(0.48, 1.0, 0.86, 0.28), 16)
+	var halo := _make_ellipse(15.0, 11.0, Color(1.0, 0.42, 0.16, 0.34) if ash_projectile else Color(0.48, 1.0, 0.86, 0.28), 16)
 	halo.name = "Halo"
 	projectile.add_child(halo)
 
@@ -1616,11 +1698,11 @@ func _make_spitter_projectile(direction: Vector2) -> Node2D:
 	ring.name = "Ring"
 	ring.width = 3.0
 	ring.closed = true
-	ring.default_color = Color(0.88, 0.52, 1.0, 0.78)
+	ring.default_color = Color(1.0, 0.78, 0.38, 0.88) if ash_projectile else Color(0.88, 0.52, 1.0, 0.78)
 	ring.points = _make_ring_points(12.0, 18)
 	projectile.add_child(ring)
 
-	var core := _make_ellipse(7.0, 7.0, Color(0.95, 0.74, 1.0, 0.96), 12)
+	var core := _make_ellipse(7.0, 7.0, Color(1.0, 0.42, 0.12, 0.98) if ash_projectile else Color(0.95, 0.74, 1.0, 0.96), 12)
 	core.name = "Core"
 	projectile.add_child(core)
 
@@ -1733,8 +1815,14 @@ func _add_enemy_death_fx(enemy_position: Vector2, enemy_kind: String, was_execut
 			color = Color(1.0, 0.5, 0.24, 0.94)
 		"brute":
 			color = Color(0.9, 0.88, 0.68, 0.92)
+		"ash_acolyte":
+			color = Color(0.72, 0.58, 0.5, 0.94)
+		"ash_bellringer":
+			color = Color(1.0, 0.7, 0.3, 0.96)
+		"ash_ember":
+			color = Color(1.0, 0.36, 0.12, 0.98)
 		"grave_king":
-			color = Color(0.9, 0.1, 0.2, 0.95)
+			color = Color(1.0, 0.42, 0.14, 0.98) if _is_ashen_chapel() else Color(0.9, 0.1, 0.2, 0.95)
 	CombatFxScript.burst(fx_layer, enemy_position, color, 28 if was_miniboss else (24 if was_execution else 14))
 	CombatFxScript.gore_burst(fx_layer, enemy_position, was_execution or was_miniboss)
 	if was_execution:
@@ -1745,6 +1833,10 @@ func _add_enemy_death_fx(enemy_position: Vector2, enemy_kind: String, was_execut
 		CombatFxScript.ring(fx_layer, enemy_position, Color(0.72, 0.42, 1.0, 0.46), 82.0, 0.32)
 	elif enemy_kind == "exploder":
 		CombatFxScript.ring(fx_layer, enemy_position, Color(1.0, 0.48, 0.18, 0.64), 118.0, 0.28)
+	elif enemy_kind == "ash_bellringer":
+		CombatFxScript.ring(fx_layer, enemy_position, Color(1.0, 0.74, 0.34, 0.66), 108.0, 0.3)
+	elif enemy_kind == "ash_ember":
+		CombatFxScript.ring(fx_layer, enemy_position, Color(1.0, 0.4, 0.12, 0.72), 124.0, 0.26)
 
 func _update_health_packs(delta: float) -> void:
 	var alive_packs: Array[Node2D] = []
@@ -1784,7 +1876,8 @@ func _update_enemy_projectiles(delta: float) -> void:
 		if player != null and projectile.global_position.distance_to(player.global_position) < 28.0:
 			var damage: float = float(projectile.get_meta("damage", SPITTER_PROJECTILE_DAMAGE))
 			_damage_player(damage, damage, true)
-			CombatFxScript.burst(fx_layer, projectile.global_position, Color(0.85, 0.48, 1.0, 0.84), 8)
+			var impact_color := Color(1.0, 0.5, 0.18, 0.9) if bool(projectile.get_meta("ash_projectile", false)) else Color(0.85, 0.48, 1.0, 0.84)
+			CombatFxScript.burst(fx_layer, projectile.global_position, impact_color, 8)
 			projectile.queue_free()
 			if player.is_dead:
 				_show_game_over()
@@ -1826,6 +1919,7 @@ func _update_hazard_zones(delta: float) -> void:
 		var age := float(zone.get_meta("age", 0.0)) + delta
 		zone.set_meta("age", age)
 		var radius := float(zone.get_meta("radius", HAZARD_RADIUS))
+		var zone_damage := float(zone.get_meta("damage", HAZARD_DAMAGE))
 		var active := age >= HAZARD_ARM_TIME
 		var total_time := HAZARD_ARM_TIME + HAZARD_ACTIVE_TIME
 		var core := zone.get_node_or_null("Core") as CanvasItem
@@ -1855,9 +1949,10 @@ func _update_hazard_zones(delta: float) -> void:
 			label.modulate.a = max(0.0, min(1.0, total_time - age)) * (0.72 if not active else 1.0)
 			label.position.y = -radius - 56.0 + sin(age * 5.0) * 2.0
 		if active and player != null and zone.global_position.distance_to(player.global_position) < radius:
-			_damage_player(HAZARD_DAMAGE * delta)
+			_damage_player(zone_damage * delta)
 			if randf() < 0.22:
-				CombatFxScript.sparkle(fx_layer, player.global_position, Color(0.7, 1.0, 0.58, 0.82), 0.12)
+				var spark_color := Color(1.0, 0.62, 0.3, 0.86) if bool(zone.get_meta("bell_zone", false)) else Color(0.7, 1.0, 0.58, 0.82)
+				CombatFxScript.sparkle(fx_layer, player.global_position, spark_color, 0.12)
 			if player.is_dead:
 				_show_game_over()
 		if age >= total_time:
@@ -1869,20 +1964,28 @@ func _update_hazard_zones(delta: float) -> void:
 
 func _spawn_hazard_zone(zone_position: Vector2) -> void:
 	var zone := Node2D.new()
+	var bell_zone := _is_ashen_chapel()
 	zone.position = _clamp_to_arena(_keep_hazard_away_from_player(zone_position))
 	zone.z_index = 2
 	zone.set_meta("age", 0.0)
 	zone.set_meta("radius", HAZARD_RADIUS)
-	var shadow := _make_ellipse(HAZARD_RADIUS * 1.16, HAZARD_RADIUS * 0.84, Color(0.04, 0.12, 0.06, 0.48), 32)
+	zone.set_meta("damage", 21.0 if bell_zone else HAZARD_DAMAGE)
+	zone.set_meta("bell_zone", bell_zone)
+	var shadow_color := Color(0.16, 0.07, 0.035, 0.52) if bell_zone else Color(0.04, 0.12, 0.06, 0.48)
+	var core_color := Color(0.92, 0.42, 0.16, 0.14) if bell_zone else Color(0.38, 0.92, 0.34, 0.12)
+	var petal_color := Color(1.0, 0.56, 0.22, 0.46) if bell_zone else Color(0.52, 1.0, 0.34, 0.42)
+	var ring_color := Color(1.0, 0.7, 0.32, 0.76) if bell_zone else Color(0.72, 1.0, 0.48, 0.66)
+	var rune_color := Color(1.0, 0.84, 0.48, 0.78) if bell_zone else Color(0.9, 1.0, 0.5, 0.72)
+	var shadow := _make_ellipse(HAZARD_RADIUS * 1.16, HAZARD_RADIUS * 0.84, shadow_color, 32)
 	shadow.name = "Shadow"
 	zone.add_child(shadow)
-	var core := _make_ellipse(HAZARD_RADIUS, HAZARD_RADIUS * 0.72, Color(0.38, 0.92, 0.34, 0.12), 34)
+	var core := _make_ellipse(HAZARD_RADIUS, HAZARD_RADIUS * 0.72, core_color, 34)
 	core.name = "Core"
 	zone.add_child(core)
 	var petals := Node2D.new()
 	petals.name = "Petals"
 	for i in range(12):
-		var petal := _make_ellipse(16.0, 42.0, Color(0.52, 1.0, 0.34, 0.42), 12)
+		var petal := _make_ellipse(16.0, 42.0, petal_color, 12)
 		petal.position = Vector2.RIGHT.rotated(TAU * float(i) / 12.0) * (HAZARD_RADIUS * 0.48)
 		petal.rotation = TAU * float(i) / 12.0 + PI / 2.0
 		petals.add_child(petal)
@@ -1891,7 +1994,7 @@ func _spawn_hazard_zone(zone_position: Vector2) -> void:
 	ring.name = "Ring"
 	ring.closed = true
 	ring.width = 6.0
-	ring.default_color = Color(0.72, 1.0, 0.48, 0.66)
+	ring.default_color = ring_color
 	var points := PackedVector2Array()
 	for i in range(36):
 		var wobble := 1.0 + sin(float(i) * 3.0) * 0.055
@@ -1903,7 +2006,7 @@ func _spawn_hazard_zone(zone_position: Vector2) -> void:
 	for i in range(8):
 		var rune := Line2D.new()
 		rune.width = 3.0
-		rune.default_color = Color(0.9, 1.0, 0.5, 0.72)
+		rune.default_color = rune_color
 		rune.points = PackedVector2Array([
 			Vector2(-7.0, -8.0),
 			Vector2(0.0, 8.0),
@@ -1913,18 +2016,31 @@ func _spawn_hazard_zone(zone_position: Vector2) -> void:
 		rune.rotation = TAU * float(i) / 8.0 + randf_range(-0.35, 0.35)
 		runes.add_child(rune)
 	zone.add_child(runes)
-	var bloom := _make_ellipse(26.0, 16.0, Color(0.8, 1.0, 0.45, 0.82), 11)
+	var bloom := _make_ellipse(26.0, 16.0, Color(1.0, 0.66, 0.28, 0.88) if bell_zone else Color(0.8, 1.0, 0.45, 0.82), 11)
 	bloom.name = "Bloom"
 	bloom.rotation = randf() * TAU
 	zone.add_child(bloom)
+	if bell_zone:
+		var bell := Polygon2D.new()
+		bell.color = Color(0.25, 0.12, 0.06, 0.96)
+		bell.polygon = PackedVector2Array([
+			Vector2(-24.0, 12.0),
+			Vector2(-17.0, -20.0),
+			Vector2(-8.0, -32.0),
+			Vector2(8.0, -32.0),
+			Vector2(17.0, -20.0),
+			Vector2(24.0, 12.0),
+			Vector2(0.0, 24.0),
+		])
+		zone.add_child(bell)
 	var label := Label.new()
 	label.name = "Label"
-	label.text = "ПРОКЛЯТЫЙ ЦВЕТОК"
+	label.text = "КОЛОКОЛЬНЫЙ ЗВОН" if bell_zone else "ПРОКЛЯТЫЙ ЦВЕТОК"
 	label.position = Vector2(-115.0, -HAZARD_RADIUS - 56.0)
 	label.size = Vector2(230.0, 30.0)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.add_theme_font_size_override("font_size", 17)
-	label.add_theme_color_override("font_color", Color(0.86, 1.0, 0.54, 0.95))
+	label.add_theme_color_override("font_color", Color(1.0, 0.78, 0.42, 0.98) if bell_zone else Color(0.86, 1.0, 0.54, 0.95))
 	zone.add_child(label)
 	hazard_zones.append(zone)
 	world.add_child(zone)
@@ -1986,11 +2102,14 @@ func _update_dread_boss_pressure(delta: float) -> void:
 		dread_boss_phase_two = true
 		boss.speed *= 1.34
 		boss.contact_damage += 10.0
-		boss.modulate = Color(1.0, 0.78, 0.88)
-		_flash_overlay_text("Корона раскрылась")
+		boss.modulate = Color(1.0, 0.5, 0.28) if _is_ashen_chapel() else Color(1.0, 0.78, 0.88)
+		_flash_overlay_text("Кадило раскололось" if _is_ashen_chapel() else "Корона раскрылась")
 		_flash_boss_ui()
 		_start_screen_shake(0.5, 11.0)
-		_spawn_boss_cross_attack(boss)
+		if _is_ashen_chapel():
+			_spawn_abbot_ash_wave(boss)
+		else:
+			_spawn_boss_cross_attack(boss)
 	dread_boss_hazard_timer -= delta
 	if dread_boss_hazard_timer <= 0.0:
 		dread_boss_hazard_timer = max(2.8, DREAD_BOSS_HAZARD_INTERVAL - elapsed * 0.006) * (0.74 if dread_boss_phase_two else 1.0)
@@ -2003,9 +2122,9 @@ func _update_dread_boss_pressure(delta: float) -> void:
 		if available_slots > 0:
 			var summon_count: int = min(3 if dread_boss_phase_two else 2, available_slots)
 			for i in range(summon_count):
-				var kind := "flanker" if i == 0 else "spitter"
+				var kind := ("ash_ember" if i == 0 else "ash_bellringer") if _is_ashen_chapel() else ("flanker" if i == 0 else "spitter")
 				_spawn_enemy(kind, false, _get_interceptor_position(i))
-		_flash_overlay_text("Король зовет мертвых")
+		_flash_overlay_text("Игумен созывает паству" if _is_ashen_chapel() else "Король зовет мертвых")
 	dread_boss_bell_timer -= delta
 	if dread_boss_bell_timer <= 0.0:
 		dread_boss_bell_timer = DREAD_BOSS_BELL_INTERVAL * (0.76 if dread_boss_phase_two else 1.0)
@@ -2013,11 +2132,18 @@ func _update_dread_boss_pressure(delta: float) -> void:
 	dread_boss_judgment_timer -= delta
 	if dread_boss_judgment_timer <= 0.0:
 		dread_boss_judgment_timer = DREAD_BOSS_JUDGMENT_INTERVAL * (0.78 if dread_boss_phase_two else 1.0)
-		_spawn_boss_judgment_attack(boss)
+		if _is_ashen_chapel():
+			_spawn_abbot_ash_wave(boss)
+		else:
+			_spawn_boss_judgment_attack(boss)
 	dread_boss_cross_timer -= delta
 	if dread_boss_phase_two and dread_boss_cross_timer <= 0.0:
 		dread_boss_cross_timer = DREAD_BOSS_CROSS_INTERVAL
-		_spawn_boss_cross_attack(boss)
+		if _is_ashen_chapel():
+			_spawn_boss_bell_attack(boss)
+			_spawn_hazard_zone(_get_boss_hazard_position(boss))
+		else:
+			_spawn_boss_cross_attack(boss)
 
 func _get_dread_boss() -> Enemy:
 	for enemy in enemies:
@@ -2049,7 +2175,7 @@ func _spawn_boss_bell_attack(boss: Enemy) -> void:
 	ring.name = "Telegraph"
 	ring.closed = true
 	ring.width = 8.0
-	ring.default_color = Color(0.9, 1.0, 0.56, 0.78)
+	ring.default_color = Color(1.0, 0.64, 0.28, 0.86) if _is_ashen_chapel() else Color(0.9, 1.0, 0.56, 0.78)
 	var points := PackedVector2Array()
 	for i in range(48):
 		points.append(Vector2.RIGHT.rotated(TAU * float(i) / 48.0) * float(attack.get_meta("radius", 245.0)))
@@ -2057,7 +2183,22 @@ func _spawn_boss_bell_attack(boss: Enemy) -> void:
 	attack.add_child(ring)
 	boss_attacks.append(attack)
 	world.add_child(attack)
-	_flash_overlay_text("Похоронный Колокол")
+	_flash_overlay_text("Последний Колокол" if _is_ashen_chapel() else "Похоронный Колокол")
+
+func _spawn_abbot_ash_wave(boss: Enemy) -> void:
+	if boss == null or player == null:
+		return
+	var base_direction := boss.global_position.direction_to(player.global_position)
+	if base_direction == Vector2.ZERO:
+		base_direction = Vector2.RIGHT.rotated(randf() * TAU)
+	var wave_count := 5 if dread_boss_phase_two else 3
+	var spread := 0.24
+	var start_angle := -spread * float(wave_count - 1) * 0.5
+	for i in range(wave_count):
+		var direction := base_direction.rotated(start_angle + spread * float(i))
+		_spawn_boss_lane_attack(boss.global_position + direction * 330.0, direction, 760.0, 48.0, 28.0 if not dread_boss_phase_two else 36.0, "Пепельная волна" if i == 0 else "")
+	CombatFxScript.burst(fx_layer, boss.global_position, Color(1.0, 0.48, 0.16, 0.9), 24)
+	_start_screen_shake(0.24, 7.0)
 
 func _spawn_boss_judgment_attack(boss: Enemy) -> void:
 	var direction := _get_player_motion_direction(boss.global_position.direction_to(player.global_position))
@@ -2087,7 +2228,7 @@ func _spawn_boss_lane_attack(center: Vector2, direction: Vector2, length: float,
 	var line := Line2D.new()
 	line.name = "Telegraph"
 	line.width = width
-	line.default_color = Color(0.95, 0.58, 0.9, 0.48)
+	line.default_color = Color(1.0, 0.46, 0.18, 0.54) if _is_ashen_chapel() else Color(0.95, 0.58, 0.9, 0.48)
 	line.points = PackedVector2Array([
 		center - direction * (length * 0.5),
 		center + direction * (length * 0.5),
@@ -2096,12 +2237,13 @@ func _spawn_boss_lane_attack(center: Vector2, direction: Vector2, length: float,
 	var edge := Line2D.new()
 	edge.name = "Edge"
 	edge.width = 4.0
-	edge.default_color = Color(0.86, 1.0, 0.58, 0.88)
+	edge.default_color = Color(1.0, 0.78, 0.38, 0.92) if _is_ashen_chapel() else Color(0.86, 1.0, 0.58, 0.88)
 	edge.points = line.points
 	attack.add_child(edge)
 	boss_attacks.append(attack)
 	world.add_child(attack)
-	_flash_overlay_text(label_text)
+	if not label_text.is_empty():
+		_flash_overlay_text(label_text)
 
 func _get_player_motion_direction(fallback: Vector2) -> Vector2:
 	var direction := player.velocity.normalized()
@@ -2162,7 +2304,7 @@ func _damage_player_from_boss_attack(attack: Node2D) -> void:
 	if did_hit:
 		_damage_player(damage, damage, true)
 		_start_screen_shake(0.24, 9.0)
-		CombatFxScript.burst(fx_layer, player.global_position, Color(0.9, 1.0, 0.52, 0.9), 18)
+		CombatFxScript.burst(fx_layer, player.global_position, Color(1.0, 0.5, 0.18, 0.92) if _is_ashen_chapel() else Color(0.9, 1.0, 0.52, 0.9), 18)
 		if player.is_dead:
 			_show_game_over()
 
@@ -2235,7 +2377,7 @@ func _check_enemy_contact(delta: float) -> void:
 			_damage_player(damage * delta)
 			if thorn_bloom_unlocked:
 				_trigger_thorn_bloom(enemy.global_position)
-			if enemy.enemy_kind == "exploder":
+			if enemy.enemy_kind in ["exploder", "ash_ember"]:
 				_explode_enemy(enemy)
 			if player.is_dead:
 				_show_game_over()
@@ -2855,6 +2997,15 @@ func _reset_profile_defaults() -> void:
 func _profile_upgrade_level(upgrade_id: String) -> int:
 	return int(profile_upgrades.get(upgrade_id, 0))
 
+func _profile_power_level() -> int:
+	var total := 0
+	for upgrade_id in META_UPGRADES.keys():
+		total += _profile_upgrade_level(String(upgrade_id))
+	return total
+
+func _profile_pressure_tier() -> int:
+	return int(_profile_power_level() / 3)
+
 func _profile_upgrade_cost(upgrade_id: String) -> int:
 	var upgrade: Dictionary = META_UPGRADES[upgrade_id]
 	var level := _profile_upgrade_level(upgrade_id)
@@ -3414,26 +3565,41 @@ func _distance_to_segment(point: Vector2, start: Vector2, end: Vector2) -> float
 	return point.distance_to(projection)
 
 func _start_screen_shake(duration: float, intensity: float) -> void:
-	shake_time = max(shake_time, duration)
-	shake_intensity = max(shake_intensity, intensity)
+	if intensity < SCREEN_SHAKE_MIN_INTENSITY:
+		return
+	var reduced_duration := duration * SCREEN_SHAKE_DURATION_SCALE
+	var reduced_intensity := minf(intensity * SCREEN_SHAKE_SCALE, SCREEN_SHAKE_MAX_INTENSITY)
+	shake_time = max(shake_time, reduced_duration)
+	shake_intensity = max(shake_intensity, reduced_intensity)
 
 func _stop_screen_shake() -> void:
 	shake_time = 0.0
 	shake_intensity = 0.0
 	world.position = Vector2.ZERO
 	fx_layer.position = Vector2.ZERO
+	var camera := _player_camera()
+	if camera != null:
+		camera.offset = Vector2.ZERO
 
 func _update_screen_shake(delta: float) -> void:
+	var camera := _player_camera()
+	if camera == null:
+		return
 	if shake_time <= 0.0:
-		if world.position != Vector2.ZERO:
-			world.position = Vector2.ZERO
-			fx_layer.position = Vector2.ZERO
+		if camera.offset != Vector2.ZERO:
+			camera.offset = camera.offset.lerp(Vector2.ZERO, minf(1.0, delta * 28.0))
+			if camera.offset.length() < 0.15:
+				camera.offset = Vector2.ZERO
 		return
 	shake_time -= delta
-	var offset := Vector2(randf_range(-shake_intensity, shake_intensity), randf_range(-shake_intensity, shake_intensity))
-	world.position = offset
-	fx_layer.position = offset
-	shake_intensity = max(0.0, shake_intensity - delta * 18.0)
+	var target_offset := Vector2(randf_range(-shake_intensity, shake_intensity), randf_range(-shake_intensity, shake_intensity))
+	camera.offset = camera.offset.lerp(target_offset, minf(1.0, delta * 34.0))
+	shake_intensity = max(0.0, shake_intensity - delta * 21.0)
+
+func _player_camera() -> Camera2D:
+	if player == null:
+		return null
+	return player.get_node_or_null("Camera2D") as Camera2D
 
 func _format_time(time_value: float) -> String:
 	var total_seconds: int = int(max(0.0, floor(time_value)))
