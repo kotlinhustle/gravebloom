@@ -103,14 +103,18 @@ scripts/
 - `Пепельная Часовня` now has deliberate level geometry: a fast central nave, roomy side aisles, a wide transept, an altar arena, and physical pew/column/wall obstacles. Keep every route wide enough for mobile movement and dense enemy waves; spawn positions and hazards are pushed out of obstacles.
 - `Мертвый Сад` is the open counterpart to the chapel: broad curved paths connect large clearings, grave plots and short physical fences provide landmarks, and a few clearly glowing thorn thickets deal light continuous damage. Preserve multiple wide escape routes around every garden feature.
 - Future maps should use distinct route topology, landmarks, and combat spaces rather than only different procedural decor.
+- Visual clarity is a hard constraint: background decor must read as low-contrast masses, not repeated lines. Avoid floor grids, outlined paths, dense cracks/runes, fence-like thin strokes, and excessive ambient glows. Reserve bright lines and rings for attacks, warnings, pickups, and major events.
+- Physical walls, fences, pews, and columns must read as solid dark silhouettes with strong offset shadows so players notice collisions during dense combat.
 - Chapel-exclusive enemies are `Пепельный Послушник` (`ash_acolyte`, dense melee pressure), `Звонарь` (`ash_bellringer`, ranged pressure), and `Быстрый Уголь` (`ash_ember`, fast flanking explosive pressure).
+- Bell-ring hazards must be recognizable by shape, not color alone: a large bell silhouette, clapper, and concentric sound waves. They must not reuse Gravebloom petals or flower runes.
 - The chapel final boss still uses the shared internal `grave_king` boss slot for compatibility, but appears as `Игумен Пепла` with its own generated `ash_abbot.png` sprite and distinct attack script: ash-wave fans, Last Bell rings, bell zones, chapel summons, and the `Кадило раскололось` second phase.
 - Manages run states: start, running, upgrade, game_over, victory.
 - Spawns the player.
 - Spawns enemy waves.
 - Regular enemies should spawn just outside the current camera view and walk in from the screen edge, not materialize inside the active screen.
 - Enemy waves now mix roles: crawler, brute, fast runner, flanker, ranged spitter, explosive enemy, final-minute boss, and miniboss.
-- Enemy role indicators are intentionally restrained. Ordinary enemies and bellringers rely on their sprite silhouette; spitters and fast embers get only a small overhead mark, exploders keep only a muted danger ring, and miniboss/boss rings are subdued. Avoid lighting every enemy at once.
+- Enemy role indicators are intentionally restrained. Ordinary enemies, spitters, bellringers, and fast embers rely on their sprite silhouette; exploders keep only a muted danger ring, and miniboss/boss rings are subdued. Avoid lighting every enemy at once.
+- Dead Garden enemies no longer use purple overhead indicators. Spitters rely on a muted toxic-green silhouette and their visible projectile.
 - Enemies use light separation so they do not collapse into one harmless blob during circular kiting.
 - Spitters use predictive shots, flankers try to cut ahead/sideways, and after the first minute occasional interceptors spawn ahead of the player's movement to break endless clockwise/counterclockwise kiting.
 - A pressure director keeps the fight populated around the player: it counts nearby/on-screen threats, spawns edge pressure if the active screen goes empty, and recycles far non-boss enemies when the global enemy cap is filled by harmless distant mobs.
@@ -190,11 +194,15 @@ scripts/
 - Mouse drag means: hold left mouse button, drag away from the starting point, release to stop.
 - The green object around the hero is the Living Blade; it now flies out to hunt enemies and returns.
 - Hits now show damage numbers, enemy flash/squash, knockback, and death bursts.
+- Ordinary enemy deaths use restrained bursts without role-specific rings. Keep larger rings for minibosses, explosions, hazards, ultimates, and other signals that affect player decisions.
+- Combat rays and strikes should not look like flat rectangular debug bars. Use tapered or curved silhouettes, irregular edges, bright cores, and a few restrained fragments while preserving readable hitboxes and telegraphs.
 - Combat has a first "meaty" layer: Living Blade finishing hits create stronger bug/Gravebloom death bursts without execution text; use toxic green, amber, and dark violet rather than human-blood red. Kill streaks appear at milestones, and taking damage breaks the streak.
 - Living Blade executions lightly heal the player, add a little Nova charge, and have a higher chance to drop a health pack, so aggressive close-range kills feel like a resource loop.
 - Incoming damage now shows red numbers over the player, throttled for continuous contact/hazard damage so it does not spam the screen.
 - Runs now have a start screen, XP bar, 3:00 survival goal, miniboss event, victory screen, death screen, and restart button.
+- Keep the start screen deliberately sparse: selected chapter, short goal, Ash total, and only `Играть`, `Сменить главу`, `Еще`. Goals, profile, codex, help, and run history live on separate secondary screens. Navigating menus must not reroll active run goals.
 - Result screens should summarize the run: time survived, level, kills, XP progress, and selected relic build with duplicate counts.
+- Keep the first result screen compact: outcome, chapter, time, level, kills, best streak, Ash reward, and only `Заново`, `Подробности`, `Главное меню`. Lore, goal progress, reward breakdown, codex unlocks, and relic lists belong on the separate details screen.
 - Result screens award `Пепел`, persist it locally, and offer a path into the profile screen.
 - Local profile data is saved to `user://save.json`; in Web/TWA this is browser/WebView local storage, not a backend-backed account.
 - The profile screen shows total `Пепел`, permanent upgrades, and a short history of recent runs.
@@ -215,7 +223,7 @@ scripts/
 - Gravebloom Nova is an automatic ultimate: it charges over time, shows a visible `NOVA` indicator with percent progress, gives peripheral visual/audio cues from 85% onward, then fires by itself and blasts nearby enemies.
 - Nova readiness should be readable without staring at HUD: faint aura at 85%, rotating Gravebloom ring at 90%, stronger warning at 97%, then a distinct burst cue at cast.
 - Do not spend more time trying to make laptop touchpad tap-to-click control Nova; the game should not depend on that input path.
-- Small health packs can drop from enemies, pulse on the ground, heal a little on pickup, and expire after a short time.
+- Small health potions can drop from enemies, pulse on the ground, heal a little on pickup, and expire after a short time. They use a dark glass bottle with crimson liquid and mint healing sparks instead of a modern red-cross icon.
 - Run reset must restore temporary upgrade state such as XP magnet range; upgrades should not leak into the next run after death/restart.
 - XP pacing is intentionally slower after the ultimate was added: higher XP thresholds keep Nova kills from over-leveling too quickly.
 

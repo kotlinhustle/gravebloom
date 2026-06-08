@@ -41,7 +41,7 @@ static func burst(parent: Node, position: Vector2, color: Color, count: int = 10
 		tween.chain().tween_callback(particle.queue_free)
 
 static func gore_burst(parent: Node, position: Vector2, execution: bool = false) -> void:
-	var count := 28 if execution else 16
+	var count := 16 if execution else 6
 	for i in range(count):
 		var shard := Polygon2D.new()
 		var long_side := randf_range(7.0, 18.0) if execution else randf_range(5.0, 12.0)

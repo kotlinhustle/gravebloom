@@ -146,7 +146,7 @@ func _nearest_enemy(enemies: Array) -> Node2D:
 func _leave_trail() -> void:
 	if fx_layer == null:
 		return
-	if randf() > 0.45:
+	if randf() > 0.18:
 		return
 	var trail := Line2D.new()
 	trail.width = 3.0
@@ -164,12 +164,17 @@ func _show_impact(target_position: Vector2, is_execution: bool = false) -> void:
 	var slash := Line2D.new()
 	slash.width = 16.0 if is_execution else (10.0 if blood_evolved else 8.0)
 	slash.default_color = Color(0.96, 0.76, 0.24, 0.95) if blood_evolved else Color(0.72, 1.0, 0.83, 0.95)
+	slash.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	slash.end_cap_mode = Line2D.LINE_CAP_ROUND
+	slash.joint_mode = Line2D.LINE_JOINT_ROUND
 	var slash_direction := Vector2.RIGHT.rotated(rotation)
+	var slash_side := slash_direction.orthogonal()
 	var slash_length := 58.0 if is_execution else 34.0
 	slash.points = PackedVector2Array([
-		target_position - slash_direction * slash_length,
-		target_position,
-		target_position + slash_direction * slash_length
+		target_position - slash_direction * slash_length - slash_side * slash_length * 0.28,
+		target_position - slash_direction * slash_length * 0.36 + slash_side * slash_length * 0.12,
+		target_position + slash_direction * slash_length * 0.36 + slash_side * slash_length * 0.24,
+		target_position + slash_direction * slash_length - slash_side * slash_length * 0.2
 	])
 	fx_layer.add_child(slash)
 	var tween := create_tween()

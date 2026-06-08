@@ -462,30 +462,25 @@ func _build_arena() -> void:
 	_build_fog_wisps()
 
 func _build_floor_tiles() -> void:
-	var tile_size := 176.0
 	var base_floor := _chapter_color("floor", Color(0.064, 0.065, 0.074, 0.92))
 	var stain_color := _chapter_color("stain", Color(0.02, 0.025, 0.026, 0.25))
-	for x in range(-11, 12):
-		for y in range(-7, 8):
-			var tile := ColorRect.new()
-			var shade := randf_range(-0.012, 0.016)
-			tile.color = Color(base_floor.r + shade, base_floor.g + shade, base_floor.b + shade, base_floor.a)
-			tile.size = Vector2(tile_size - 7.0, tile_size - 7.0)
-			tile.position = Vector2(x * tile_size, y * tile_size) + Vector2(randf_range(-3.0, 3.0), randf_range(-3.0, 3.0))
-			tile.rotation = randf_range(-0.012, 0.012)
-			world.add_child(tile)
-	for i in range(90):
-		var stain := _make_ellipse(randf_range(10.0, 34.0), randf_range(5.0, 18.0), Color(stain_color.r, stain_color.g, stain_color.b, randf_range(0.16, 0.34)), 12)
+	var floor := ColorRect.new()
+	floor.color = base_floor
+	floor.size = Vector2(4200.0, 2800.0)
+	floor.position = -floor.size * 0.5
+	world.add_child(floor)
+	for i in range(28):
+		var stain := _make_ellipse(randf_range(28.0, 80.0), randf_range(14.0, 38.0), Color(stain_color.r, stain_color.g, stain_color.b, randf_range(0.08, 0.18)), 12)
 		stain.position = Vector2(randf_range(-1850.0, 1850.0), randf_range(-1200.0, 1200.0))
 		stain.rotation = randf() * TAU
 		world.add_child(stain)
 
 func _build_cracks() -> void:
-	for i in range(34):
+	for i in range(7):
 		var crack := Line2D.new()
-		crack.width = randf_range(2.0, 5.0)
-		crack.default_color = Color(0.012, 0.014, 0.018, randf_range(0.5, 0.82))
-		crack.points = _make_crack_points(randf_range(80.0, 250.0), randi_range(4, 8))
+		crack.width = randf_range(2.0, 3.0)
+		crack.default_color = Color(0.012, 0.014, 0.018, randf_range(0.12, 0.22))
+		crack.points = _make_crack_points(randf_range(70.0, 150.0), randi_range(3, 5))
 		crack.position = Vector2(randf_range(-1750.0, 1750.0), randf_range(-1050.0, 1050.0))
 		crack.rotation = randf() * TAU
 		world.add_child(crack)
@@ -500,12 +495,12 @@ func _make_crack_points(length: float, point_count: int) -> PackedVector2Array:
 	return points
 
 func _build_ruins() -> void:
-	var rubble_count := 28 if _is_ashen_chapel() else 48
+	var rubble_count := 12 if _is_ashen_chapel() else 18
 	for i in range(rubble_count):
 		var rubble := ColorRect.new()
 		var rubble_color := _chapter_color("rubble", Color(0.12, 0.12, 0.135, 0.55))
-		rubble.color = Color(rubble_color.r, rubble_color.g, rubble_color.b, randf_range(0.35, 0.7))
-		rubble.size = Vector2(randf_range(12.0, 42.0), randf_range(7.0, 18.0))
+		rubble.color = Color(rubble_color.r, rubble_color.g, rubble_color.b, randf_range(0.2, 0.38))
+		rubble.size = Vector2(randf_range(18.0, 48.0), randf_range(10.0, 22.0))
 		rubble.position = Vector2(randf_range(-1900.0, 1900.0), randf_range(-1250.0, 1250.0))
 		rubble.rotation = randf() * TAU
 		world.add_child(rubble)
@@ -560,31 +555,17 @@ func _build_dead_garden() -> void:
 	_add_garden_thicket(Vector2(1660.0, 870.0), Vector2(360.0, 190.0), 0.18)
 
 func _add_garden_path(points: PackedVector2Array, width: float) -> void:
-	var border := Line2D.new()
-	border.width = width + 34.0
-	border.default_color = Color(0.025, 0.04, 0.032, 0.62)
-	border.joint_mode = Line2D.LINE_JOINT_ROUND
-	border.points = points
-	world.add_child(border)
 	var path := Line2D.new()
 	path.width = width
-	path.default_color = Color(0.12, 0.135, 0.125, 0.84)
+	path.default_color = Color(0.12, 0.135, 0.125, 0.44)
 	path.joint_mode = Line2D.LINE_JOINT_ROUND
 	path.points = points
 	world.add_child(path)
 
 func _add_garden_clearing(center: Vector2) -> void:
-	var clearing := _make_ellipse(260.0, 175.0, Color(0.115, 0.13, 0.12, 0.68), 28)
+	var clearing := _make_ellipse(260.0, 175.0, Color(0.115, 0.13, 0.12, 0.38), 28)
 	clearing.position = center
 	world.add_child(clearing)
-	var ring := Line2D.new()
-	ring.width = 5.0
-	ring.closed = true
-	ring.default_color = Color(0.3, 0.38, 0.32, 0.28)
-	ring.points = _make_ring_points(205.0, 28)
-	ring.scale.y = 0.68
-	ring.position = center
-	world.add_child(ring)
 
 func _add_grave_plot(center: Vector2, size: Vector2, grave_count: int) -> void:
 	var plot := ColorRect.new()
@@ -613,18 +594,21 @@ func _add_garden_fence(center: Vector2, size: Vector2, rotation_value: float) ->
 	shape.size = size
 	collision.shape = shape
 	body.add_child(collision)
-	for rail_y in [-15.0, 15.0]:
-		var rail := ColorRect.new()
-		rail.color = Color(0.16, 0.17, 0.17, 0.92)
-		rail.size = Vector2(size.x, 9.0)
-		rail.position = Vector2(-size.x * 0.5, rail_y - 4.5)
-		body.add_child(rail)
-	for x in range(int(-size.x * 0.5), int(size.x * 0.5) + 1, 70):
-		var post := ColorRect.new()
-		post.color = Color(0.25, 0.27, 0.26, 0.96)
-		post.size = Vector2(11.0, size.y + 18.0)
-		post.position = Vector2(float(x) - 5.5, -size.y * 0.5 - 9.0)
-		body.add_child(post)
+	var shadow := ColorRect.new()
+	shadow.color = Color(0.0, 0.0, 0.0, 0.62)
+	shadow.size = size + Vector2(28.0, 28.0)
+	shadow.position = -shadow.size * 0.5 + Vector2(12.0, 18.0)
+	body.add_child(shadow)
+	var wall := ColorRect.new()
+	wall.color = Color(0.075, 0.085, 0.082, 0.98)
+	wall.size = size
+	wall.position = -size * 0.5
+	body.add_child(wall)
+	var top := ColorRect.new()
+	top.color = Color(0.22, 0.25, 0.24, 0.78)
+	top.size = Vector2(size.x, 13.0)
+	top.position = Vector2(-size.x * 0.5, -size.y * 0.5)
+	body.add_child(top)
 
 func _add_garden_thicket(center: Vector2, size: Vector2, rotation_value: float) -> void:
 	var thicket := Node2D.new()
@@ -638,25 +622,12 @@ func _add_garden_thicket(center: Vector2, size: Vector2, rotation_value: float) 
 	var shadow := _make_ellipse(size.x * 0.54, size.y * 0.54, Color(0.015, 0.055, 0.028, 0.76), 26)
 	shadow.name = "Shadow"
 	thicket.add_child(shadow)
-	var edge := Line2D.new()
-	edge.name = "Edge"
-	edge.width = 6.0
-	edge.closed = true
-	edge.default_color = Color(0.34, 0.78, 0.42, 0.58)
-	for i in range(28):
-		var angle := TAU * float(i) / 28.0
-		var wobble := 0.82 + sin(float(i) * 2.7) * 0.12
-		edge.add_point(Vector2(cos(angle) * size.x * 0.5 * wobble, sin(angle) * size.y * 0.5 * wobble))
-	thicket.add_child(edge)
-	for i in range(15):
-		var thorn := Line2D.new()
-		thorn.width = 4.0
-		thorn.default_color = Color(0.22, 0.56, 0.3, 0.8)
-		var origin := Vector2(randf_range(-size.x * 0.42, size.x * 0.42), randf_range(-size.y * 0.36, size.y * 0.36))
-		thorn.points = PackedVector2Array([origin, origin + Vector2(randf_range(-30.0, 30.0), randf_range(-38.0, 38.0))])
-		thicket.add_child(thorn)
-	for i in range(8):
-		var bloom := _make_ellipse(7.0, 5.0, Color(0.62, 1.0, 0.48, 0.72), 8)
+	for i in range(10):
+		var mass := _make_ellipse(randf_range(32.0, 70.0), randf_range(24.0, 48.0), Color(0.025, 0.16, 0.07, randf_range(0.72, 0.9)), 12)
+		mass.position = Vector2(randf_range(-size.x * 0.38, size.x * 0.38), randf_range(-size.y * 0.3, size.y * 0.3))
+		thicket.add_child(mass)
+	for i in range(4):
+		var bloom := _make_ellipse(9.0, 7.0, Color(0.62, 1.0, 0.48, 0.78), 8)
 		bloom.position = Vector2(randf_range(-size.x * 0.38, size.x * 0.38), randf_range(-size.y * 0.32, size.y * 0.32))
 		thicket.add_child(bloom)
 		ambient_glows.append(bloom)
@@ -664,11 +635,8 @@ func _add_garden_thicket(center: Vector2, size: Vector2, rotation_value: float) 
 func _build_chapel_debris() -> void:
 	# The nave is the fast route. Side aisles and the transept give room to
 	# circle enemies, while pews and columns break up endless open kiting.
-	_add_chapel_floor_band(Vector2(0.0, 0.0), Vector2(3820.0, 330.0), Color(0.18, 0.125, 0.115, 0.56))
-	_add_chapel_floor_band(Vector2(0.0, -680.0), Vector2(3820.0, 250.0), Color(0.105, 0.078, 0.082, 0.7))
-	_add_chapel_floor_band(Vector2(0.0, 680.0), Vector2(3820.0, 250.0), Color(0.105, 0.078, 0.082, 0.7))
-	_add_chapel_floor_band(Vector2(260.0, 0.0), Vector2(430.0, 2360.0), Color(0.155, 0.105, 0.1, 0.5))
-	_add_chapel_floor_band(Vector2(1540.0, 0.0), Vector2(610.0, 920.0), Color(0.21, 0.135, 0.105, 0.62))
+	_add_chapel_floor_band(Vector2(0.0, 0.0), Vector2(3820.0, 1240.0), Color(0.13, 0.095, 0.095, 0.34))
+	_add_chapel_floor_band(Vector2(1540.0, 0.0), Vector2(610.0, 920.0), Color(0.21, 0.135, 0.105, 0.42))
 
 	for side in [-1.0, 1.0]:
 		for x in [-1320.0, -940.0, -560.0]:
@@ -683,7 +651,7 @@ func _build_chapel_debris() -> void:
 	_add_chapel_obstacle(Vector2(1580.0, 0.0), Vector2(250.0, 150.0), "altar")
 	_add_chapel_landmarks()
 
-	for i in range(26):
+	for i in range(10):
 		var ember := _make_ellipse(randf_range(5.0, 12.0), randf_range(2.0, 5.0), Color(1.0, 0.56, 0.24, randf_range(0.28, 0.5)), 8)
 		ember.position = Vector2(randf_range(-1860.0, 1860.0), randf_range(-1180.0, 1180.0))
 		ember.rotation = randf() * TAU
@@ -692,22 +660,10 @@ func _build_chapel_debris() -> void:
 
 func _add_chapel_floor_band(center: Vector2, size: Vector2, color: Color) -> void:
 	var band := ColorRect.new()
-	band.color = color
+	band.color = Color(color.r, color.g, color.b, color.a * 0.62)
 	band.size = size
 	band.position = center - size * 0.5
 	world.add_child(band)
-	var edge := Line2D.new()
-	edge.width = 4.0
-	edge.closed = true
-	edge.default_color = Color(0.52, 0.31, 0.22, 0.42)
-	edge.points = PackedVector2Array([
-		Vector2(-size.x, -size.y) * 0.5,
-		Vector2(size.x, -size.y) * 0.5,
-		Vector2(size.x, size.y) * 0.5,
-		Vector2(-size.x, size.y) * 0.5,
-	])
-	edge.position = center
-	world.add_child(edge)
 
 func _add_chapel_obstacle(center: Vector2, size: Vector2, kind: String) -> void:
 	var body := StaticBody2D.new()
@@ -723,9 +679,9 @@ func _add_chapel_obstacle(center: Vector2, size: Vector2, kind: String) -> void:
 	arena_obstacles.append(Rect2(center - size * 0.5, size))
 
 	var shadow := ColorRect.new()
-	shadow.color = Color(0.0, 0.0, 0.0, 0.34)
-	shadow.size = size + Vector2(18.0, 18.0)
-	shadow.position = -shadow.size * 0.5 + Vector2(12.0, 18.0)
+	shadow.color = Color(0.0, 0.0, 0.0, 0.62)
+	shadow.size = size + Vector2(30.0, 30.0)
+	shadow.position = -shadow.size * 0.5 + Vector2(14.0, 20.0)
 	body.add_child(shadow)
 	var stone := ColorRect.new()
 	stone.color = Color(0.23, 0.17, 0.16, 0.96) if kind != "altar" else Color(0.32, 0.19, 0.14, 0.98)
@@ -745,16 +701,15 @@ func _add_chapel_obstacle(center: Vector2, size: Vector2, kind: String) -> void:
 
 func _add_chapel_landmarks() -> void:
 	for x in [-1780.0, 260.0, 1360.0]:
-		var threshold := Line2D.new()
-		threshold.width = 10.0
-		threshold.default_color = Color(0.62, 0.35, 0.22, 0.62)
-		threshold.points = PackedVector2Array([Vector2(0.0, -245.0), Vector2(0.0, 245.0)])
-		threshold.position = Vector2(x, 0.0)
+		var threshold := ColorRect.new()
+		threshold.color = Color(0.07, 0.045, 0.045, 0.54)
+		threshold.size = Vector2(48.0, 490.0)
+		threshold.position = Vector2(x - 24.0, -245.0)
 		world.add_child(threshold)
 	var altar_rune := Line2D.new()
 	altar_rune.width = 7.0
 	altar_rune.closed = true
-	altar_rune.default_color = Color(1.0, 0.48, 0.2, 0.66)
+	altar_rune.default_color = Color(1.0, 0.48, 0.2, 0.36)
 	altar_rune.points = _make_ring_points(235.0, 24)
 	altar_rune.position = Vector2(1580.0, 0.0)
 	world.add_child(altar_rune)
@@ -794,35 +749,23 @@ func _add_gravestone(base_position: Vector2, scale_value: float) -> void:
 	stone.position = base_position
 	stone.rotation = randf_range(-0.18, 0.18)
 	world.add_child(stone)
-	var rune := ColorRect.new()
-	var glow_color := _chapter_color("glow", Color(0.55, 1.0, 0.72, 0.34))
-	rune.color = Color(glow_color.r, glow_color.g, glow_color.b, randf_range(0.22, 0.36))
-	rune.size = Vector2(4.0 * scale_value, 20.0 * scale_value)
-	rune.position = base_position + Vector2(-2.0 * scale_value, -8.0 * scale_value)
-	world.add_child(rune)
-	ambient_glows.append(rune)
 
 func _build_graveblooms() -> void:
 	var flower_color := _chapter_color("flower", Color(0.62, 1.0, 0.72, 0.68))
-	for i in range(70):
+	var bloom_count := 6 if _is_ashen_chapel() else 16
+	for i in range(bloom_count):
 		var center := Vector2(randf_range(-1850.0, 1850.0), randf_range(-1200.0, 1200.0))
-		var stem := ColorRect.new()
-		stem.color = Color(0.16, 0.36, 0.24, randf_range(0.44, 0.72))
-		stem.size = Vector2(3.0, randf_range(10.0, 20.0))
-		stem.position = center + Vector2(-1.5, -2.0)
-		world.add_child(stem)
-		var bloom := _make_ellipse(randf_range(5.0, 9.0), randf_range(4.0, 7.0), Color(flower_color.r, flower_color.g, flower_color.b, randf_range(0.48, 0.82)), 8)
-		bloom.position = center + Vector2(0.0, -7.0)
+		var bloom := _make_ellipse(randf_range(6.0, 10.0), randf_range(5.0, 8.0), Color(flower_color.r, flower_color.g, flower_color.b, randf_range(0.18, 0.34)), 8)
+		bloom.position = center
 		world.add_child(bloom)
-		ambient_glows.append(bloom)
 
 func _build_cursed_runes() -> void:
-	for i in range(9):
+	for i in range(2):
 		var rune := Line2D.new()
-		rune.width = 3.0
+		rune.width = 2.0
 		rune.closed = true
 		var glow_color := _chapter_color("glow", Color(0.48, 1.0, 0.75, 0.42))
-		rune.default_color = Color(glow_color.r, glow_color.g, glow_color.b, randf_range(0.28, 0.48))
+		rune.default_color = Color(glow_color.r, glow_color.g, glow_color.b, 0.1)
 		var radius := randf_range(18.0, 42.0)
 		var points := PackedVector2Array()
 		for point_index in range(6):
@@ -831,31 +774,15 @@ func _build_cursed_runes() -> void:
 		rune.position = Vector2(randf_range(-1600.0, 1600.0), randf_range(-950.0, 950.0))
 		rune.rotation = randf() * TAU
 		world.add_child(rune)
-		ambient_glows.append(rune)
 
 func _build_boundary_markers() -> void:
 	var border_color := Color(0.11, 0.105, 0.12, 0.86)
-	var base_glow := _chapter_color("glow", Color(0.48, 1.0, 0.72, 0.28))
-	var glow_color := Color(base_glow.r, base_glow.g, base_glow.b, 0.28)
 	for x in range(-10, 11):
 		_add_boundary_stone(Vector2(x * 205.0, -ARENA_LIMIT_Y - 36.0), randf_range(-0.12, 0.12), border_color)
 		_add_boundary_stone(Vector2(x * 205.0, ARENA_LIMIT_Y + 36.0), randf_range(-0.12, 0.12), border_color)
 	for y in range(-6, 7):
 		_add_boundary_stone(Vector2(-ARENA_LIMIT_X - 42.0, y * 205.0), randf_range(1.42, 1.72), border_color)
 		_add_boundary_stone(Vector2(ARENA_LIMIT_X + 42.0, y * 205.0), randf_range(1.42, 1.72), border_color)
-	for i in range(14):
-		var marker := Line2D.new()
-		marker.width = 4.0
-		marker.default_color = glow_color
-		marker.points = PackedVector2Array([Vector2(-18, 0), Vector2(18, 0)])
-		var on_horizontal_edge := i < 8
-		if on_horizontal_edge:
-			marker.position = Vector2(randf_range(-1850.0, 1850.0), (-ARENA_LIMIT_Y if i % 2 == 0 else ARENA_LIMIT_Y) + randf_range(-8.0, 8.0))
-		else:
-			marker.position = Vector2((-ARENA_LIMIT_X if i % 2 == 0 else ARENA_LIMIT_X) + randf_range(-8.0, 8.0), randf_range(-1180.0, 1180.0))
-			marker.rotation = PI * 0.5
-		world.add_child(marker)
-		ambient_glows.append(marker)
 
 func _add_boundary_stone(position: Vector2, rotation: float, color: Color) -> void:
 	var stone := ColorRect.new()
@@ -867,13 +794,13 @@ func _add_boundary_stone(position: Vector2, rotation: float, color: Color) -> vo
 
 func _build_fog_wisps() -> void:
 	var fog_color := _chapter_color("fog", Color(0.45, 0.56, 0.52, 0.1))
-	for i in range(18):
+	for i in range(5):
 		var wisp := Line2D.new()
-		wisp.width = randf_range(12.0, 24.0)
-		wisp.default_color = Color(fog_color.r, fog_color.g, fog_color.b, randf_range(0.06, 0.13))
+		wisp.width = randf_range(42.0, 70.0)
+		wisp.default_color = Color(fog_color.r, fog_color.g, fog_color.b, randf_range(0.025, 0.05))
 		var points := PackedVector2Array()
-		for point_index in range(6):
-			points.append(Vector2(point_index * randf_range(36.0, 58.0), sin(point_index * 1.7) * randf_range(10.0, 22.0)))
+		for point_index in range(3):
+			points.append(Vector2(point_index * randf_range(90.0, 130.0), sin(point_index * 1.7) * randf_range(8.0, 16.0)))
 		wisp.points = points
 		wisp.position = Vector2(randf_range(-1800.0, 1500.0), randf_range(-1100.0, 1100.0))
 		wisp.rotation = randf_range(-0.35, 0.35)
@@ -911,6 +838,29 @@ func _make_ring_points(radius: float, point_count: int) -> PackedVector2Array:
 	for i in range(point_count):
 		points.append(Vector2.RIGHT.rotated(TAU * float(i) / float(point_count)) * radius)
 	return points
+
+func _make_tapered_strike(start: Vector2, end: Vector2, half_width: float, color: Color, jaggedness: float = 0.0) -> Polygon2D:
+	var strike := Polygon2D.new()
+	strike.color = color
+	var direction := start.direction_to(end)
+	var side := direction.orthogonal()
+	var upper := PackedVector2Array()
+	var lower := PackedVector2Array()
+	var segment_count := 8
+	for i in range(segment_count + 1):
+		var progress := float(i) / float(segment_count)
+		var taper := sin(progress * PI)
+		var uneven := sin(progress * PI * 5.0) * jaggedness
+		var center := start.lerp(end, progress) + side * uneven
+		var width := maxf(2.0, half_width * taper * (0.84 + sin(progress * PI * 7.0) * 0.12))
+		upper.append(center + side * width)
+		lower.insert(0, center - side * width)
+	var points := PackedVector2Array()
+	points.append_array(upper)
+	for point in lower:
+		points.append(point)
+	strike.polygon = points
+	return strike
 
 func _build_nova_charge_fx() -> void:
 	nova_charge_fx.visible = false
@@ -1099,7 +1049,8 @@ func _make_bar_style(fill: Color, border_color: Color) -> StyleBoxFlat:
 
 func _show_start_screen() -> void:
 	_clear_world_entities()
-	_prepare_run_goals()
+	if active_run_goals.is_empty():
+		_prepare_run_goals()
 	game_state = "start"
 	get_tree().paused = true
 	build_label.visible = false
@@ -1110,28 +1061,53 @@ func _show_start_screen() -> void:
 	joystick_base.visible = false
 	ultimate_button.visible = false
 	ultimate_bar.visible = false
-	_configure_overlay(Vector2(24, 72), Vector2(492, 820))
+	_configure_overlay(Vector2(44, 210), Vector2(452, 530))
 	overlay_panel.visible = true
 	_clear_container(overlay_list)
 	var chapter := _current_chapter()
 	_add_overlay_label("GRAVEBLOOM", 42)
-	_add_overlay_label("Глава: %s" % String(chapter["name"]), 23)
-	_add_overlay_label(String(chapter["subtitle"]), 15)
-	_add_overlay_label("Цели забега", 22)
-	_add_overlay_label("Выполни их во время забега, чтобы получить больше Пепла.", 15)
+	_add_overlay_label(String(chapter["name"]), 26)
+	_add_overlay_label(String(chapter["goal"]), 17)
+	_add_overlay_label("Пепел: %d" % profile_ash, 17)
+	_add_overlay_button("Играть", _start_run)
+	_add_overlay_button("Сменить главу", _show_chapter_screen)
+	_add_overlay_button("Еще", _show_more_screen)
+
+func _show_more_screen() -> void:
+	_clear_world_entities()
+	game_state = "more"
+	get_tree().paused = true
+	build_label.visible = false
+	hp_bar.visible = false
+	xp_bar.visible = false
+	_hide_boss_ui()
+	upgrade_panel.visible = false
+	joystick_base.visible = false
+	ultimate_button.visible = false
+	ultimate_bar.visible = false
+	_configure_overlay(Vector2(44, 170), Vector2(452, 620))
+	overlay_panel.visible = true
+	_clear_container(overlay_list)
+	_add_overlay_label("Еще", 32)
+	_add_overlay_button("Цели забега", _show_run_goals_screen)
+	_add_overlay_button("Профиль Маски", _show_profile_screen)
+	_add_overlay_button("Летопись", _show_codex_screen)
+	_add_overlay_button("Справка", _show_help_screen)
+	_add_overlay_button("Назад", _show_start_screen)
+
+func _show_run_goals_screen() -> void:
+	_clear_world_entities()
+	game_state = "goals"
+	get_tree().paused = true
+	_configure_overlay(Vector2(44, 170), Vector2(452, 620))
+	overlay_panel.visible = true
+	_clear_container(overlay_list)
+	_add_overlay_label("Цели забега", 32)
+	_add_overlay_label("Дают дополнительный Пепел", 15)
 	for goal in active_run_goals:
 		var goal_data: Dictionary = goal
-		_add_overlay_label("%s: %s  +%d" % [String(goal_data["title"]), String(goal_data["description"]), int(goal_data["reward"])], 16)
-	_add_overlay_label("Королевство умерло, но его цветы продолжают расти.", 19)
-	_add_overlay_label(String(chapter["goal"]), 20)
-	_add_overlay_label("Пепел профиля: %d" % profile_ash, 18)
-	if _profile_pressure_tier() > 0:
-		_add_overlay_label("Руины чувствуют силу Маски и отвечают более опасными волнами.", 14)
-	_add_overlay_button("Начать забег", _start_run)
-	_add_overlay_button("Выбрать главу", _show_chapter_screen)
-	_add_overlay_button("Справка", _show_help_screen)
-	_add_overlay_button("Профиль", _show_profile_screen)
-	_add_overlay_button("Летопись", _show_codex_screen)
+		_add_overlay_label("%s\n%s  +%d" % [String(goal_data["title"]), String(goal_data["description"]), int(goal_data["reward"])], 17)
+	_add_overlay_button("Назад", _show_more_screen)
 
 func _show_chapter_screen() -> void:
 	_clear_world_entities()
@@ -1145,11 +1121,10 @@ func _show_chapter_screen() -> void:
 	joystick_base.visible = false
 	ultimate_button.visible = false
 	ultimate_bar.visible = false
-	_configure_overlay(Vector2(24, 76), Vector2(492, 812))
+	_configure_overlay(Vector2(44, 170), Vector2(452, 620))
 	overlay_panel.visible = true
 	_clear_container(overlay_list)
 	_add_overlay_label("Выбор главы", 32)
-	_add_overlay_label("Каждая глава меняет арену, темп врагов и голос руин.", 16)
 	for i in range(CHAPTERS.size()):
 		var chapter: Dictionary = CHAPTERS[i]
 		var marker := ">> " if i == current_chapter_index else ""
@@ -1193,11 +1168,20 @@ func _show_profile_screen() -> void:
 	_clear_container(overlay_list)
 	_add_overlay_label("Профиль Маски", 32)
 	_add_overlay_label("Пепел: %d" % profile_ash, 22)
-	_add_overlay_label("Пепел сохраняется между забегами. Трать его здесь на постоянные усиления.", 15)
-	_add_overlay_label("Постоянные дары", 20)
+	_add_overlay_label("Постоянные дары", 18)
 	for upgrade_id in ["mask", "blade", "magnet", "nova"]:
 		_add_profile_upgrade_button(upgrade_id)
-	_add_overlay_label("История забегов", 20)
+	_add_overlay_button("История забегов", _show_history_screen)
+	_add_overlay_button("Назад", _show_more_screen)
+
+func _show_history_screen() -> void:
+	_clear_world_entities()
+	game_state = "history"
+	get_tree().paused = true
+	_configure_overlay(Vector2(44, 170), Vector2(452, 620))
+	overlay_panel.visible = true
+	_clear_container(overlay_list)
+	_add_overlay_label("История забегов", 32)
 	if run_history.is_empty():
 		_add_overlay_label("Пока руины молчат.", 16)
 	else:
@@ -1205,10 +1189,8 @@ func _show_profile_screen() -> void:
 		for entry in run_history.slice(0, history_count):
 			_add_overlay_label(_format_history_entry(entry), 15)
 		if run_history.size() > history_count:
-			_add_overlay_label("Еще забегов в памяти: %d" % (run_history.size() - history_count), 14)
-	_add_overlay_button("Справка", _show_help_screen)
-	_add_overlay_button("Летопись", _show_codex_screen)
-	_add_overlay_button("Назад", _show_start_screen)
+			_add_overlay_label("Скрыто: %d" % (run_history.size() - history_count), 14)
+	_add_overlay_button("Назад", _show_profile_screen)
 
 func _show_help_screen() -> void:
 	_clear_world_entities()
@@ -1222,16 +1204,14 @@ func _show_help_screen() -> void:
 	joystick_base.visible = false
 	ultimate_button.visible = false
 	ultimate_bar.visible = false
-	_configure_overlay(Vector2(24, 76), Vector2(492, 812))
+	_configure_overlay(Vector2(44, 200), Vector2(452, 560))
 	overlay_panel.visible = true
 	_clear_container(overlay_list)
 	_add_overlay_label("Справка Маски", 32)
-	_add_overlay_label("Как играть\nДвигайся и выживай 3 минуты. Атаки срабатывают сами, ты управляешь только позицией.", 16)
-	_add_overlay_label("Пепел\nВалюта профиля. Получаешь после забега, тратишь на постоянные усиления.", 16)
-	_add_overlay_label("Реликвии\nВременные улучшения одного забега. Выбираются при новом уровне и сбрасываются после смерти.", 16)
-	_add_overlay_label("Летопись\nДостижения, статистика и короткие записи мира. Новые записи дают разовый Пепел.", 16)
-	_add_overlay_label("Счетчики сверху\nУровень, время забега и сколько осталось до конца. Полоски: здоровье и опыт.", 16)
-	_add_overlay_button("Назад", _show_start_screen)
+	_add_overlay_label("Двигайся и выживай 3 минуты.\nОружие атакует автоматически.", 17)
+	_add_overlay_label("Пепел — постоянная валюта.\nРеликвии действуют один забег.", 17)
+	_add_overlay_label("Сверху: уровень, время, здоровье и опыт.", 17)
+	_add_overlay_button("Назад", _show_more_screen)
 
 func _show_codex_screen() -> void:
 	_clear_world_entities()
@@ -1245,20 +1225,18 @@ func _show_codex_screen() -> void:
 	joystick_base.visible = false
 	ultimate_button.visible = false
 	ultimate_bar.visible = false
-	_configure_overlay(Vector2(24, 72), Vector2(492, 820))
+	_configure_overlay(Vector2(34, 110), Vector2(472, 740))
 	overlay_panel.visible = true
 	_clear_container(overlay_list)
 	_add_overlay_label("Летопись Маски", 32)
-	_add_overlay_label("Здесь хранятся достижения, статистика и открытые записи мира.", 15)
 	_add_overlay_label(_format_codex_stats(), 16)
-	_add_overlay_label("Последние открытые записи", 20)
 	var opened := 0
 	var shown := 0
 	for entry in CODEX_ENTRIES:
 		var entry_data: Dictionary = entry
 		if codex_unlocked.has(String(entry_data["id"])):
 			opened += 1
-			if shown < CODEX_VISIBLE_ENTRIES:
+			if shown < min(2, CODEX_VISIBLE_ENTRIES):
 				shown += 1
 				_add_overlay_label("%s\n%s" % [String(entry_data["title"]), String(entry_data["text"])], 15)
 	if opened <= 0:
@@ -1266,8 +1244,7 @@ func _show_codex_screen() -> void:
 	elif opened > shown:
 		_add_overlay_label("Еще записей открыто: %d" % (opened - shown), 14)
 	_add_overlay_label("Открыто: %d/%d" % [opened, CODEX_ENTRIES.size()], 16)
-	_add_overlay_button("Профиль", _show_profile_screen)
-	_add_overlay_button("Назад", _show_start_screen)
+	_add_overlay_button("Назад", _show_more_screen)
 
 func _reset_run() -> void:
 	_clear_world_entities()
@@ -1735,7 +1712,7 @@ func _set_enemy_art(enemy: Enemy, enemy_kind: String, is_miniboss: bool) -> void
 	elif enemy_kind == "spitter":
 		art.texture = EnemyCrawlerTexture
 		art.scale = Vector2(0.27, 0.27)
-		art.modulate = Color(0.86, 0.72, 1.0)
+		art.modulate = Color(0.58, 0.92, 0.72)
 	elif enemy_kind == "exploder":
 		art.texture = EnemyBruteTexture
 		art.scale = Vector2(0.15, 0.15)
@@ -1748,31 +1725,18 @@ func _set_enemy_art(enemy: Enemy, enemy_kind: String, is_miniboss: bool) -> void
 func _add_enemy_role_markers(enemy: Enemy, enemy_kind: String) -> void:
 	match enemy_kind:
 		"spitter":
-			_add_enemy_mark(enemy, Color(0.86, 0.62, 1.0, 0.72), PackedVector2Array([
-				Vector2(0, -43),
-				Vector2(8, -33),
-				Vector2(0, -29),
-				Vector2(-8, -33),
-			]))
+			pass
 		"exploder":
 			_add_enemy_ring(enemy, Color(1.0, 0.58, 0.28, 0.48), 34.0, 4.0)
 		"ash_bellringer":
 			pass
 		"ash_ember":
-			_add_enemy_mark(enemy, Color(1.0, 0.58, 0.2, 0.78), PackedVector2Array([
-				Vector2(0, -48),
-				Vector2(8, -34),
-				Vector2(2, -36),
-				Vector2(8, -24),
-				Vector2(-7, -33),
-			]))
+			pass
 		"miniboss":
-			_add_enemy_ring(enemy, Color(0.9, 0.48, 0.72, 0.48), 45.0, 4.0)
+			_add_enemy_ring(enemy, Color(0.72, 0.9, 0.48, 0.42), 45.0, 4.0)
 		"grave_king":
 			var boss_primary := Color(1.0, 0.55, 0.24, 0.88) if _is_ashen_chapel() else Color(0.62, 1.0, 0.58, 0.82)
-			var boss_secondary := Color(0.5, 0.16, 0.08, 0.72) if _is_ashen_chapel() else Color(0.95, 0.52, 0.86, 0.58)
 			_add_enemy_ring(enemy, Color(boss_primary.r, boss_primary.g, boss_primary.b, 0.56), 62.0, 5.0)
-			_add_enemy_ring(enemy, Color(boss_secondary.r, boss_secondary.g, boss_secondary.b, 0.38), 78.0, 3.0)
 			_add_enemy_mark(enemy, boss_primary, PackedVector2Array([
 				Vector2(0, -76),
 				Vector2(18, -48),
@@ -1833,7 +1797,7 @@ func _add_enemy_speed_wings(enemy: Enemy, color: Color) -> void:
 func _spawn_miniboss() -> void:
 	miniboss_spawned = true
 	_spawn_enemy("miniboss", true)
-	CombatFxScript.ring(fx_layer, player.global_position, Color(1.0, 0.62, 0.28, 0.9) if _is_ashen_chapel() else Color(0.9, 0.55, 0.72, 0.9), 260.0, 0.7)
+	CombatFxScript.ring(fx_layer, player.global_position, Color(1.0, 0.62, 0.28, 0.9) if _is_ashen_chapel() else Color(0.72, 0.92, 0.48, 0.78), 260.0, 0.7)
 	_flash_overlay_text("Пепельный Дьякон поднялся" if _is_ashen_chapel() else "Могильный Страж пробудился")
 	_flash_overlay_text("Он несет последний уголь" if _is_ashen_chapel() else "Он все еще охраняет пустой трон")
 	_start_screen_shake(0.34, 8.0)
@@ -1847,7 +1811,7 @@ func _spawn_dread_boss() -> void:
 	_spawn_enemy("grave_king", true, spawn_position)
 	_show_boss_ui(_get_dread_boss())
 	CombatFxScript.ring(fx_layer, player.global_position, Color(1.0, 0.55, 0.22, 0.94) if _is_ashen_chapel() else Color(0.64, 1.0, 0.56, 0.92), 360.0, 0.9)
-	CombatFxScript.ring(fx_layer, player.global_position, Color(0.48, 0.12, 0.06, 0.8) if _is_ashen_chapel() else Color(0.95, 0.5, 0.8, 0.72), 220.0, 0.7)
+	CombatFxScript.ring(fx_layer, player.global_position, Color(0.48, 0.12, 0.06, 0.8) if _is_ashen_chapel() else Color(0.28, 0.62, 0.38, 0.62), 220.0, 0.7)
 	_flash_overlay_text(String(_current_chapter().get("boss_enter", "Король-Могила встал")))
 	_flash_overlay_text(String(_current_chapter().get("boss_lore", "За ним не осталось живых подданных")))
 	_start_screen_shake(0.64, 12.0)
@@ -1944,25 +1908,59 @@ func _spawn_health_pack(pack_position: Vector2) -> void:
 	var pack := Node2D.new()
 	pack.position = pack_position + Vector2(randf_range(-18.0, 18.0), randf_range(-18.0, 18.0))
 	pack.z_index = 4
-	var glow := _make_ellipse(20.0, 14.0, Color(0.95, 0.16, 0.24, 0.28), 14)
+	var glow := _make_ellipse(24.0, 17.0, Color(0.46, 1.0, 0.7, 0.2), 14)
 	glow.name = "Glow"
 	pack.add_child(glow)
-	var body := ColorRect.new()
+	var shadow := _make_ellipse(13.0, 5.0, Color(0.02, 0.04, 0.04, 0.72), 12)
+	shadow.position = Vector2(0.0, 17.0)
+	pack.add_child(shadow)
+	var body := Polygon2D.new()
 	body.name = "Body"
-	body.color = Color(0.16, 0.04, 0.06, 0.95)
-	body.size = Vector2(28.0, 28.0)
-	body.position = Vector2(-14.0, -14.0)
+	body.polygon = PackedVector2Array([
+		Vector2(-7.0, -9.0),
+		Vector2(-12.0, -3.0),
+		Vector2(-14.0, 9.0),
+		Vector2(-9.0, 15.0),
+		Vector2(9.0, 15.0),
+		Vector2(14.0, 9.0),
+		Vector2(12.0, -3.0),
+		Vector2(7.0, -9.0),
+	])
+	body.color = Color(0.08, 0.14, 0.14, 0.98)
 	pack.add_child(body)
-	var cross_vertical := ColorRect.new()
-	cross_vertical.color = Color(1.0, 0.24, 0.32, 1.0)
-	cross_vertical.size = Vector2(8.0, 22.0)
-	cross_vertical.position = Vector2(-4.0, -11.0)
-	pack.add_child(cross_vertical)
-	var cross_horizontal := ColorRect.new()
-	cross_horizontal.color = Color(1.0, 0.24, 0.32, 1.0)
-	cross_horizontal.size = Vector2(22.0, 8.0)
-	cross_horizontal.position = Vector2(-11.0, -4.0)
-	pack.add_child(cross_horizontal)
+	var liquid := Polygon2D.new()
+	liquid.polygon = PackedVector2Array([
+		Vector2(-11.0, 5.0),
+		Vector2(-12.0, 10.0),
+		Vector2(-8.0, 13.0),
+		Vector2(8.0, 13.0),
+		Vector2(12.0, 10.0),
+		Vector2(11.0, 5.0),
+	])
+	liquid.color = Color(0.8, 0.12, 0.3, 0.96)
+	pack.add_child(liquid)
+	var neck := ColorRect.new()
+	neck.color = Color(0.12, 0.22, 0.2, 1.0)
+	neck.size = Vector2(12.0, 8.0)
+	neck.position = Vector2(-6.0, -16.0)
+	pack.add_child(neck)
+	var cork := ColorRect.new()
+	cork.color = Color(0.82, 0.64, 0.32, 1.0)
+	cork.size = Vector2(16.0, 6.0)
+	cork.position = Vector2(-8.0, -20.0)
+	pack.add_child(cork)
+	var highlight := Line2D.new()
+	highlight.width = 2.5
+	highlight.default_color = Color(0.78, 1.0, 0.9, 0.72)
+	highlight.points = PackedVector2Array([Vector2(-8.0, -2.0), Vector2(-10.0, 5.0)])
+	highlight.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	highlight.end_cap_mode = Line2D.LINE_CAP_ROUND
+	pack.add_child(highlight)
+	for sparkle_position in [Vector2(-19.0, -7.0), Vector2(19.0, 2.0), Vector2(10.0, -18.0)]:
+		var sparkle := _make_ellipse(2.2, 2.2, Color(0.68, 1.0, 0.78, 0.9), 8)
+		sparkle.position = sparkle_position
+		sparkle.set_meta("health_pack_sparkle", true)
+		pack.add_child(sparkle)
 	pack.set_meta("age", 0.0)
 	health_packs.append(pack)
 	world.add_child(pack)
@@ -2003,7 +2001,7 @@ func _add_enemy_death_fx(enemy_position: Vector2, enemy_kind: String, was_execut
 	var color := Color(0.55, 1.0, 0.72, 0.9)
 	match enemy_kind:
 		"spitter":
-			color = Color(0.78, 0.48, 1.0, 0.92)
+			color = Color(0.48, 0.9, 0.68, 0.9)
 		"exploder":
 			color = Color(1.0, 0.5, 0.24, 0.94)
 		"brute":
@@ -2016,20 +2014,12 @@ func _add_enemy_death_fx(enemy_position: Vector2, enemy_kind: String, was_execut
 			color = Color(1.0, 0.36, 0.12, 0.98)
 		"grave_king":
 			color = Color(1.0, 0.42, 0.14, 0.98) if _is_ashen_chapel() else Color(0.9, 0.1, 0.2, 0.95)
-	CombatFxScript.burst(fx_layer, enemy_position, color, 28 if was_miniboss else (24 if was_execution else 14))
+	CombatFxScript.burst(fx_layer, enemy_position, color, 20 if was_miniboss else (16 if was_execution else 7))
 	CombatFxScript.gore_burst(fx_layer, enemy_position, was_execution or was_miniboss)
-	if was_execution:
-		CombatFxScript.ring(fx_layer, enemy_position, Color(0.68, 1.0, 0.34, 0.72), 96.0, 0.24)
-	elif was_miniboss:
-		CombatFxScript.ring(fx_layer, enemy_position, Color(0.9, 0.55, 0.72, 0.78), 150.0, 0.38)
-	if enemy_kind == "spitter":
-		CombatFxScript.ring(fx_layer, enemy_position, Color(0.72, 0.42, 1.0, 0.46), 82.0, 0.32)
-	elif enemy_kind == "exploder":
+	if was_miniboss:
+		CombatFxScript.ring(fx_layer, enemy_position, Color(0.72, 0.92, 0.48, 0.7), 150.0, 0.38)
+	if enemy_kind == "exploder":
 		CombatFxScript.ring(fx_layer, enemy_position, Color(1.0, 0.48, 0.18, 0.64), 118.0, 0.28)
-	elif enemy_kind == "ash_bellringer":
-		CombatFxScript.ring(fx_layer, enemy_position, Color(1.0, 0.74, 0.34, 0.66), 108.0, 0.3)
-	elif enemy_kind == "ash_ember":
-		CombatFxScript.ring(fx_layer, enemy_position, Color(1.0, 0.4, 0.12, 0.72), 124.0, 0.26)
 
 func _update_health_packs(delta: float) -> void:
 	var alive_packs: Array[Node2D] = []
@@ -2040,10 +2030,14 @@ func _update_health_packs(delta: float) -> void:
 		pack.set_meta("age", age)
 		pack.rotation = sin(age * 2.5) * 0.08
 		pack.scale = Vector2.ONE * (1.0 + sin(age * 4.0) * 0.05)
+		for child in pack.get_children():
+			var sparkle := child as Node2D
+			if sparkle != null and bool(sparkle.get_meta("health_pack_sparkle", false)):
+				sparkle.modulate.a = 0.45 + sin(age * 5.0 + sparkle.position.x) * 0.35
 		if player != null and pack.global_position.distance_to(player.global_position) < 34.0:
 			player.heal(HEALTH_PACK_HEAL)
 			health_pack_count += 1
-			CombatFxScript.ring(fx_layer, pack.global_position, Color(1.0, 0.26, 0.34, 0.72), 70.0, 0.26)
+			CombatFxScript.ring(fx_layer, pack.global_position, Color(0.62, 1.0, 0.72, 0.72), 70.0, 0.26)
 			_flash_overlay_text("+%d здоровье" % int(HEALTH_PACK_HEAL))
 			pack.queue_free()
 			continue
@@ -2107,9 +2101,7 @@ func _update_garden_thickets(delta: float) -> void:
 			continue
 		var phase := float(thicket.get_meta("phase", 0.0)) + delta * 1.4
 		thicket.set_meta("phase", phase)
-		var edge := thicket.get_node_or_null("Edge") as CanvasItem
-		if edge != null:
-			edge.modulate.a = 0.72 + sin(phase) * 0.22
+		thicket.modulate = Color(0.88, 0.96 + sin(phase) * 0.04, 0.88, 1.0)
 		var size := Vector2(thicket.get_meta("size", Vector2(300.0, 170.0)))
 		var local_player := thicket.to_local(player.global_position)
 		var normalized_distance := Vector2(
@@ -2145,6 +2137,9 @@ func _update_hazard_zones(delta: float) -> void:
 		var petals := zone.get_node_or_null("Petals") as CanvasItem
 		var runes := zone.get_node_or_null("Runes") as CanvasItem
 		var bloom := zone.get_node_or_null("Bloom") as CanvasItem
+		var sound_waves := zone.get_node_or_null("SoundWaves") as CanvasItem
+		var bell := zone.get_node_or_null("Bell") as CanvasItem
+		var clapper := zone.get_node_or_null("Clapper") as CanvasItem
 		var label := zone.get_node_or_null("Label") as Label
 		if ring != null:
 			ring.scale = Vector2.ONE * (0.62 + min(1.0, age / HAZARD_ARM_TIME) * 0.45)
@@ -2163,6 +2158,13 @@ func _update_hazard_zones(delta: float) -> void:
 		if bloom != null:
 			bloom.rotation += delta * 1.8
 			bloom.scale = Vector2.ONE * (0.8 + min(1.0, age / HAZARD_ARM_TIME) * 0.45 + sin(age * 7.0) * 0.08)
+		if sound_waves != null:
+			sound_waves.scale = Vector2.ONE * (0.78 + min(1.0, age / HAZARD_ARM_TIME) * 0.3 + sin(age * 6.0) * 0.035)
+			sound_waves.modulate.a = 0.42 if not active else 0.9
+		if bell != null:
+			bell.rotation = sin(age * 6.5) * (0.08 if not active else 0.16)
+		if clapper != null:
+			clapper.position.x = sin(age * 6.5) * (8.0 if not active else 15.0)
 		if label != null:
 			label.modulate.a = max(0.0, min(1.0, total_time - age)) * (0.72 if not active else 1.0)
 			label.position.y = -radius - 56.0 + sin(age * 5.0) * 2.0
@@ -2191,23 +2193,13 @@ func _spawn_hazard_zone(zone_position: Vector2) -> void:
 	zone.set_meta("bell_zone", bell_zone)
 	var shadow_color := Color(0.16, 0.07, 0.035, 0.52) if bell_zone else Color(0.04, 0.12, 0.06, 0.48)
 	var core_color := Color(0.92, 0.42, 0.16, 0.14) if bell_zone else Color(0.38, 0.92, 0.34, 0.12)
-	var petal_color := Color(1.0, 0.56, 0.22, 0.46) if bell_zone else Color(0.52, 1.0, 0.34, 0.42)
 	var ring_color := Color(1.0, 0.7, 0.32, 0.76) if bell_zone else Color(0.72, 1.0, 0.48, 0.66)
-	var rune_color := Color(1.0, 0.84, 0.48, 0.78) if bell_zone else Color(0.9, 1.0, 0.5, 0.72)
 	var shadow := _make_ellipse(HAZARD_RADIUS * 1.16, HAZARD_RADIUS * 0.84, shadow_color, 32)
 	shadow.name = "Shadow"
 	zone.add_child(shadow)
 	var core := _make_ellipse(HAZARD_RADIUS, HAZARD_RADIUS * 0.72, core_color, 34)
 	core.name = "Core"
 	zone.add_child(core)
-	var petals := Node2D.new()
-	petals.name = "Petals"
-	for i in range(12):
-		var petal := _make_ellipse(16.0, 42.0, petal_color, 12)
-		petal.position = Vector2.RIGHT.rotated(TAU * float(i) / 12.0) * (HAZARD_RADIUS * 0.48)
-		petal.rotation = TAU * float(i) / 12.0 + PI / 2.0
-		petals.add_child(petal)
-	zone.add_child(petals)
 	var ring := Line2D.new()
 	ring.name = "Ring"
 	ring.closed = true
@@ -2219,38 +2211,10 @@ func _spawn_hazard_zone(zone_position: Vector2) -> void:
 		points.append(Vector2(cos(TAU * float(i) / 36.0) * HAZARD_RADIUS * wobble, sin(TAU * float(i) / 36.0) * HAZARD_RADIUS * 0.72 * wobble))
 	ring.points = points
 	zone.add_child(ring)
-	var runes := Node2D.new()
-	runes.name = "Runes"
-	for i in range(8):
-		var rune := Line2D.new()
-		rune.width = 3.0
-		rune.default_color = rune_color
-		rune.points = PackedVector2Array([
-			Vector2(-7.0, -8.0),
-			Vector2(0.0, 8.0),
-			Vector2(8.0, -5.0),
-		])
-		rune.position = Vector2.RIGHT.rotated(TAU * float(i) / 8.0) * (HAZARD_RADIUS * 0.76)
-		rune.rotation = TAU * float(i) / 8.0 + randf_range(-0.35, 0.35)
-		runes.add_child(rune)
-	zone.add_child(runes)
-	var bloom := _make_ellipse(26.0, 16.0, Color(1.0, 0.66, 0.28, 0.88) if bell_zone else Color(0.8, 1.0, 0.45, 0.82), 11)
-	bloom.name = "Bloom"
-	bloom.rotation = randf() * TAU
-	zone.add_child(bloom)
 	if bell_zone:
-		var bell := Polygon2D.new()
-		bell.color = Color(0.25, 0.12, 0.06, 0.96)
-		bell.polygon = PackedVector2Array([
-			Vector2(-24.0, 12.0),
-			Vector2(-17.0, -20.0),
-			Vector2(-8.0, -32.0),
-			Vector2(8.0, -32.0),
-			Vector2(17.0, -20.0),
-			Vector2(24.0, 12.0),
-			Vector2(0.0, 24.0),
-		])
-		zone.add_child(bell)
+		_add_bell_hazard_visual(zone)
+	else:
+		_add_flower_hazard_visual(zone)
 	var label := Label.new()
 	label.name = "Label"
 	label.text = "КОЛОКОЛЬНЫЙ ЗВОН" if bell_zone else "ПРОКЛЯТЫЙ ЦВЕТОК"
@@ -2262,6 +2226,66 @@ func _spawn_hazard_zone(zone_position: Vector2) -> void:
 	zone.add_child(label)
 	hazard_zones.append(zone)
 	world.add_child(zone)
+
+func _add_flower_hazard_visual(zone: Node2D) -> void:
+	var petals := Node2D.new()
+	petals.name = "Petals"
+	for i in range(12):
+		var petal := _make_ellipse(16.0, 42.0, Color(0.52, 1.0, 0.34, 0.42), 12)
+		petal.position = Vector2.RIGHT.rotated(TAU * float(i) / 12.0) * (HAZARD_RADIUS * 0.48)
+		petal.rotation = TAU * float(i) / 12.0 + PI / 2.0
+		petals.add_child(petal)
+	zone.add_child(petals)
+	var runes := Node2D.new()
+	runes.name = "Runes"
+	for i in range(8):
+		var rune := Line2D.new()
+		rune.width = 3.0
+		rune.default_color = Color(0.9, 1.0, 0.5, 0.72)
+		rune.points = PackedVector2Array([Vector2(-7.0, -8.0), Vector2(0.0, 8.0), Vector2(8.0, -5.0)])
+		rune.position = Vector2.RIGHT.rotated(TAU * float(i) / 8.0) * (HAZARD_RADIUS * 0.76)
+		rune.rotation = TAU * float(i) / 8.0 + randf_range(-0.35, 0.35)
+		runes.add_child(rune)
+	zone.add_child(runes)
+	var bloom := _make_ellipse(26.0, 16.0, Color(0.8, 1.0, 0.45, 0.82), 11)
+	bloom.name = "Bloom"
+	bloom.rotation = randf() * TAU
+	zone.add_child(bloom)
+
+func _add_bell_hazard_visual(zone: Node2D) -> void:
+	var waves := Node2D.new()
+	waves.name = "SoundWaves"
+	for wave_index in range(3):
+		var wave := Line2D.new()
+		wave.width = 8.0 - float(wave_index) * 1.5
+		wave.closed = true
+		wave.default_color = Color(1.0, 0.74, 0.32, 0.62 - float(wave_index) * 0.12)
+		wave.points = _make_ring_points(48.0 + float(wave_index) * 34.0, 30)
+		wave.scale.y = 0.72
+		waves.add_child(wave)
+	zone.add_child(waves)
+	var bell := Polygon2D.new()
+	bell.name = "Bell"
+	bell.color = Color(0.42, 0.2, 0.07, 0.98)
+	bell.polygon = PackedVector2Array([
+		Vector2(-48.0, 32.0),
+		Vector2(-35.0, -28.0),
+		Vector2(-18.0, -54.0),
+		Vector2(18.0, -54.0),
+		Vector2(35.0, -28.0),
+		Vector2(48.0, 32.0),
+		Vector2(0.0, 52.0),
+	])
+	zone.add_child(bell)
+	var bell_highlight := ColorRect.new()
+	bell_highlight.color = Color(1.0, 0.62, 0.22, 0.72)
+	bell_highlight.size = Vector2(12.0, 58.0)
+	bell_highlight.position = Vector2(-26.0, -34.0)
+	zone.add_child(bell_highlight)
+	var clapper := _make_ellipse(12.0, 15.0, Color(0.12, 0.055, 0.025, 1.0), 12)
+	clapper.name = "Clapper"
+	clapper.position = Vector2(0.0, 39.0)
+	zone.add_child(clapper)
 
 func _get_hazard_position() -> Vector2:
 	var forward := player.velocity.normalized()
@@ -2443,21 +2467,29 @@ func _spawn_boss_lane_attack(center: Vector2, direction: Vector2, length: float,
 	attack.set_meta("width", width)
 	attack.set_meta("damage", damage)
 	attack.set_meta("hit", false)
-	var line := Line2D.new()
-	line.name = "Telegraph"
-	line.width = width
-	line.default_color = Color(1.0, 0.46, 0.18, 0.54) if _is_ashen_chapel() else Color(0.95, 0.58, 0.9, 0.48)
-	line.points = PackedVector2Array([
-		center - direction * (length * 0.5),
-		center + direction * (length * 0.5),
-	])
-	attack.add_child(line)
-	var edge := Line2D.new()
-	edge.name = "Edge"
-	edge.width = 4.0
-	edge.default_color = Color(1.0, 0.78, 0.38, 0.92) if _is_ashen_chapel() else Color(0.86, 1.0, 0.58, 0.88)
-	edge.points = line.points
-	attack.add_child(edge)
+	var start := center - direction * (length * 0.5)
+	var end := center + direction * (length * 0.5)
+	var telegraph_color := Color(1.0, 0.46, 0.18, 0.42) if _is_ashen_chapel() else Color(0.72, 0.3, 0.78, 0.42)
+	var core_color := Color(1.0, 0.82, 0.42, 0.88) if _is_ashen_chapel() else Color(0.74, 1.0, 0.58, 0.84)
+	var fracture := _make_tapered_strike(start, end, width * 0.54, telegraph_color, width * 0.09)
+	fracture.name = "Telegraph"
+	attack.add_child(fracture)
+	var core := _make_tapered_strike(start + direction * 14.0, end - direction * 14.0, maxf(5.0, width * 0.11), core_color, width * 0.035)
+	core.name = "Edge"
+	attack.add_child(core)
+	for i in range(5):
+		var shard_progress := 0.14 + float(i) * 0.18
+		var shard_center := start.lerp(end, shard_progress) + direction.orthogonal() * randf_range(-width * 0.75, width * 0.75)
+		var shard := Polygon2D.new()
+		shard.color = core_color
+		shard.polygon = PackedVector2Array([
+			shard_center + direction * randf_range(8.0, 18.0),
+			shard_center + direction.orthogonal() * randf_range(3.0, 7.0),
+			shard_center - direction * randf_range(5.0, 12.0),
+			shard_center - direction.orthogonal() * randf_range(3.0, 7.0),
+		])
+		shard.modulate.a = 0.55
+		attack.add_child(shard)
 	boss_attacks.append(attack)
 	world.add_child(attack)
 	if not label_text.is_empty():
@@ -2923,27 +2955,38 @@ func _show_victory() -> void:
 	_show_result_screen(true)
 
 func _show_result_screen(victory: bool) -> void:
-	_configure_overlay(Vector2(28, 104), Vector2(484, 744))
+	_configure_overlay(Vector2(44, 190), Vector2(452, 580))
 	overlay_panel.visible = true
 	_clear_container(overlay_list)
 	_add_overlay_label("Победа" if victory else "Забег окончен", 34)
-	_add_overlay_label("Глава: %s" % String(_current_chapter()["name"]), 18)
-	_add_overlay_label(last_run_result, 20)
-	_add_overlay_label(last_run_lore, 18)
-	_add_overlay_label("Время: %s   Уровень: %d   Убийства: %d   Серия: x%d" % [_format_time(elapsed), level, kill_count, best_kill_streak], 18)
-	_add_overlay_label("Пепел: %d   Цели:+%d   Летопись:+%d" % [last_run_ash, last_run_goal_ash, last_run_codex_ash], 18)
-	_add_overlay_label("Всего пепла: %d" % profile_ash, 18)
-	_add_overlay_label("Осколки: %d/%d" % [xp, xp_to_next], 16)
+	_add_overlay_label(String(_current_chapter()["name"]), 20)
+	_add_overlay_label("%s   Уровень %d\nУбийства %d   Серия x%d" % [_format_time(elapsed), level, kill_count, best_kill_streak], 19)
+	_add_overlay_label("+%d Пепла" % last_run_ash, 24)
+	_add_overlay_button("Заново", _start_run)
+	_add_overlay_button("Подробности", _show_result_details.bind(victory))
+	_add_overlay_button("Главное меню", _return_to_start_after_run)
+
+func _show_result_details(victory: bool) -> void:
+	_configure_overlay(Vector2(34, 105), Vector2(472, 750))
+	overlay_panel.visible = true
+	_clear_container(overlay_list)
+	_add_overlay_label("Подробности забега", 30)
+	_add_overlay_label(last_run_lore, 17)
+	_add_overlay_label("Награда: %d\nЦели: +%d   Летопись: +%d" % [last_run_ash, last_run_goal_ash, last_run_codex_ash], 17)
 	_add_overlay_label("Цели забега:\n%s" % _format_goal_summary(false), 15)
 	if not last_run_codex_unlocks.is_empty():
 		_add_overlay_label("Летопись открыла: %s" % ", ".join(last_run_codex_unlocks), 15)
-	var build_summary := _format_relic_summary()
+	var build_summary := _format_relic_summary_limited(4)
 	if not build_summary.is_empty():
 		_add_overlay_label("Реликвии: %s" % build_summary, 16)
 	else:
-		_add_overlay_label("Реликвии: Маска вошла в руины без даров", 16)
-	_add_overlay_button("Заново", _start_run)
-	_add_overlay_button("Профиль", _show_profile_screen)
+		_add_overlay_label("Реликвии: нет", 16)
+	_add_overlay_button("Назад", _show_result_screen.bind(victory))
+
+func _return_to_start_after_run() -> void:
+	active_run_goals.clear()
+	completed_goal_ids.clear()
+	_show_start_screen()
 
 func _finish_run(victory: bool) -> void:
 	if run_reward_recorded:
@@ -2995,6 +3038,16 @@ func _format_relic_summary() -> String:
 			continue
 		parts.append("%s x%d" % [relic_name, count] if count > 1 else relic_name)
 	return ", ".join(parts)
+
+func _format_relic_summary_limited(max_items: int) -> String:
+	var full_summary := _format_relic_summary()
+	if full_summary.is_empty():
+		return ""
+	var parts := full_summary.split(", ")
+	if parts.size() <= max_items:
+		return full_summary
+	var visible := parts.slice(0, max_items)
+	return "%s, еще %d" % [", ".join(visible), parts.size() - max_items]
 
 func _current_build_path(include_default: bool = false) -> String:
 	var blade_picks := _blade_upgrade_pick_count()
@@ -3660,14 +3713,30 @@ func _cast_shadow_spirit(target_position: Vector2) -> void:
 	if direction.length() <= 0.0:
 		return
 	var end := start + direction * 520.0
-	var spirit := Line2D.new()
-	spirit.width = 14.0
-	spirit.default_color = Color(0.44, 1.0, 0.78, 0.72)
-	spirit.points = PackedVector2Array([start, end])
+	var spirit := Node2D.new()
+	spirit.z_index = 45
 	fx_layer.add_child(spirit)
+	var wake := _make_tapered_strike(start - direction * 18.0, end, 28.0, Color(0.08, 0.28, 0.22, 0.34), 7.0)
+	spirit.add_child(wake)
+	var body := _make_tapered_strike(start, end + direction * 20.0, 13.0, Color(0.34, 0.92, 0.68, 0.7), 4.0)
+	spirit.add_child(body)
+	var core := _make_tapered_strike(start + direction * 18.0, end + direction * 30.0, 4.0, Color(0.82, 1.0, 0.9, 0.94), 1.5)
+	spirit.add_child(core)
+	for i in range(7):
+		var wisp := Polygon2D.new()
+		var wisp_center := start.lerp(end, randf_range(0.12, 0.94))
+		var wisp_side := direction.orthogonal() * randf_range(-30.0, 30.0)
+		wisp.color = Color(0.48, 1.0, 0.78, randf_range(0.36, 0.7))
+		wisp.polygon = PackedVector2Array([
+			wisp_center + wisp_side + direction * randf_range(8.0, 18.0),
+			wisp_center + wisp_side + direction.orthogonal() * 4.0,
+			wisp_center + wisp_side - direction * randf_range(12.0, 26.0),
+			wisp_center + wisp_side - direction.orthogonal() * 4.0,
+		])
+		spirit.add_child(wisp)
 	var tween := create_tween()
 	tween.tween_property(spirit, "modulate:a", 0.0, 0.34)
-	tween.tween_callback(spirit.queue_free)
+	tween.chain().tween_callback(spirit.queue_free)
 	CombatFxScript.ring(fx_layer, start, Color(0.45, 1.0, 0.76, 0.55), 90.0, 0.28)
 	for enemy in enemies:
 		if not is_instance_valid(enemy):
@@ -3710,21 +3779,18 @@ func _cast_single_bone_spear(origin: Vector2, direction: Vector2) -> void:
 	var spear_root := Node2D.new()
 	spear_root.z_index = 46
 	fx_layer.add_child(spear_root)
-	var shadow := Line2D.new()
-	shadow.width = 22.0
-	shadow.default_color = Color(0.03, 0.015, 0.02, 0.48)
-	shadow.points = PackedVector2Array([start - direction * 10.0, end])
+	var shadow := _make_tapered_strike(start - direction * 18.0, end + direction * 8.0, 14.0, Color(0.03, 0.015, 0.02, 0.42), 2.5)
 	spear_root.add_child(shadow)
-	var spear := Line2D.new()
-	spear.width = 15.0
-	spear.default_color = Color(0.86, 0.88, 0.68, 0.95)
-	spear.points = PackedVector2Array([start, end])
+	var spear := _make_tapered_strike(start, end, 8.0, Color(0.76, 0.78, 0.58, 0.96), 2.0)
 	spear_root.add_child(spear)
-	var core := Line2D.new()
-	core.width = 5.0
-	core.default_color = Color(1.0, 0.98, 0.82, 1.0)
-	core.points = PackedVector2Array([start + direction * 20.0, end])
+	var core := _make_tapered_strike(start + direction * 20.0, end, 2.8, Color(1.0, 0.98, 0.82, 1.0), 0.8)
 	spear_root.add_child(core)
+	for joint_index in range(1, 6):
+		var joint_center := start.lerp(end, float(joint_index) / 6.0)
+		var joint := _make_ellipse(10.0, 7.0, Color(0.9, 0.9, 0.68, 0.94), 8)
+		joint.position = joint_center
+		joint.rotation = direction.angle()
+		spear_root.add_child(joint)
 	var head := Polygon2D.new()
 	var side := direction.orthogonal()
 	head.color = Color(0.96, 0.94, 0.72, 0.98)
