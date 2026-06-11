@@ -23,6 +23,17 @@ var has_hit_target := false
 func setup(player: Node2D, effects_parent: Node2D) -> void:
 	owner_player = player
 	fx_layer = effects_parent
+	z_index = 20
+
+func reset_to_owner() -> void:
+	if owner_player == null:
+		return
+	z_index = 20
+	target_enemy = null
+	has_hit_target = false
+	state = "orbit"
+	timer = 0.0
+	global_position = owner_player.global_position + Vector2.RIGHT * 34.0
 
 func _process(delta: float) -> void:
 	if owner_player == null or owner_player.get("is_dead"):

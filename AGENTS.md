@@ -14,7 +14,7 @@ Core fantasy:
 Core gameplay loop:
 
 ```text
-Choose chapter -> start run -> move -> kite enemies -> auto-attack -> collect XP shards -> level up -> choose relic upgrades -> survive 3:00
+Start journey -> clear Dead Garden -> defeat Grave King -> enter Ashen Chapel -> defeat Ash Abbot
 ```
 
 ## Tech
@@ -94,7 +94,15 @@ scripts/
 
 `Main`:
 
-- Supports chapter selection before a run. The current first chapters are `Мертвый Сад` and `Пепельная Часовня`.
+- Runs are now short journeys through connected chapters rather than isolated timed arenas.
+- The first journey starts in `Мертвый Сад`; clearing 50 enemies stops ordinary waves and summons `Король-Могила`. Killing him opens one physical gate to `Пепельная Часовня` near the player's current position. The player must walk into it to continue.
+- Do not add route choices or intermediary maps unless they contain meaningful distinct gameplay. A decorative empty route only slows the journey.
+- Health, level, XP, relics, and auto-weapons persist across areas. Reset the Living Blade to its owner during transitions so it cannot remain offscreen while chasing a deleted enemy, and keep its canvas layer above rebuilt arena backgrounds.
+- Garden and Chapel boss deaths must be tracked separately even though both currently use the shared internal `grave_king` enemy slot. Killing `Король-Могила` opens the Chapel gate; killing `Игумен Пепла` wins the journey.
+- Clearing 75 chapel enemies stops ordinary waves and summons `Игумен Пепла`; killing him wins the journey.
+- Bosses should threaten with attacks and positioning rather than simply outrunning the player. Their base chase speed and phase-two acceleration are intentionally restrained.
+- Combat areas are currently cleared by objectives rather than a global three-minute survival timer. The HUD shows current area progress.
+- Supports chapter selection infrastructure from the earlier standalone-arena format, but the main start screen now launches the connected journey.
 - The selected chapter changes arena palette/decor, run lore lines, boss title/entrance/death lines, and light enemy pacing modifiers.
 - The selected chapter is saved in the local profile as `chapter_index`, so Web/TWA players keep their last chosen map.
 - New chapters should be real gameplay variants, not only menu labels: each chapter should eventually get its own palette, decor motifs, enemy pressure bias, boss identity, and short lore.
@@ -120,8 +128,7 @@ scripts/
 - A pressure director keeps the fight populated around the player: it counts nearby/on-screen threats, spawns edge pressure if the active screen goes empty, and recycles far non-boss enemies when the global enemy cap is filled by harmless distant mobs.
 - Gravebloom hazard zones periodically warn, bloom, then damage the player if they keep running through the same route; they should read as large animated cursed flowers with a short Russian warning label. Keep a safe distance from the player on spawn and preserve a clear no-damage warning phase.
 - If too many enemies stay packed together after the first minute, the cluster can bloom into a hazard zone to punish harmless enemy balls.
-- `Король-Могила` is the final-minute pressure boss at 2:00: custom terrifying grave king sprite, very high speed, high health, larger contact radius, periodic Gravebloom hazards, flanker/spitter summons, and telegraphed boss attacks.
-- Король-Могила should be killable in the final minute with a decent offensive build: lower HP than a pure survival wall, extra Nova damage, and extra Living Blade damage against him.
+- `Король-Могила` remains implemented as a standalone boss identity and can return in a later journey branch; the first connected journey currently culminates with `Игумен Пепла`.
 - Boss attacks include `Похоронный Колокол` radial shock rings, `Королевский Приговор` lane strikes along the player's route, and phase-two `Черная корона` cross strikes.
 - Король-Могила has a dedicated top HUD boss HP bar that appears on spawn, updates with damage, flashes on phase two, and hides on boss death/result screens.
 - Keeps the player inside visible ruined arena bounds and caps live enemy pressure for early readability.
@@ -130,7 +137,7 @@ scripts/
 - Micro-lore is embedded through the start screen, timed run notices, relic descriptions, relic-pick echo lines, boss entrance lines, and result text.
 - Relic cards should keep the lore phrase, then add a short mechanical effect so choices stay understandable.
 - Relic choice text must fit on a 540px-wide phone screen; keep descriptions short and mechanical enough to avoid clipped button text.
-- Spawns `Король-Могила` at 2:00 and a smaller miniboss near the end of the 3-minute run.
+- Summons `Игумен Пепла` after the player clears the chapel objective.
 - Owns enemy and XP shard lists.
 - Updates XP collection, level-ups, randomized relic choices, HUD, XP bar, result screens, enemy contact damage, and enemy projectiles.
 - Handles screen shake, XP sparkles, and Shadow Spirit secondary weapon.
@@ -199,8 +206,10 @@ scripts/
 - Combat has a first "meaty" layer: Living Blade finishing hits create stronger bug/Gravebloom death bursts without execution text; use toxic green, amber, and dark violet rather than human-blood red. Kill streaks appear at milestones, and taking damage breaks the streak.
 - Living Blade executions lightly heal the player, add a little Nova charge, and have a higher chance to drop a health pack, so aggressive close-range kills feel like a resource loop.
 - Incoming damage now shows red numbers over the player, throttled for continuous contact/hazard damage so it does not spam the screen.
-- Runs now have a start screen, XP bar, 3:00 survival goal, miniboss event, victory screen, death screen, and restart button.
-- Keep the start screen deliberately sparse: selected chapter, short goal, Ash total, and only `Играть`, `Сменить главу`, `Еще`. Goals, profile, codex, help, and run history live on separate secondary screens. Navigating menus must not reroll active run goals.
+- Runs now have a journey start screen, XP bar, area-clear objectives, physical chapter gates, chapter bosses, victory/death screens, and a restart button.
+- Starting a journey now shows a short Russian text prologue before controls become active. Keep it brief, phone-readable, and focused on why the Mask enters the ruins.
+- Killing `Игумен Пепла` starts a short skippable finale before the victory screen: combat stops, the last bell answers, and a dark passage opens behind the altar as a hook for the next chapter.
+- Keep the start screen deliberately sparse: journey premise, Ash total, and only `Начать путешествие` and `Еще`. Goals, profile, codex, help, and run history live on separate secondary screens. Navigating menus must not reroll active run goals.
 - Result screens should summarize the run: time survived, level, kills, XP progress, and selected relic build with duplicate counts.
 - Keep the first result screen compact: outcome, chapter, time, level, kills, best streak, Ash reward, and only `Заново`, `Подробности`, `Главное меню`. Lore, goal progress, reward breakdown, codex unlocks, and relic lists belong on the separate details screen.
 - Result screens award `Пепел`, persist it locally, and offer a path into the profile screen.

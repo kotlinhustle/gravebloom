@@ -14,6 +14,8 @@ const AshAbbotTexture := preload("res://assets/sprites/ash_abbot.png")
 const RUN_DURATION := 180.0
 const DREAD_BOSS_TIME := 120.0
 const MINIBOSS_TIME := 150.0
+const GARDEN_CLEAR_KILLS := 50
+const CHAPEL_CLEAR_KILLS := 75
 const ARENA_LIMIT_X := 2060.0
 const ARENA_LIMIT_Y := 1360.0
 const MAX_ENEMIES := 55
@@ -225,6 +227,18 @@ var health_packs: Array[Node2D] = []
 var hazard_zones: Array[Node2D] = []
 var boss_attacks: Array[Node2D] = []
 var elapsed := 0.0
+var stage_elapsed := 0.0
+var journey_stage := 0
+var stage_kill_start := 0
+var garden_boss_summoned := false
+var journey_boss_summoned := false
+var chapel_boss_killed := false
+var journey_transition_mode := ""
+var journey_markers: Array[Node2D] = []
+var journey_exit: Node2D
+var finale_origin := Vector2.ZERO
+var finale_tween: Tween
+var finale_finished := false
 var spawn_timer := 0.0
 var level := 1
 var player_damage_bonus := 0.0
@@ -340,6 +354,7 @@ func _ready() -> void:
 	add_child(world)
 	add_child(fx_layer)
 	_load_profile()
+	current_chapter_index = 0
 	_build_arena()
 	_build_ui()
 	_build_nova_charge_fx()
@@ -412,23 +427,23 @@ func _process(delta: float) -> void:
 	if game_state != "running":
 		return
 	elapsed += delta
+	stage_elapsed += delta
+	if not journey_transition_mode.is_empty():
+		_update_journey_transition()
+		_keep_player_inside_arena()
+		_update_hud()
+		return
 	thorn_bloom_cooldown = max(0.0, thorn_bloom_cooldown - delta)
 	player_damage_number_cooldown = max(0.0, player_damage_number_cooldown - delta)
 	_update_kill_streak(delta)
-	if elapsed >= RUN_DURATION:
-		_show_victory()
-		return
-	if not dread_boss_spawned and elapsed >= DREAD_BOSS_TIME:
-		_spawn_dread_boss()
-	if not miniboss_spawned and elapsed >= MINIBOSS_TIME:
-		_spawn_miniboss()
 	_update_lore_events()
-	spawn_timer -= delta
-	if spawn_timer <= 0.0:
-		_spawn_enemy_wave()
-		spawn_timer = max(0.28, 1.18 - elapsed * 0.006 - float(_profile_pressure_tier()) * 0.018)
-	_update_pressure_director(delta)
-	_update_anti_kite_pressure(delta)
+	if _journey_allows_regular_spawns():
+		spawn_timer -= delta
+		if spawn_timer <= 0.0:
+			_spawn_enemy_wave()
+			spawn_timer = max(0.28, 1.18 - elapsed * 0.006 - float(_profile_pressure_tier()) * 0.018)
+		_update_pressure_director(delta)
+		_update_anti_kite_pressure(delta)
 	living_blade.tick(delta, enemies)
 	_update_ultimate(delta)
 	_update_shadow_spirit(delta)
@@ -949,6 +964,7 @@ func _update_arena_ambience(delta: float) -> void:
 func _spawn_player() -> void:
 	player = PlayerScene.instantiate()
 	player.position = Vector2.ZERO
+	player.z_index = 10
 	player.set_arena_limits(Vector2(ARENA_LIMIT_X, ARENA_LIMIT_Y))
 	world.add_child(player)
 	living_blade = LivingBladeScene.instantiate()
@@ -1064,13 +1080,11 @@ func _show_start_screen() -> void:
 	_configure_overlay(Vector2(44, 210), Vector2(452, 530))
 	overlay_panel.visible = true
 	_clear_container(overlay_list)
-	var chapter := _current_chapter()
 	_add_overlay_label("GRAVEBLOOM", 42)
-	_add_overlay_label(String(chapter["name"]), 26)
-	_add_overlay_label(String(chapter["goal"]), 17)
+	_add_overlay_label("Путь через мертвое королевство", 24)
+	_add_overlay_label("Очисти Сад и войди в Пепельную Часовню.", 17)
 	_add_overlay_label("Пепел: %d" % profile_ash, 17)
-	_add_overlay_button("Играть", _start_run)
-	_add_overlay_button("Сменить главу", _show_chapter_screen)
+	_add_overlay_button("Начать путешествие", _start_run)
 	_add_overlay_button("Еще", _show_more_screen)
 
 func _show_more_screen() -> void:
@@ -1141,7 +1155,29 @@ func _select_chapter(chapter_index: int) -> void:
 func _start_run() -> void:
 	if game_state != "start":
 		_prepare_run_goals()
+	current_chapter_index = 0
+	_rebuild_arena()
 	_reset_run()
+	_show_intro_cutscene()
+
+func _show_intro_cutscene() -> void:
+	game_state = "intro"
+	get_tree().paused = true
+	hp_bar.visible = false
+	xp_bar.visible = false
+	build_label.visible = false
+	joystick_base.visible = false
+	ultimate_button.visible = false
+	ultimate_bar.visible = false
+	_configure_overlay(Vector2(44, 190), Vector2(452, 580))
+	overlay_panel.visible = true
+	_clear_container(overlay_list)
+	_add_overlay_label("До Gravebloom", 30)
+	_add_overlay_label("Королевство хоронило своих королей стоя.\nОднажды из их могил вырос первый цветок.", 18)
+	_add_overlay_label("Теперь Живой Клинок ведет Маску туда,\nгде колокол всё ещё зовёт мёртвых.", 18)
+	_add_overlay_button("Войти в Мертвый Сад", _begin_journey)
+
+func _begin_journey() -> void:
 	overlay_panel.visible = false
 	hp_bar.visible = true
 	xp_bar.visible = true
@@ -1208,7 +1244,7 @@ func _show_help_screen() -> void:
 	overlay_panel.visible = true
 	_clear_container(overlay_list)
 	_add_overlay_label("Справка Маски", 32)
-	_add_overlay_label("Двигайся и выживай 3 минуты.\nОружие атакует автоматически.", 17)
+	_add_overlay_label("Очищай области и двигайся глубже.\nОружие атакует автоматически.", 17)
 	_add_overlay_label("Пепел — постоянная валюта.\nРеликвии действуют один забег.", 17)
 	_add_overlay_label("Сверху: уровень, время, здоровье и опыт.", 17)
 	_add_overlay_button("Назад", _show_more_screen)
@@ -1249,6 +1285,17 @@ func _show_codex_screen() -> void:
 func _reset_run() -> void:
 	_clear_world_entities()
 	elapsed = 0.0
+	stage_elapsed = 0.0
+	journey_stage = 0
+	stage_kill_start = 0
+	garden_boss_summoned = false
+	journey_boss_summoned = false
+	chapel_boss_killed = false
+	finale_origin = Vector2.ZERO
+	finale_finished = false
+	journey_transition_mode = ""
+	journey_markers.clear()
+	journey_exit = null
 	spawn_timer = 0.0
 	level = 1
 	player_damage_bonus = 0.0
@@ -1551,7 +1598,7 @@ func _spawn_enemy(enemy_kind: String, is_miniboss: bool, spawn_position := Vecto
 		enemy.flank_ahead = randf_range(155.0, 240.0)
 	elif enemy_kind == "grave_king":
 		enemy.max_health = 78 + int(elapsed / 6.0) + _chapter_enemy_health_bonus() * 8
-		enemy.speed = 142.0 * _chapter_enemy_speed_multiplier()
+		enemy.speed = 116.0 * _chapter_enemy_speed_multiplier()
 		enemy.scale = Vector2.ONE * 1.0
 		enemy.contact_damage = 52.0
 		enemy.xp_value = 24
@@ -1900,9 +1947,151 @@ func _on_enemy_died(enemy_position: Vector2, enemy_ref: Enemy = null, xp_value: 
 	if was_miniboss:
 		_flash_overlay_text(String(_current_chapter().get("boss_dead", "Король-Могила пал")) if xp_value >= 20 else "Могильный Страж повержен")
 		if xp_value >= 20:
-			grave_king_killed = true
+			if journey_stage == 0:
+				grave_king_killed = true
+			else:
+				chapel_boss_killed = true
+				finale_origin = enemy_position
 			_hide_boss_ui()
 	_compact_enemies()
+	_check_journey_progress()
+
+func _check_journey_progress() -> void:
+	if game_state != "running":
+		return
+	var stage_kills := kill_count - stage_kill_start
+	if journey_stage == 0 and stage_kills >= GARDEN_CLEAR_KILLS and not garden_boss_summoned:
+		garden_boss_summoned = true
+		_clear_stage_entities()
+		_flash_overlay_text("Пустой трон услышал бой. Король-Могила встал.")
+		_spawn_dread_boss()
+	elif journey_stage == 0 and grave_king_killed:
+		_open_chapel_gate()
+	elif journey_stage == 1 and stage_kills >= CHAPEL_CLEAR_KILLS and not journey_boss_summoned:
+		journey_boss_summoned = true
+		_flash_overlay_text("Алтарь услышал бой. Игумен Пепла идет.")
+		_spawn_dread_boss()
+	elif journey_stage == 1 and chapel_boss_killed:
+		_start_finale_cutscene()
+
+func _start_finale_cutscene() -> void:
+	if game_state == "finale":
+		return
+	game_state = "finale"
+	finale_finished = false
+	_clear_stage_entities()
+	_hide_boss_ui()
+	_reset_joystick()
+	build_label.visible = false
+	hp_bar.visible = false
+	xp_bar.visible = false
+	joystick_base.visible = false
+	ultimate_button.visible = false
+	ultimate_bar.visible = false
+	if player != null:
+		player.set_physics_process(false)
+		player.global_position = finale_origin + Vector2(0.0, 150.0)
+	_reset_living_blade_position()
+	_show_finale_caption("Игумен рассыпался.\nКолокол качнулся в последний раз.")
+	CombatFxScript.burst(fx_layer, finale_origin, Color(0.82, 0.48, 0.24, 0.82), 28)
+	CombatFxScript.ring(fx_layer, finale_origin, Color(0.92, 0.66, 0.38, 0.8), 180.0, 0.8)
+	finale_tween = create_tween()
+	finale_tween.tween_interval(1.8)
+	finale_tween.tween_callback(_finale_last_bell)
+	finale_tween.tween_interval(1.8)
+	finale_tween.tween_callback(_finale_open_passage)
+	finale_tween.tween_interval(1.8)
+	finale_tween.tween_callback(_finish_finale_cutscene)
+
+func _show_finale_caption(text: String) -> void:
+	_configure_overlay(Vector2(44, 650), Vector2(452, 230))
+	overlay_panel.visible = true
+	_clear_container(overlay_list)
+	_add_overlay_label(text, 21)
+	_add_overlay_button("Пропустить", _finish_finale_cutscene)
+
+func _finale_last_bell() -> void:
+	if finale_finished:
+		return
+	_show_finale_caption("Колокол смолк.\nНо под пеплом кто-то ответил.")
+	CombatFxScript.ring(fx_layer, finale_origin, Color(1.0, 0.72, 0.38, 0.72), 340.0, 1.1)
+	_start_screen_shake(0.28, 5.5)
+
+func _finale_open_passage() -> void:
+	if finale_finished:
+		return
+	_show_finale_caption("За алтарём открылся путь,\nкоторого не было на картах.")
+	var passage := _make_journey_gate(finale_origin + Vector2(0.0, -170.0), "Дальше — только пепел", "", Color(0.35, 0.24, 0.42), "ending", 0.82)
+	journey_markers.append(passage)
+	CombatFxScript.burst(fx_layer, passage.global_position, Color(0.48, 0.34, 0.62, 0.72), 20)
+
+func _finish_finale_cutscene() -> void:
+	if finale_finished:
+		return
+	finale_finished = true
+	if finale_tween != null:
+		finale_tween.kill()
+	overlay_panel.visible = false
+	_show_victory()
+
+func _journey_allows_regular_spawns() -> bool:
+	if journey_transition_mode == "chapel_gate":
+		return false
+	if journey_stage == 0:
+		return not garden_boss_summoned
+	return not journey_boss_summoned
+
+func _open_chapel_gate() -> void:
+	_clear_stage_entities()
+	_hide_boss_ui()
+	journey_transition_mode = "chapel_gate"
+	journey_markers.clear()
+	var gate_origin := player.global_position if player != null else Vector2.ZERO
+	var gate_position := _push_out_of_arena_obstacles(gate_origin + Vector2(0.0, -155.0), 54.0)
+	journey_exit = _make_journey_gate(gate_position, "Пепельная Часовня", "войти", Color(0.92, 0.66, 0.38), "chapel", 0.78)
+	journey_markers.append(journey_exit)
+	_flash_overlay_text("Сад очищен. Ворота Часовни открылись.")
+
+func _update_journey_transition() -> void:
+	if player == null:
+		return
+	if journey_transition_mode == "chapel_gate" and is_instance_valid(journey_exit):
+		if player.global_position.distance_to(journey_exit.global_position) <= 92.0:
+			_enter_journey_stage(1)
+
+func _enter_journey_stage(stage_index: int) -> void:
+	_clear_journey_markers()
+	journey_stage = stage_index
+	current_chapter_index = clampi(stage_index, 0, CHAPTERS.size() - 1)
+	journey_transition_mode = ""
+	stage_elapsed = 0.0
+	stage_kill_start = kill_count
+	journey_boss_summoned = false
+	dread_boss_spawned = false
+	miniboss_spawned = false
+	dread_boss_phase_two = false
+	lore_event_index = 0
+	spawn_timer = 0.0
+	anti_kite_timer = ANTI_KITE_INTERVAL
+	pressure_director_timer = PRESSURE_DIRECTOR_INTERVAL
+	hazard_timer = HAZARD_INTERVAL
+	cluster_bloom_timer = CLUSTER_BLOOM_INTERVAL
+	_clear_stage_entities()
+	_rebuild_arena()
+	if player != null:
+		player.position = Vector2(0.0, 1080.0)
+	_reset_living_blade_position()
+	overlay_panel.visible = false
+	joystick_base.visible = true
+	ultimate_button.visible = true
+	ultimate_bar.visible = true
+	game_state = "running"
+	get_tree().paused = false
+	_flash_overlay_text("Пепельная Часовня")
+
+func _reset_living_blade_position() -> void:
+	if is_instance_valid(living_blade) and living_blade.has_method("reset_to_owner"):
+		living_blade.reset_to_owner()
 
 func _spawn_health_pack(pack_position: Vector2) -> void:
 	var pack := Node2D.new()
@@ -2342,7 +2531,7 @@ func _update_dread_boss_pressure(delta: float) -> void:
 		return
 	if not dread_boss_phase_two and boss.health <= int(ceil(float(boss.max_health) * 0.5)):
 		dread_boss_phase_two = true
-		boss.speed *= 1.34
+		boss.speed *= 1.16
 		boss.contact_damage += 10.0
 		boss.modulate = Color(1.0, 0.5, 0.28) if _is_ashen_chapel() else Color(1.0, 0.78, 0.88)
 		_flash_overlay_text("Кадило раскололось" if _is_ashen_chapel() else "Корона раскрылась")
@@ -2921,7 +3110,7 @@ func _update_lore_events() -> void:
 	if lore_event_index >= events.size():
 		return
 	var lore_event: Dictionary = events[lore_event_index]
-	if elapsed >= float(lore_event["time"]):
+	if stage_elapsed >= float(lore_event["time"]):
 		lore_event_index += 1
 		_flash_overlay_text(String(lore_event["text"]))
 
@@ -2959,7 +3148,7 @@ func _show_result_screen(victory: bool) -> void:
 	overlay_panel.visible = true
 	_clear_container(overlay_list)
 	_add_overlay_label("Победа" if victory else "Забег окончен", 34)
-	_add_overlay_label(String(_current_chapter()["name"]), 20)
+	_add_overlay_label("Путь Маски: %s" % _journey_progress_text(), 18)
 	_add_overlay_label("%s   Уровень %d\nУбийства %d   Серия x%d" % [_format_time(elapsed), level, kill_count, best_kill_streak], 19)
 	_add_overlay_label("+%d Пепла" % last_run_ash, 24)
 	_add_overlay_button("Заново", _start_run)
@@ -2986,6 +3175,8 @@ func _show_result_details(victory: bool) -> void:
 func _return_to_start_after_run() -> void:
 	active_run_goals.clear()
 	completed_goal_ids.clear()
+	current_chapter_index = 0
+	_rebuild_arena()
 	_show_start_screen()
 
 func _finish_run(victory: bool) -> void:
@@ -3010,7 +3201,7 @@ func _finish_run(victory: bool) -> void:
 		"codex": ", ".join(last_run_codex_unlocks),
 		"build": _format_relic_summary(),
 		"build_path": _current_build_path(true),
-		"chapter": String(_current_chapter()["name"]),
+		"chapter": "Мертвый Сад → Пепельная Часовня",
 		"date": Time.get_datetime_string_from_system(false, true),
 	}
 	run_history.insert(0, history_entry)
@@ -3022,7 +3213,7 @@ func _calculate_ash_reward(victory: bool) -> int:
 	reward += int(elapsed / 12.0)
 	reward += level * 4
 	reward += int(kill_count / 4)
-	if dread_boss_spawned:
+	if garden_boss_summoned or journey_boss_summoned:
 		reward += 10
 	if victory:
 		reward += 45
@@ -3101,7 +3292,7 @@ func _run_goal_progress(goal: Dictionary) -> int:
 		"level":
 			return level
 		"boss_spawned":
-			return 1 if dread_boss_spawned else 0
+			return 1 if garden_boss_summoned else 0
 		"boss_killed":
 			return 1 if grave_king_killed else 0
 		"blood_blade":
@@ -3159,7 +3350,7 @@ func _update_codex_after_run(victory: bool) -> int:
 		reward += _unlock_codex_entry("first_death")
 	if victory:
 		reward += _unlock_codex_entry("first_victory")
-	if dread_boss_spawned:
+	if garden_boss_summoned:
 		reward += _unlock_codex_entry("king_seen")
 	if grave_king_killed:
 		reward += _unlock_codex_entry("king_killed")
@@ -3352,15 +3543,14 @@ func _format_history_entry(entry: Variant) -> String:
 	]
 
 func _update_hud() -> void:
-	var remaining: float = max(0.0, RUN_DURATION - elapsed)
 	var health_value := 0
 	if player != null:
 		health_value = int(ceil(player.health))
-	hud.text = "%s\nУровень %d   Забег %s   До конца %s" % [
+	hud.text = "%s   Ур.%d   %s\n%s" % [
 		String(_current_chapter()["name"]),
 		level,
 		_format_time(elapsed),
-		_format_time(remaining)
+		_journey_objective_text()
 	]
 	hp_bar.value = health_value
 	xp_bar.max_value = xp_to_next
@@ -3369,6 +3559,23 @@ func _update_hud() -> void:
 	build_label.visible = game_state == "running" and not build_label.text.is_empty()
 	_update_boss_ui()
 	_update_ultimate_ui()
+
+func _journey_objective_text() -> String:
+	if journey_transition_mode == "chapel_gate":
+		return "Войди в Пепельную Часовню"
+	var stage_kills: int = maxi(0, kill_count - stage_kill_start)
+	if journey_stage == 0:
+		if garden_boss_summoned:
+			return "Сразить Короля-Могилу"
+		return "Очистить Сад: %d/%d" % [min(stage_kills, GARDEN_CLEAR_KILLS), GARDEN_CLEAR_KILLS]
+	if journey_boss_summoned:
+		return "Сразить Игумена Пепла"
+	return "Открыть алтарь: %d/%d" % [min(stage_kills, CHAPEL_CLEAR_KILLS), CHAPEL_CLEAR_KILLS]
+
+func _journey_progress_text() -> String:
+	if journey_stage <= 0:
+		return "Мертвый Сад"
+	return "Мертвый Сад → Пепельная Часовня"
 
 func _format_build_hud() -> String:
 	var lines: Array[String] = []
@@ -3958,7 +4165,53 @@ func _flash_overlay_text(text: String) -> void:
 	tween.tween_property(label, "modulate:a", 0.0, 1.1)
 	tween.chain().tween_callback(label.queue_free)
 
-func _clear_world_entities() -> void:
+func _make_journey_gate(gate_position: Vector2, title: String, subtitle: String, color: Color, route_id: String, gate_scale: float = 1.0) -> Node2D:
+	var gate := Node2D.new()
+	gate.position = gate_position
+	gate.scale = Vector2.ONE * gate_scale
+	gate.z_index = 30
+	gate.set_meta("route_id", route_id)
+	world.add_child(gate)
+	var shadow := _make_ellipse(118.0, 48.0, Color(0.01, 0.015, 0.018, 0.78), 24)
+	shadow.position.y = 48.0
+	gate.add_child(shadow)
+	var arch := Line2D.new()
+	arch.width = 22.0
+	arch.default_color = Color(color.r * 0.42, color.g * 0.42, color.b * 0.42, 0.98)
+	arch.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	arch.end_cap_mode = Line2D.LINE_CAP_ROUND
+	arch.points = PackedVector2Array([
+		Vector2(-92.0, 68.0),
+		Vector2(-92.0, -30.0),
+		Vector2(-58.0, -88.0),
+		Vector2(0.0, -112.0),
+		Vector2(58.0, -88.0),
+		Vector2(92.0, -30.0),
+		Vector2(92.0, 68.0),
+	])
+	gate.add_child(arch)
+	var threshold := Line2D.new()
+	threshold.width = 8.0
+	threshold.default_color = color
+	threshold.points = PackedVector2Array([Vector2(-74.0, 54.0), Vector2(74.0, 54.0)])
+	gate.add_child(threshold)
+	var glow := _make_ellipse(68.0, 38.0, Color(color.r, color.g, color.b, 0.2), 24)
+	glow.position.y = 32.0
+	gate.add_child(glow)
+	var label := _make_label("%s\n%s" % [title, subtitle], 22)
+	label.position = Vector2(-150.0, -178.0)
+	label.size = Vector2(300.0, 64.0)
+	gate.add_child(label)
+	return gate
+
+func _clear_journey_markers() -> void:
+	for marker in journey_markers:
+		if is_instance_valid(marker):
+			marker.queue_free()
+	journey_markers.clear()
+	journey_exit = null
+
+func _clear_stage_entities() -> void:
 	for enemy in enemies:
 		if is_instance_valid(enemy):
 			enemy.queue_free()
@@ -3977,15 +4230,19 @@ func _clear_world_entities() -> void:
 	for attack in boss_attacks:
 		if is_instance_valid(attack):
 			attack.queue_free()
-	if is_instance_valid(player):
-		player.queue_free()
-	if is_instance_valid(living_blade):
-		living_blade.queue_free()
 	enemies.clear()
 	shards.clear()
 	enemy_projectiles.clear()
 	health_packs.clear()
 	hazard_zones.clear()
 	boss_attacks.clear()
+
+func _clear_world_entities() -> void:
+	_clear_stage_entities()
+	_clear_journey_markers()
+	if is_instance_valid(player):
+		player.queue_free()
+	if is_instance_valid(living_blade):
+		living_blade.queue_free()
 	player = null
 	living_blade = null
