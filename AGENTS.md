@@ -14,7 +14,7 @@ Core fantasy:
 Core gameplay loop:
 
 ```text
-Start journey -> clear Dead Garden -> defeat Grave King -> enter Ashen Chapel -> defeat Ash Abbot
+Start journey -> clear Dead Garden -> defeat Grave King -> choose a royal gift -> enter Ashen Chapel -> defeat Ash Abbot
 ```
 
 ## Tech
@@ -87,18 +87,21 @@ scripts/
 `Assets`:
 
 - Core sprites are generated bitmap assets with transparent backgrounds.
+- `enemy_crawler_sheet.png` is a real 6-frame limb-pose walk cycle used by crawler-based enemy roles; do not replace it with whole-sprite squash/pulse animation.
+- `enemy_brute_sheet.png`, `grave_king_sheet.png`, and `ash_abbot_sheet.png` provide real 4-frame pose cycles for heavy enemies and both journey bosses.
+- Enemy sprites stay upright on screen like the player instead of rotating with movement. They only mirror horizontally when changing left/right direction; rotating the three-quarter-view art makes vertical movement look sideways or upside down.
 - Keep generated originals outside the repo; commit only cropped project-ready PNG files in `assets/sprites/`.
 - Sprite scenes use `Sprite2D`; older polygon placeholders are hidden, not deleted yet, so we can tune scale/collisions safely.
 - Player uses a generated 6-frame idle + 6-frame run spritesheet; avoid procedural overlay limbs for hero animation.
-- Sprite juice is script-driven: player frame switching plus small bob/lean, enemy crawl wobble, hit squash, and blade pulse all preserve each sprite's base scale.
+- Sprite juice is script-driven: player frame switching plus small bob/lean, role-specific enemy locomotion/attack cycles, hit squash, and blade pulse all preserve each sprite's base scale. Enemy animation distinguishes fast skittering, heavy stomps, ranged charge/recoil, explosive pulsing, floating acolytes, and looming bosses without requiring sprite sheets yet.
 
 `Main`:
 
 - Runs are now short journeys through connected chapters rather than isolated timed arenas.
-- The first journey starts in `Мертвый Сад`; clearing 50 enemies stops ordinary waves and summons `Король-Могила`. Killing him opens one physical gate to `Пепельная Часовня` near the player's current position. The player must walk into it to continue.
+- The first journey starts in `Мертвый Сад`; clearing 50 enemies stops ordinary waves and summons `Король-Могила`. Killing him pauses combat for one royal-gift choice, then opens one physical gate to `Пепельная Часовня` near the player's current position. The player must walk into it to continue.
 - Do not add route choices or intermediary maps unless they contain meaningful distinct gameplay. A decorative empty route only slows the journey.
 - Health, level, XP, relics, and auto-weapons persist across areas. Reset the Living Blade to its owner during transitions so it cannot remain offscreen while chasing a deleted enemy, and keep its canvas layer above rebuilt arena backgrounds.
-- Garden and Chapel boss deaths must be tracked separately even though both currently use the shared internal `grave_king` enemy slot. Killing `Король-Могила` opens the Chapel gate; killing `Игумен Пепла` wins the journey.
+- Garden and Chapel boss deaths must be tracked separately even though both currently use the shared internal `grave_king` enemy slot. Killing `Король-Могила` unlocks the royal-gift choice and then the Chapel gate; killing `Игумен Пепла` wins the journey.
 - Clearing 75 chapel enemies stops ordinary waves and summons `Игумен Пепла`; killing him wins the journey.
 - Bosses should threaten with attacks and positioning rather than simply outrunning the player. Their base chase speed and phase-two acceleration are intentionally restrained.
 - Combat areas are currently cleared by objectives rather than a global three-minute survival timer. The HUD shows current area progress.
@@ -129,6 +132,7 @@ scripts/
 - Gravebloom hazard zones periodically warn, bloom, then damage the player if they keep running through the same route; they should read as large animated cursed flowers with a short Russian warning label. Keep a safe distance from the player on spawn and preserve a clear no-damage warning phase.
 - If too many enemies stay packed together after the first minute, the cluster can bloom into a hazard zone to punish harmless enemy balls.
 - `Король-Могила` remains implemented as a standalone boss identity and can return in a later journey branch; the first connected journey currently culminates with `Игумен Пепла`.
+- Defeating `Король-Могила` pauses the journey for one run-defining royal gift before the Chapel gate opens: `Сердце Короля` gives the Living Blade a larger cleaving hit, `Мёртвая Корона` adds a ghost-blade echo after Nova, and `Королевский Прах` summons an attacking shadow every seven ordinary kills.
 - Boss attacks include `Похоронный Колокол` radial shock rings, `Королевский Приговор` lane strikes along the player's route, and phase-two `Черная корона` cross strikes.
 - Король-Могила has a dedicated top HUD boss HP bar that appears on spawn, updates with damage, flashes on phase two, and hides on boss death/result screens.
 - Keeps the player inside visible ruined arena bounds and caps live enemy pressure for early readability.

@@ -6,10 +6,11 @@ const XPShardScene := preload("res://scenes/xp_shard.tscn")
 const LivingBladeScene := preload("res://scenes/living_blade.tscn")
 const CombatFxScript := preload("res://scripts/combat_fx.gd")
 const EnemyCrawlerTexture := preload("res://assets/sprites/enemy_crawler.png")
-const EnemyBruteTexture := preload("res://assets/sprites/enemy_brute.png")
+const EnemyCrawlerSheetTexture := preload("res://assets/sprites/enemy_crawler_sheet.png")
+const EnemyBruteSheetTexture := preload("res://assets/sprites/enemy_brute_sheet.png")
 const GraveWardenTexture := preload("res://assets/sprites/grave_warden.png")
-const GraveKingTexture := preload("res://assets/sprites/grave_king.png")
-const AshAbbotTexture := preload("res://assets/sprites/ash_abbot.png")
+const GraveKingSheetTexture := preload("res://assets/sprites/grave_king_sheet.png")
+const AshAbbotSheetTexture := preload("res://assets/sprites/ash_abbot_sheet.png")
 
 const RUN_DURATION := 180.0
 const DREAD_BOSS_TIME := 120.0
@@ -233,6 +234,10 @@ var stage_kill_start := 0
 var garden_boss_summoned := false
 var journey_boss_summoned := false
 var chapel_boss_killed := false
+var king_gift_offered := false
+var king_gift_id := ""
+var king_gift_name := ""
+var royal_ash_kills := 0
 var journey_transition_mode := ""
 var journey_markers: Array[Node2D] = []
 var journey_exit: Node2D
@@ -1291,6 +1296,10 @@ func _reset_run() -> void:
 	garden_boss_summoned = false
 	journey_boss_summoned = false
 	chapel_boss_killed = false
+	king_gift_offered = false
+	king_gift_id = ""
+	king_gift_name = ""
+	royal_ash_kills = 0
 	finale_origin = Vector2.ZERO
 	finale_finished = false
 	journey_transition_mode = ""
@@ -1724,10 +1733,18 @@ func _set_enemy_art(enemy: Enemy, enemy_kind: String, is_miniboss: bool) -> void
 	var art := enemy.get_node_or_null("Art")
 	if art == null:
 		return
+	art.hframes = 1
+	art.frame = 0
+	enemy.uses_walk_frames = false
+	enemy.animation_frame_count = 1
 	if enemy_kind == "grave_king":
-		art.texture = AshAbbotTexture if _is_ashen_chapel() else GraveKingTexture
-		art.scale = Vector2(0.235, 0.235) if _is_ashen_chapel() else Vector2(0.24, 0.24)
+		art.texture = AshAbbotSheetTexture if _is_ashen_chapel() else GraveKingSheetTexture
+		art.scale = Vector2(0.4, 0.4) if _is_ashen_chapel() else Vector2(0.42, 0.42)
 		art.modulate = Color.WHITE if _is_ashen_chapel() else Color(0.82, 0.92, 0.86)
+		art.hframes = 4
+		art.frame = randi() % 4
+		enemy.uses_walk_frames = true
+		enemy.animation_frame_count = 4
 	elif is_miniboss:
 		art.texture = GraveWardenTexture
 		art.scale = Vector2(0.2, 0.2)
@@ -1738,16 +1755,16 @@ func _set_enemy_art(enemy: Enemy, enemy_kind: String, is_miniboss: bool) -> void
 		art.scale = Vector2(0.105, 0.105)
 		art.modulate = Color(0.68, 0.55, 0.5)
 	elif enemy_kind == "ash_bellringer":
-		art.texture = EnemyBruteTexture
-		art.scale = Vector2(0.17, 0.17)
+		art.texture = EnemyBruteSheetTexture
+		art.scale = Vector2(0.15, 0.15)
 		art.modulate = Color(0.94, 0.62, 0.32)
 	elif enemy_kind == "ash_ember":
 		art.texture = EnemyCrawlerTexture
 		art.scale = Vector2(0.18, 0.18)
 		art.modulate = Color(1.0, 0.42, 0.18)
 	elif enemy_kind == "brute":
-		art.texture = EnemyBruteTexture
-		art.scale = Vector2(0.19, 0.19)
+		art.texture = EnemyBruteSheetTexture
+		art.scale = Vector2(0.15, 0.15)
 	elif enemy_kind == "runner":
 		art.texture = EnemyCrawlerTexture
 		art.scale = Vector2(0.23, 0.23)
@@ -1761,12 +1778,23 @@ func _set_enemy_art(enemy: Enemy, enemy_kind: String, is_miniboss: bool) -> void
 		art.scale = Vector2(0.27, 0.27)
 		art.modulate = Color(0.58, 0.92, 0.72)
 	elif enemy_kind == "exploder":
-		art.texture = EnemyBruteTexture
-		art.scale = Vector2(0.15, 0.15)
+		art.texture = EnemyBruteSheetTexture
+		art.scale = Vector2(0.12, 0.12)
 		art.modulate = Color(1.0, 0.78, 0.58)
 	else:
 		art.texture = EnemyCrawlerTexture
 		art.scale = Vector2(0.28, 0.28)
+	if enemy_kind in ["crawler", "runner", "flanker", "spitter", "ash_ember"]:
+		art.texture = EnemyCrawlerSheetTexture
+		art.hframes = 6
+		art.frame = randi() % 6
+		enemy.uses_walk_frames = true
+		enemy.animation_frame_count = 6
+	if enemy_kind in ["brute", "ash_bellringer", "exploder"]:
+		art.hframes = 4
+		art.frame = randi() % 4
+		enemy.uses_walk_frames = true
+		enemy.animation_frame_count = 4
 	_add_enemy_role_markers(enemy, enemy_kind)
 
 func _add_enemy_role_markers(enemy: Enemy, enemy_kind: String) -> void:
@@ -1953,6 +1981,11 @@ func _on_enemy_died(enemy_position: Vector2, enemy_ref: Enemy = null, xp_value: 
 				chapel_boss_killed = true
 				finale_origin = enemy_position
 			_hide_boss_ui()
+	if king_gift_id == "royal_ash" and not was_miniboss:
+		royal_ash_kills += 1
+		if royal_ash_kills >= 7:
+			royal_ash_kills = 0
+			_summon_royal_shadow(enemy_position)
 	_compact_enemies()
 	_check_journey_progress()
 
@@ -1965,7 +1998,9 @@ func _check_journey_progress() -> void:
 		_clear_stage_entities()
 		_flash_overlay_text("Пустой трон услышал бой. Король-Могила встал.")
 		_spawn_dread_boss()
-	elif journey_stage == 0 and grave_king_killed:
+	elif journey_stage == 0 and grave_king_killed and not king_gift_offered:
+		_show_king_gift_choice()
+	elif journey_stage == 0 and grave_king_killed and not king_gift_id.is_empty():
 		_open_chapel_gate()
 	elif journey_stage == 1 and stage_kills >= CHAPEL_CLEAR_KILLS and not journey_boss_summoned:
 		journey_boss_summoned = true
@@ -2042,6 +2077,8 @@ func _journey_allows_regular_spawns() -> bool:
 	return not journey_boss_summoned
 
 func _open_chapel_gate() -> void:
+	if journey_transition_mode == "chapel_gate":
+		return
 	_clear_stage_entities()
 	_hide_boss_ui()
 	journey_transition_mode = "chapel_gate"
@@ -2051,6 +2088,78 @@ func _open_chapel_gate() -> void:
 	journey_exit = _make_journey_gate(gate_position, "Пепельная Часовня", "войти", Color(0.92, 0.66, 0.38), "chapel", 0.78)
 	journey_markers.append(journey_exit)
 	_flash_overlay_text("Сад очищен. Ворота Часовни открылись.")
+
+func _show_king_gift_choice() -> void:
+	king_gift_offered = true
+	_clear_stage_entities()
+	_hide_boss_ui()
+	paused_for_upgrade = true
+	game_state = "king_gift"
+	build_label.visible = false
+	joystick_base.visible = false
+	ultimate_button.visible = false
+	ultimate_bar.visible = false
+	_reset_joystick()
+	get_tree().paused = true
+	_clear_container(upgrade_list)
+	upgrade_list.add_child(_make_label("Король-Могила пал", 26))
+	upgrade_list.add_child(_make_label("Возьми один дар с пустого трона", 15))
+	_add_king_gift_button("Сердце Короля", "Клинок крупнее и рассекает соседних врагов", "king_heart")
+	_add_king_gift_button("Мёртвая Корона", "После Новы призрачные клинки бьют снова", "dead_crown")
+	_add_king_gift_button("Королевский Прах", "Каждые 7 убийств призывают атакующую тень", "royal_ash")
+	upgrade_panel.visible = true
+
+func _add_king_gift_button(title: String, description: String, gift_id: String) -> void:
+	var button := Button.new()
+	button.text = "%s\n%s" % [title, description]
+	button.custom_minimum_size = Vector2(430, 82)
+	button.set_meta("gift_id", gift_id)
+	button.set_meta("gift_name", title)
+	button.pressed.connect(_on_king_gift_chosen.bind(button))
+	upgrade_list.add_child(button)
+
+func _on_king_gift_chosen(button: Button) -> void:
+	king_gift_id = String(button.get_meta("gift_id", ""))
+	king_gift_name = String(button.get_meta("gift_name", ""))
+	match king_gift_id:
+		"king_heart":
+			if is_instance_valid(living_blade) and living_blade.has_method("awaken_king_heart"):
+				living_blade.awaken_king_heart()
+		"dead_crown":
+			ultimate_damage += 1
+			ultimate_radius += 24.0
+		"royal_ash":
+			royal_ash_kills = 0
+	upgrade_panel.visible = false
+	paused_for_upgrade = false
+	game_state = "running"
+	get_tree().paused = false
+	_flash_overlay_text("%s принята Маской" % king_gift_name)
+	_open_chapel_gate()
+
+func _summon_royal_shadow(origin: Vector2) -> void:
+	if player == null:
+		return
+	var target := _nearest_enemy_for_spirit()
+	if target == null:
+		return
+	var direction := origin.direction_to(target.global_position)
+	if direction.length() <= 0.0:
+		return
+	var end := origin + direction * 480.0
+	var shadow := Node2D.new()
+	shadow.z_index = 45
+	fx_layer.add_child(shadow)
+	shadow.add_child(_make_tapered_strike(origin, end, 18.0, Color(0.24, 0.14, 0.34, 0.62), 6.0))
+	shadow.add_child(_make_tapered_strike(origin + direction * 12.0, end, 5.0, Color(0.78, 0.66, 0.96, 0.9), 2.0))
+	CombatFxScript.burst(fx_layer, origin, Color(0.58, 0.46, 0.78, 0.78), 12)
+	CombatFxScript.ring(fx_layer, origin, Color(0.72, 0.62, 0.92, 0.62), 72.0, 0.3)
+	for enemy in enemies:
+		if is_instance_valid(enemy) and _distance_to_segment(enemy.global_position, origin, end) <= 38.0:
+			enemy.take_damage(_scaled_player_damage(3), origin, 210.0)
+	var tween := create_tween()
+	tween.tween_property(shadow, "modulate:a", 0.0, 0.38)
+	tween.tween_callback(shadow.queue_free)
 
 func _update_journey_transition() -> void:
 	if player == null:
@@ -3592,6 +3701,8 @@ func _format_build_hud() -> String:
 		lines.append("Тень x%d" % int(relic_pick_counts.get("Призвать Тень", 1)))
 	if vampirism_unlocked:
 		lines.append("Цветок x%d" % vampirism_level)
+	if not king_gift_name.is_empty():
+		lines.append("Дар: %s" % king_gift_name)
 	if kill_streak >= 5:
 		lines.append("Серия x%d" % kill_streak)
 	if not blood_blade_evolved:
@@ -3792,7 +3903,29 @@ func _cast_ultimate() -> void:
 				damage = int(ceil(float(damage) * 0.65))
 			enemy.take_damage(damage, origin, 520.0)
 	nova_damage_active = false
+	if king_gift_id == "dead_crown":
+		_cast_dead_crown_echo(origin)
 	_update_ultimate_ui()
+
+func _cast_dead_crown_echo(origin: Vector2) -> void:
+	var crown := Node2D.new()
+	crown.z_index = 46
+	fx_layer.add_child(crown)
+	for i in range(10):
+		var angle := TAU * float(i) / 10.0
+		var direction := Vector2.RIGHT.rotated(angle)
+		var start := origin + direction * 90.0
+		var end := origin + direction * (ultimate_radius + 92.0)
+		crown.add_child(_make_tapered_strike(start, end, 8.0, Color(0.7, 0.56, 0.92, 0.78), 4.0))
+	CombatFxScript.ring(fx_layer, origin, Color(0.72, 0.58, 0.94, 0.72), ultimate_radius + 76.0, 0.58)
+	for enemy in enemies.duplicate():
+		if not is_instance_valid(enemy):
+			continue
+		if origin.distance_to(enemy.global_position) <= ultimate_radius + 92.0:
+			enemy.take_damage(_scaled_player_damage(maxi(2, int(ceil(float(ultimate_damage) * 0.65)))), origin, 360.0)
+	var tween := create_tween()
+	tween.tween_property(crown, "modulate:a", 0.0, 0.5)
+	tween.tween_callback(crown.queue_free)
 
 func _add_ultimate_lashes(origin: Vector2) -> void:
 	for i in range(18):

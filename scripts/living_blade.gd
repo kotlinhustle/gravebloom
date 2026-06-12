@@ -7,6 +7,7 @@ var damage := 1
 var level_damage_bonus := 0.0
 var grave_king_damage_multiplier := 1.65
 var blood_evolved := false
+var king_heart_awakened := false
 var cooldown := 0.72
 var attack_range := 230.0
 var dash_speed := 820.0
@@ -16,6 +17,7 @@ var visual_angle := 0.0
 var target_enemy: Node2D
 var state := "orbit"
 var has_hit_target := false
+var nearby_enemies: Array = []
 
 @onready var blade_sprite := $Blade
 @onready var base_blade_scale: Vector2 = blade_sprite.scale
@@ -49,6 +51,7 @@ func _process(delta: float) -> void:
 func tick(delta: float, enemies: Array) -> void:
 	if owner_player == null or owner_player.get("is_dead"):
 		return
+	nearby_enemies = enemies
 	if state != "orbit":
 		return
 	timer -= delta
@@ -76,6 +79,16 @@ func evolve_blood_blade() -> void:
 	dash_speed += 120.0
 	return_speed += 90.0
 	blade_sprite.modulate = Color(1.0, 0.48, 0.56)
+
+func awaken_king_heart() -> void:
+	if king_heart_awakened:
+		return
+	king_heart_awakened = true
+	damage += 2
+	attack_range += 35.0
+	base_blade_scale *= 1.22
+	blade_sprite.scale = base_blade_scale
+	blade_sprite.modulate = Color(1.0, 0.76, 0.36)
 
 func quicken() -> void:
 	cooldown = max(0.22, cooldown - 0.08)
@@ -129,10 +142,19 @@ func _hit_target() -> void:
 		target_enemy.set_meta("execution_death", true)
 		target_enemy.set_meta("execution_source", "blade")
 	target_enemy.take_damage(hit_damage, owner_player.global_position, 360.0 if is_execution else 260.0, "blade")
+	if king_heart_awakened:
+		_cleave_near_target(target_enemy.global_position, hit_damage)
 	if blood_evolved and owner_player.has_method("heal"):
 		owner_player.heal(0.75)
 	_show_impact(target_enemy.global_position, is_execution)
 	blade_sprite.scale = base_blade_scale * (Vector2(1.95, 0.55) if is_execution else Vector2(1.55, 0.7))
+
+func _cleave_near_target(hit_position: Vector2, hit_damage: int) -> void:
+	for enemy in nearby_enemies:
+		if not is_instance_valid(enemy) or enemy == target_enemy:
+			continue
+		if hit_position.distance_to(enemy.global_position) <= 82.0:
+			enemy.take_damage(max(1, int(ceil(float(hit_damage) * 0.55))), hit_position, 220.0, "blade")
 
 func _begin_return() -> void:
 	state = "return"
