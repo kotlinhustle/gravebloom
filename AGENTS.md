@@ -101,8 +101,8 @@ scripts/
 - The first journey starts in `Мертвый Сад`; clearing 50 enemies stops ordinary waves and summons `Король-Могила`. Killing him pauses combat for one royal-gift choice, then opens one physical gate to `Пепельная Часовня` near the player's current position. The player must walk into it to continue.
 - Do not add route choices or intermediary maps unless they contain meaningful distinct gameplay. A decorative empty route only slows the journey.
 - Health, level, XP, relics, and auto-weapons persist across areas. Reset the Living Blade to its owner during transitions so it cannot remain offscreen while chasing a deleted enemy, and keep its canvas layer above rebuilt arena backgrounds.
-- Garden and Chapel boss deaths must be tracked separately even though both currently use the shared internal `grave_king` enemy slot. Killing `Король-Могила` unlocks the royal-gift choice and then the Chapel gate; killing `Игумен Пепла` wins the journey.
-- Clearing 75 chapel enemies stops ordinary waves and summons `Игумен Пепла`; killing him wins the journey.
+- Garden and Chapel boss deaths must be tracked separately even though both currently use the shared internal `grave_king` enemy slot. Killing `Король-Могила` unlocks the royal-gift choice and then the Chapel gate; killing `Игумен Пепла` opens the final passage.
+- Clearing 75 chapel enemies stops ordinary waves and summons `Игумен Пепла`; after killing him, the hero must walk into the final passage to win the journey.
 - Bosses should threaten with attacks and positioning rather than simply outrunning the player. Their base chase speed and phase-two acceleration are intentionally restrained.
 - Combat areas are currently cleared by objectives rather than a global three-minute survival timer. The HUD shows current area progress.
 - Supports chapter selection infrastructure from the earlier standalone-arena format, but the main start screen now launches the connected journey.
@@ -133,6 +133,7 @@ scripts/
 - If too many enemies stay packed together after the first minute, the cluster can bloom into a hazard zone to punish harmless enemy balls.
 - `Король-Могила` remains implemented as a standalone boss identity and can return in a later journey branch; the first connected journey currently culminates with `Игумен Пепла`.
 - Defeating `Король-Могила` pauses the journey for one run-defining royal gift before the Chapel gate opens: `Сердце Короля` gives the Living Blade a larger cleaving hit, `Мёртвая Корона` adds a ghost-blade echo after Nova, and `Королевский Прах` summons an attacking shadow every seven ordinary kills.
+- Closing the royal-gift choice must restore the mobile joystick, Nova controls, and combat HUD before the player walks to the Chapel gate.
 - Boss attacks include `Похоронный Колокол` radial shock rings, `Королевский Приговор` lane strikes along the player's route, and phase-two `Черная корона` cross strikes.
 - Король-Могила has a dedicated top HUD boss HP bar that appears on spawn, updates with damage, flashes on phase two, and hides on boss death/result screens.
 - Keeps the player inside visible ruined arena bounds and caps live enemy pressure for early readability.
@@ -212,7 +213,7 @@ scripts/
 - Incoming damage now shows red numbers over the player, throttled for continuous contact/hazard damage so it does not spam the screen.
 - Runs now have a journey start screen, XP bar, area-clear objectives, physical chapter gates, chapter bosses, victory/death screens, and a restart button.
 - Starting a journey now shows a short Russian text prologue before controls become active. Keep it brief, phone-readable, and focused on why the Mask enters the ruins.
-- Killing `Игумен Пепла` starts a short skippable finale before the victory screen: combat stops, the last bell answers, and a dark passage opens behind the altar as a hook for the next chapter.
+- Killing `Игумен Пепла` starts a short skippable finale: combat stops, the last bell answers, and a dark passage opens behind the altar. The finale then restores player control, and victory only occurs when the hero walks into that passage. Skipping captions must skip to the interactive gate, not directly to victory.
 - Keep the start screen deliberately sparse: journey premise, Ash total, and only `Начать путешествие` and `Еще`. Goals, profile, codex, help, and run history live on separate secondary screens. Navigating menus must not reroll active run goals.
 - Result screens should summarize the run: time survived, level, kills, XP progress, and selected relic build with duplicate counts.
 - Keep the first result screen compact: outcome, chapter, time, level, kills, best streak, Ash reward, and only `Заново`, `Подробности`, `Главное меню`. Lore, goal progress, reward breakdown, codex unlocks, and relic lists belong on the separate details screen.

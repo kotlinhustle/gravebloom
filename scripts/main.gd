@@ -2053,24 +2053,38 @@ func _finale_last_bell() -> void:
 	_start_screen_shake(0.28, 5.5)
 
 func _finale_open_passage() -> void:
-	if finale_finished:
+	if finale_finished or is_instance_valid(journey_exit):
 		return
 	_show_finale_caption("За алтарём открылся путь,\nкоторого не было на картах.")
-	var passage := _make_journey_gate(finale_origin + Vector2(0.0, -170.0), "Дальше — только пепел", "", Color(0.35, 0.24, 0.42), "ending", 0.82)
-	journey_markers.append(passage)
-	CombatFxScript.burst(fx_layer, passage.global_position, Color(0.48, 0.34, 0.62, 0.72), 20)
+	var gate_position := _push_out_of_arena_obstacles(finale_origin + Vector2(0.0, -190.0), 54.0)
+	journey_exit = _make_journey_gate(gate_position, "Дальше — только пепел", "войти", Color(0.35, 0.24, 0.42), "ending", 0.82)
+	journey_markers.append(journey_exit)
+	CombatFxScript.burst(fx_layer, journey_exit.global_position, Color(0.48, 0.34, 0.62, 0.72), 20)
 
 func _finish_finale_cutscene() -> void:
 	if finale_finished:
 		return
-	finale_finished = true
 	if finale_tween != null:
 		finale_tween.kill()
+	if not is_instance_valid(journey_exit):
+		_finale_open_passage()
+	finale_finished = true
 	overlay_panel.visible = false
-	_show_victory()
+	journey_transition_mode = "ending_gate"
+	game_state = "running"
+	if player != null:
+		player.set_physics_process(true)
+	hp_bar.visible = true
+	xp_bar.visible = true
+	build_label.visible = true
+	joystick_base.visible = true
+	ultimate_button.visible = true
+	ultimate_bar.visible = true
+	_update_hud()
+	_flash_overlay_text("Войди в проход за алтарём")
 
 func _journey_allows_regular_spawns() -> bool:
-	if journey_transition_mode == "chapel_gate":
+	if not journey_transition_mode.is_empty():
 		return false
 	if journey_stage == 0:
 		return not garden_boss_summoned
@@ -2134,6 +2148,11 @@ func _on_king_gift_chosen(button: Button) -> void:
 	paused_for_upgrade = false
 	game_state = "running"
 	get_tree().paused = false
+	joystick_base.visible = true
+	ultimate_button.visible = true
+	ultimate_bar.visible = true
+	build_label.visible = true
+	_update_hud()
 	_flash_overlay_text("%s принята Маской" % king_gift_name)
 	_open_chapel_gate()
 
@@ -2167,6 +2186,11 @@ func _update_journey_transition() -> void:
 	if journey_transition_mode == "chapel_gate" and is_instance_valid(journey_exit):
 		if player.global_position.distance_to(journey_exit.global_position) <= 92.0:
 			_enter_journey_stage(1)
+	elif journey_transition_mode == "ending_gate" and is_instance_valid(journey_exit):
+		if player.global_position.distance_to(journey_exit.global_position) <= 92.0:
+			journey_transition_mode = ""
+			_clear_journey_markers()
+			_show_victory()
 
 func _enter_journey_stage(stage_index: int) -> void:
 	_clear_journey_markers()
@@ -3672,6 +3696,8 @@ func _update_hud() -> void:
 func _journey_objective_text() -> String:
 	if journey_transition_mode == "chapel_gate":
 		return "Войди в Пепельную Часовню"
+	if journey_transition_mode == "ending_gate":
+		return "Войди в проход за алтарём"
 	var stage_kills: int = maxi(0, kill_count - stage_kill_start)
 	if journey_stage == 0:
 		if garden_boss_summoned:
