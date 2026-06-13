@@ -5,18 +5,22 @@ const EnemyScene := preload("res://scenes/enemy.tscn")
 const XPShardScene := preload("res://scenes/xp_shard.tscn")
 const LivingBladeScene := preload("res://scenes/living_blade.tscn")
 const CombatFxScript := preload("res://scripts/combat_fx.gd")
+const JourneyObjectiveScript := preload("res://scripts/journey_objective.gd")
 const EnemyCrawlerTexture := preload("res://assets/sprites/enemy_crawler.png")
 const EnemyCrawlerSheetTexture := preload("res://assets/sprites/enemy_crawler_sheet.png")
 const EnemyBruteSheetTexture := preload("res://assets/sprites/enemy_brute_sheet.png")
 const GraveWardenTexture := preload("res://assets/sprites/grave_warden.png")
 const GraveKingSheetTexture := preload("res://assets/sprites/grave_king_sheet.png")
 const AshAbbotSheetTexture := preload("res://assets/sprites/ash_abbot_sheet.png")
+const GravebloomFlowerHazardTexturePath := "res://assets/sprites/gravebloom_flower_hazard.png"
+const CursedBellObjectiveTexturePath := "res://assets/sprites/cursed_bell_objective.png"
+const BellRingHazardTexturePath := "res://assets/sprites/bell_ring_hazard.png"
 
 const RUN_DURATION := 180.0
 const DREAD_BOSS_TIME := 120.0
 const MINIBOSS_TIME := 150.0
-const GARDEN_CLEAR_KILLS := 50
-const CHAPEL_CLEAR_KILLS := 75
+const OBJECTIVE_COUNT := 3
+const OBJECTIVE_KILL_THRESHOLDS := [10, 25, 40]
 const ARENA_LIMIT_X := 2060.0
 const ARENA_LIMIT_Y := 1360.0
 const MAX_ENEMIES := 55
@@ -241,6 +245,10 @@ var royal_ash_kills := 0
 var journey_transition_mode := ""
 var journey_markers: Array[Node2D] = []
 var journey_exit: Node2D
+var journey_objective: Node2D
+var journey_objectives_destroyed := 0
+var objective_guard_timer := 0.0
+var pending_objective_reward := false
 var finale_origin := Vector2.ZERO
 var finale_tween: Tween
 var finale_finished := false
@@ -331,6 +339,9 @@ var dread_boss_bell_timer := DREAD_BOSS_BELL_INTERVAL
 var dread_boss_judgment_timer := DREAD_BOSS_JUDGMENT_INTERVAL
 var dread_boss_cross_timer := DREAD_BOSS_CROSS_INTERVAL
 var dread_boss_phase_two := false
+var gravebloom_flower_hazard_texture: Texture2D
+var cursed_bell_objective_texture: Texture2D
+var bell_ring_hazard_texture: Texture2D
 
 @onready var world := Node2D.new()
 @onready var fx_layer := Node2D.new()
@@ -359,6 +370,7 @@ func _ready() -> void:
 	add_child(world)
 	add_child(fx_layer)
 	_load_profile()
+	_load_generated_effect_textures()
 	current_chapter_index = 0
 	_build_arena()
 	_build_ui()
@@ -449,7 +461,8 @@ func _process(delta: float) -> void:
 			spawn_timer = max(0.28, 1.18 - elapsed * 0.006 - float(_profile_pressure_tier()) * 0.018)
 		_update_pressure_director(delta)
 		_update_anti_kite_pressure(delta)
-	living_blade.tick(delta, enemies)
+	_update_journey_objective(delta)
+	living_blade.tick(delta, enemies, journey_objective if is_instance_valid(journey_objective) else null)
 	_update_ultimate(delta)
 	_update_shadow_spirit(delta)
 	_update_bone_spears(delta)
@@ -853,11 +866,32 @@ func _make_ellipse(radius_x: float, radius_y: float, color: Color, point_count: 
 	polygon.polygon = points
 	return polygon
 
+func _fit_sprite_scale(texture: Texture2D, max_size: float) -> Vector2:
+	if texture == null:
+		return Vector2.ONE
+	var size := texture.get_size()
+	var scale_value := max_size / maxf(size.x, size.y)
+	return Vector2.ONE * scale_value
+
 func _make_ring_points(radius: float, point_count: int) -> PackedVector2Array:
 	var points := PackedVector2Array()
 	for i in range(point_count):
 		points.append(Vector2.RIGHT.rotated(TAU * float(i) / float(point_count)) * radius)
 	return points
+
+func _load_generated_effect_textures() -> void:
+	gravebloom_flower_hazard_texture = _load_image_texture(GravebloomFlowerHazardTexturePath)
+	cursed_bell_objective_texture = _load_image_texture(CursedBellObjectiveTexturePath)
+	bell_ring_hazard_texture = _load_image_texture(BellRingHazardTexturePath)
+
+func _load_image_texture(resource_path: String) -> Texture2D:
+	var texture := load(resource_path) as Texture2D
+	if texture != null:
+		return texture
+	var image := Image.load_from_file(resource_path)
+	if image == null or image.is_empty():
+		return null
+	return ImageTexture.create_from_image(image)
 
 func _make_tapered_strike(start: Vector2, end: Vector2, half_width: float, color: Color, jaggedness: float = 0.0) -> Polygon2D:
 	var strike := Polygon2D.new()
@@ -1305,6 +1339,10 @@ func _reset_run() -> void:
 	journey_transition_mode = ""
 	journey_markers.clear()
 	journey_exit = null
+	journey_objective = null
+	journey_objectives_destroyed = 0
+	objective_guard_timer = 0.0
+	pending_objective_reward = false
 	spawn_timer = 0.0
 	level = 1
 	player_damage_bonus = 0.0
@@ -1546,6 +1584,10 @@ func _pick_enemy_kind() -> String:
 func _spawn_enemy(enemy_kind: String, is_miniboss: bool, spawn_position := Vector2.INF) -> void:
 	var enemy: Enemy = EnemyScene.instantiate()
 	enemy.enemy_kind = enemy_kind
+	# Ordinary crowds deal contact damage but must not physically imprison the player.
+	if not is_miniboss and enemy_kind != "grave_king":
+		enemy.collision_layer = 0
+		enemy.collision_mask = 1
 	enemy.max_health = 2 + int(elapsed / 52.0) + _chapter_enemy_health_bonus()
 	enemy.speed = (randf_range(56.0, 84.0) + elapsed * 0.14) * _chapter_enemy_speed_multiplier()
 	enemy.xp_value = 1
@@ -1993,21 +2035,164 @@ func _check_journey_progress() -> void:
 	if game_state != "running":
 		return
 	var stage_kills := kill_count - stage_kill_start
-	if journey_stage == 0 and stage_kills >= GARDEN_CLEAR_KILLS and not garden_boss_summoned:
+	if is_instance_valid(journey_objective) or pending_objective_reward:
+		return
+	if journey_objectives_destroyed < OBJECTIVE_COUNT:
+		var threshold: int = int(OBJECTIVE_KILL_THRESHOLDS[journey_objectives_destroyed])
+		if stage_kills >= threshold:
+			_spawn_journey_objective()
+		return
+	if journey_stage == 0 and not garden_boss_summoned:
 		garden_boss_summoned = true
 		_clear_stage_entities()
-		_flash_overlay_text("Пустой трон услышал бой. Король-Могила встал.")
+		_flash_overlay_text("Три Сердца замолчали. Король-Могила встал.")
 		_spawn_dread_boss()
 	elif journey_stage == 0 and grave_king_killed and not king_gift_offered:
 		_show_king_gift_choice()
 	elif journey_stage == 0 and grave_king_killed and not king_gift_id.is_empty():
 		_open_chapel_gate()
-	elif journey_stage == 1 and stage_kills >= CHAPEL_CLEAR_KILLS and not journey_boss_summoned:
+	elif journey_stage == 1 and not journey_boss_summoned:
 		journey_boss_summoned = true
-		_flash_overlay_text("Алтарь услышал бой. Игумен Пепла идет.")
+		_flash_overlay_text("Третий колокол треснул. Игумен Пепла идет.")
 		_spawn_dread_boss()
 	elif journey_stage == 1 and chapel_boss_killed:
 		_start_finale_cutscene()
+
+func _spawn_journey_objective() -> void:
+	if is_instance_valid(journey_objective) or journey_objectives_destroyed >= OBJECTIVE_COUNT:
+		return
+	var kind := "cursed_bell" if journey_stage == 1 else "grave_heart"
+	var base_health := 22 if journey_stage == 0 else 28
+	var objective_health := base_health + journey_objectives_destroyed * 12 + _profile_pressure_tier() * 2
+	journey_objective = JourneyObjectiveScript.new()
+	journey_objective.setup(kind, objective_health)
+	var angle := randf_range(0.0, TAU)
+	var distance := randf_range(330.0, 470.0)
+	var origin := player.global_position if player != null else Vector2.ZERO
+	journey_objective.position = _push_out_of_arena_obstacles(origin + Vector2.RIGHT.rotated(angle) * distance, 90.0)
+	journey_objective.position.x = clampf(journey_objective.position.x, -ARENA_LIMIT_X + 150.0, ARENA_LIMIT_X - 150.0)
+	journey_objective.position.y = clampf(journey_objective.position.y, -ARENA_LIMIT_Y + 150.0, ARENA_LIMIT_Y - 150.0)
+	journey_objective.destroyed.connect(_on_journey_objective_destroyed)
+	journey_objective.damaged.connect(_on_journey_objective_damaged)
+	world.add_child(journey_objective)
+	objective_guard_timer = 0.2
+	var title := "ПРОКЛЯТЫЙ КОЛОКОЛ" if journey_stage == 1 else "СЕРДЦЕ МОГИЛ"
+	_flash_overlay_text("%s ПРОБУДИЛОСЬ" % title)
+	CombatFxScript.ring(fx_layer, journey_objective.global_position, Color(1.0, 0.62, 0.28, 0.76) if journey_stage == 1 else Color(0.48, 1.0, 0.62, 0.72), 190.0, 0.72)
+
+func _update_journey_objective(delta: float) -> void:
+	if not is_instance_valid(journey_objective):
+		return
+	objective_guard_timer -= delta
+	if objective_guard_timer > 0.0:
+		return
+	objective_guard_timer = maxf(5.8, 8.0 - float(journey_objectives_destroyed) * 0.7)
+	var guard_count := mini(3, 2 + journey_objectives_destroyed)
+	var approach_direction := Vector2.RIGHT.rotated(randf_range(0.0, TAU))
+	if player != null:
+		approach_direction = player.global_position.direction_to(journey_objective.global_position)
+	for i in range(guard_count):
+		if enemies.size() >= MAX_ENEMIES:
+			break
+		var kind := _objective_guard_kind(i)
+		var spread := (float(i) - float(guard_count - 1) * 0.5) * 0.48
+		var spawn_position: Vector2 = journey_objective.global_position + approach_direction.rotated(spread) * randf_range(340.0, 440.0)
+		_spawn_enemy(kind, false, _push_out_of_arena_obstacles(spawn_position, 48.0))
+	CombatFxScript.ring(fx_layer, journey_objective.global_position, Color(1.0, 0.58, 0.24, 0.42) if journey_stage == 1 else Color(0.42, 0.92, 0.56, 0.4), 150.0, 0.35)
+
+func _objective_guard_kind(index: int) -> String:
+	if journey_stage == 1:
+		return "ash_bellringer" if index == 0 else ("ash_ember" if index % 2 == 0 else "ash_acolyte")
+	return "brute" if index == 0 and journey_objectives_destroyed > 0 else ("spitter" if index % 2 == 0 else "crawler")
+
+func _on_journey_objective_damaged(objective_position: Vector2, amount: int) -> void:
+	CombatFxScript.damage_number(fx_layer, objective_position + Vector2(0.0, -70.0), amount, Color(1.0, 0.76, 0.34) if journey_stage == 1 else Color(0.62, 1.0, 0.68), 19)
+
+func _on_journey_objective_destroyed(objective_position: Vector2) -> void:
+	journey_objective = null
+	journey_objectives_destroyed += 1
+	pending_objective_reward = true
+	CombatFxScript.burst(fx_layer, objective_position, Color(1.0, 0.58, 0.24, 0.88) if journey_stage == 1 else Color(0.5, 1.0, 0.62, 0.88), 28)
+	CombatFxScript.ring(fx_layer, objective_position, Color(1.0, 0.82, 0.48, 0.78), 230.0, 0.68)
+	_start_screen_shake(0.24, 6.5)
+	call_deferred("_show_objective_reward_choice")
+
+func _show_objective_reward_choice() -> void:
+	paused_for_upgrade = true
+	game_state = "objective_reward"
+	build_label.visible = false
+	joystick_base.visible = false
+	ultimate_button.visible = false
+	ultimate_bar.visible = false
+	_reset_joystick()
+	get_tree().paused = true
+	_clear_container(upgrade_list)
+	upgrade_list.add_child(_make_label("Эхо разрушенной цели", 25))
+	upgrade_list.add_child(_make_label("Выбери малый дар на этот забег", 15))
+	var rewards := _roll_objective_rewards()
+	for reward in rewards:
+		_add_objective_reward_button(String(reward["name"]), String(reward["description"]), String(reward["method"]))
+	upgrade_panel.visible = true
+
+func _roll_objective_rewards() -> Array:
+	var rewards := [
+		{"name": "Крепость Маски", "description": "+14 здоровья и лечение", "method": "_objective_reward_health"},
+		{"name": "Острота Клинка", "description": "+1 урон Живого Клинка", "method": "_upgrade_damage"},
+		{"name": "Быстрый Звон", "description": "Автооружие срабатывает чаще", "method": "_objective_reward_tempo"},
+		{"name": "Живое Сердце", "description": "Нова заряжается быстрее", "method": "_objective_reward_nova"},
+		{"name": "Лёгкий Шаг", "description": "+8% скорости движения", "method": "_objective_reward_speed"},
+		{"name": "Зов Осколков", "description": "Опыт притягивается дальше", "method": "_objective_reward_magnet"},
+	]
+	rewards.shuffle()
+	return rewards.slice(0, 2)
+
+func _add_objective_reward_button(title: String, description: String, method_name: String) -> void:
+	var button := Button.new()
+	button.text = "%s\n%s" % [title, description]
+	button.custom_minimum_size = Vector2(430, 78)
+	button.set_meta("reward_method", method_name)
+	button.pressed.connect(_on_objective_reward_chosen.bind(button))
+	upgrade_list.add_child(button)
+
+func _on_objective_reward_chosen(button: Button) -> void:
+	var method_name := String(button.get_meta("reward_method", ""))
+	if not method_name.is_empty():
+		call(method_name)
+	upgrade_panel.visible = false
+	paused_for_upgrade = false
+	pending_objective_reward = false
+	game_state = "running"
+	get_tree().paused = false
+	joystick_base.visible = true
+	ultimate_button.visible = true
+	ultimate_bar.visible = true
+	build_label.visible = true
+	_flash_overlay_text("Маска приняла эхо")
+	_check_journey_progress()
+
+func _objective_reward_health() -> void:
+	if player == null:
+		return
+	player.max_health += 14.0
+	player.heal(28.0)
+
+func _objective_reward_tempo() -> void:
+	if is_instance_valid(living_blade):
+		living_blade.quicken()
+	shadow_spirit_cooldown = maxf(2.5, shadow_spirit_cooldown - 0.35)
+	bone_spear_cooldown = maxf(1.55, bone_spear_cooldown - 0.3)
+	oblivion_bell_cooldown = maxf(3.4, oblivion_bell_cooldown - 0.35)
+
+func _objective_reward_nova() -> void:
+	ultimate_cooldown = maxf(16.0, ultimate_cooldown - 2.5)
+	ultimate_charge = minf(ultimate_cooldown, ultimate_charge + 5.0)
+
+func _objective_reward_speed() -> void:
+	if player != null:
+		player.speed *= 1.08
+
+func _objective_reward_magnet() -> void:
+	shard_pull_range += 45.0
 
 func _start_finale_cutscene() -> void:
 	if game_state == "finale":
@@ -2199,6 +2384,10 @@ func _enter_journey_stage(stage_index: int) -> void:
 	journey_transition_mode = ""
 	stage_elapsed = 0.0
 	stage_kill_start = kill_count
+	journey_objective = null
+	journey_objectives_destroyed = 0
+	objective_guard_timer = 0.0
+	pending_objective_reward = false
 	journey_boss_summoned = false
 	dread_boss_spawned = false
 	miniboss_spawned = false
@@ -2458,7 +2647,6 @@ func _update_hazard_zones(delta: float) -> void:
 		var ring := zone.get_node_or_null("Ring") as CanvasItem
 		var petals := zone.get_node_or_null("Petals") as CanvasItem
 		var runes := zone.get_node_or_null("Runes") as CanvasItem
-		var bloom := zone.get_node_or_null("Bloom") as CanvasItem
 		var sound_waves := zone.get_node_or_null("SoundWaves") as CanvasItem
 		var bell := zone.get_node_or_null("Bell") as CanvasItem
 		var clapper := zone.get_node_or_null("Clapper") as CanvasItem
@@ -2471,17 +2659,15 @@ func _update_hazard_zones(delta: float) -> void:
 			core.scale = Vector2.ONE * (0.84 + sin(age * 4.5) * 0.045)
 			core.modulate.a = 0.1 if not active else 0.34 + sin(age * 7.0) * 0.08
 		if petals != null:
-			petals.rotation -= delta * (0.45 if active else 0.18)
-			petals.scale = Vector2.ONE * (0.82 + min(1.0, age / HAZARD_ARM_TIME) * 0.22 + sin(age * 5.0) * 0.025)
+			var petals_base_scale := petals.get_meta("base_scale", Vector2.ONE) as Vector2
+			petals.scale = petals_base_scale * (0.9 + min(1.0, age / HAZARD_ARM_TIME) * 0.1 + sin(age * 5.0) * 0.018)
 			petals.modulate.a = 0.36 if not active else 0.72
 		if runes != null:
 			runes.rotation += delta * 0.72
 			runes.modulate.a = 0.3 + sin(age * 8.0) * 0.14
-		if bloom != null:
-			bloom.rotation += delta * 1.8
-			bloom.scale = Vector2.ONE * (0.8 + min(1.0, age / HAZARD_ARM_TIME) * 0.45 + sin(age * 7.0) * 0.08)
 		if sound_waves != null:
-			sound_waves.scale = Vector2.ONE * (0.78 + min(1.0, age / HAZARD_ARM_TIME) * 0.3 + sin(age * 6.0) * 0.035)
+			var waves_base_scale := sound_waves.get_meta("base_scale", Vector2.ONE) as Vector2
+			sound_waves.scale = waves_base_scale * (0.86 + min(1.0, age / HAZARD_ARM_TIME) * 0.14 + sin(age * 6.0) * 0.02)
 			sound_waves.modulate.a = 0.42 if not active else 0.9
 		if bell != null:
 			bell.rotation = sin(age * 6.5) * (0.08 if not active else 0.16)
@@ -2550,63 +2736,41 @@ func _spawn_hazard_zone(zone_position: Vector2) -> void:
 	world.add_child(zone)
 
 func _add_flower_hazard_visual(zone: Node2D) -> void:
-	var petals := Node2D.new()
+	var petals := Sprite2D.new()
 	petals.name = "Petals"
-	for i in range(12):
-		var petal := _make_ellipse(16.0, 42.0, Color(0.52, 1.0, 0.34, 0.42), 12)
-		petal.position = Vector2.RIGHT.rotated(TAU * float(i) / 12.0) * (HAZARD_RADIUS * 0.48)
-		petal.rotation = TAU * float(i) / 12.0 + PI / 2.0
-		petals.add_child(petal)
+	petals.texture = gravebloom_flower_hazard_texture
+	petals.centered = true
+	petals.scale = _fit_sprite_scale(gravebloom_flower_hazard_texture, HAZARD_RADIUS * 1.42)
+	petals.set_meta("base_scale", petals.scale)
+	petals.modulate = Color(1.0, 1.0, 1.0, 0.78)
 	zone.add_child(petals)
 	var runes := Node2D.new()
 	runes.name = "Runes"
-	for i in range(8):
-		var rune := Line2D.new()
-		rune.width = 3.0
-		rune.default_color = Color(0.9, 1.0, 0.5, 0.72)
-		rune.points = PackedVector2Array([Vector2(-7.0, -8.0), Vector2(0.0, 8.0), Vector2(8.0, -5.0)])
-		rune.position = Vector2.RIGHT.rotated(TAU * float(i) / 8.0) * (HAZARD_RADIUS * 0.76)
-		rune.rotation = TAU * float(i) / 8.0 + randf_range(-0.35, 0.35)
+	for i in range(6):
+		var rune := _make_ellipse(7.0, 7.0, Color(0.86, 1.0, 0.54, 0.74), 10)
+		rune.position = Vector2.RIGHT.rotated(TAU * float(i) / 6.0) * (HAZARD_RADIUS * 0.73)
 		runes.add_child(rune)
 	zone.add_child(runes)
-	var bloom := _make_ellipse(26.0, 16.0, Color(0.8, 1.0, 0.45, 0.82), 11)
-	bloom.name = "Bloom"
-	bloom.rotation = randf() * TAU
-	zone.add_child(bloom)
 
 func _add_bell_hazard_visual(zone: Node2D) -> void:
-	var waves := Node2D.new()
+	var waves := Sprite2D.new()
 	waves.name = "SoundWaves"
-	for wave_index in range(3):
-		var wave := Line2D.new()
-		wave.width = 8.0 - float(wave_index) * 1.5
-		wave.closed = true
-		wave.default_color = Color(1.0, 0.74, 0.32, 0.62 - float(wave_index) * 0.12)
-		wave.points = _make_ring_points(48.0 + float(wave_index) * 34.0, 30)
-		wave.scale.y = 0.72
-		waves.add_child(wave)
+	waves.texture = bell_ring_hazard_texture
+	waves.centered = true
+	waves.scale = _fit_sprite_scale(bell_ring_hazard_texture, HAZARD_RADIUS * 1.72)
+	waves.set_meta("base_scale", waves.scale)
+	waves.modulate = Color(1.0, 1.0, 1.0, 0.74)
 	zone.add_child(waves)
-	var bell := Polygon2D.new()
+	var bell := Sprite2D.new()
 	bell.name = "Bell"
-	bell.color = Color(0.42, 0.2, 0.07, 0.98)
-	bell.polygon = PackedVector2Array([
-		Vector2(-48.0, 32.0),
-		Vector2(-35.0, -28.0),
-		Vector2(-18.0, -54.0),
-		Vector2(18.0, -54.0),
-		Vector2(35.0, -28.0),
-		Vector2(48.0, 32.0),
-		Vector2(0.0, 52.0),
-	])
+	bell.texture = cursed_bell_objective_texture
+	bell.centered = true
+	bell.scale = _fit_sprite_scale(cursed_bell_objective_texture, HAZARD_RADIUS * 1.08)
+	bell.position = Vector2(0.0, 4.0)
 	zone.add_child(bell)
-	var bell_highlight := ColorRect.new()
-	bell_highlight.color = Color(1.0, 0.62, 0.22, 0.72)
-	bell_highlight.size = Vector2(12.0, 58.0)
-	bell_highlight.position = Vector2(-26.0, -34.0)
-	zone.add_child(bell_highlight)
-	var clapper := _make_ellipse(12.0, 15.0, Color(0.12, 0.055, 0.025, 1.0), 12)
+	var clapper := _make_ellipse(11.0, 14.0, Color(0.16, 0.08, 0.03, 0.96), 12)
 	clapper.name = "Clapper"
-	clapper.position = Vector2(0.0, 39.0)
+	clapper.position = Vector2(0.0, 37.0)
 	zone.add_child(clapper)
 
 func _get_hazard_position() -> Vector2:
@@ -2902,6 +3066,28 @@ func _compact_enemies() -> void:
 		if is_instance_valid(enemy) and not enemy.is_dead:
 			alive_enemies.append(enemy)
 	enemies = alive_enemies
+
+func _combat_targets() -> Array:
+	var targets: Array = enemies.duplicate()
+	if is_instance_valid(journey_objective):
+		targets.append(journey_objective)
+	return targets
+
+func _damage_objective_in_radius(origin: Vector2, radius: float, damage: int, hit_source: String = "") -> bool:
+	if not is_instance_valid(journey_objective):
+		return false
+	if journey_objective.global_position.distance_to(origin) > radius:
+		return false
+	journey_objective.take_damage(damage, origin, 0.0, hit_source)
+	return true
+
+func _damage_objective_on_segment(start: Vector2, end: Vector2, width: float, damage: int, hit_source: String = "") -> bool:
+	if not is_instance_valid(journey_objective):
+		return false
+	if _distance_to_segment(journey_objective.global_position, start, end) > width:
+		return false
+	journey_objective.take_damage(damage, start, 0.0, hit_source)
+	return true
 
 func _compact_shards() -> void:
 	var alive_shards: Array[XPShard] = []
@@ -3699,13 +3885,20 @@ func _journey_objective_text() -> String:
 	if journey_transition_mode == "ending_gate":
 		return "Войди в проход за алтарём"
 	var stage_kills: int = maxi(0, kill_count - stage_kill_start)
+	if is_instance_valid(journey_objective):
+		return "Разбей проклятый колокол" if journey_stage == 1 else "Уничтожь Сердце могил"
+	if pending_objective_reward:
+		return "Выбери эхо разрушенной цели"
+	if journey_objectives_destroyed < OBJECTIVE_COUNT:
+		var threshold: int = int(OBJECTIVE_KILL_THRESHOLDS[journey_objectives_destroyed])
+		return "Пробуди цель: осталось врагов %d" % maxi(0, threshold - stage_kills)
 	if journey_stage == 0:
 		if garden_boss_summoned:
 			return "Сразить Короля-Могилу"
-		return "Очистить Сад: %d/%d" % [min(stage_kills, GARDEN_CLEAR_KILLS), GARDEN_CLEAR_KILLS]
+		return "Сердца уничтожены: %d/%d" % [journey_objectives_destroyed, OBJECTIVE_COUNT]
 	if journey_boss_summoned:
 		return "Сразить Игумена Пепла"
-	return "Открыть алтарь: %d/%d" % [min(stage_kills, CHAPEL_CLEAR_KILLS), CHAPEL_CLEAR_KILLS]
+	return "Колокола разбиты: %d/%d" % [journey_objectives_destroyed, OBJECTIVE_COUNT]
 
 func _journey_progress_text() -> String:
 	if journey_stage <= 0:
@@ -3928,6 +4121,7 @@ func _cast_ultimate() -> void:
 			elif enemy.is_miniboss:
 				damage = int(ceil(float(damage) * 0.65))
 			enemy.take_damage(damage, origin, 520.0)
+	_damage_objective_in_radius(origin, ultimate_radius + 70.0, _scaled_player_damage(ultimate_damage), "nova")
 	nova_damage_active = false
 	if king_gift_id == "dead_crown":
 		_cast_dead_crown_echo(origin)
@@ -3949,6 +4143,7 @@ func _cast_dead_crown_echo(origin: Vector2) -> void:
 			continue
 		if origin.distance_to(enemy.global_position) <= ultimate_radius + 92.0:
 			enemy.take_damage(_scaled_player_damage(maxi(2, int(ceil(float(ultimate_damage) * 0.65)))), origin, 360.0)
+	_damage_objective_in_radius(origin, ultimate_radius + 140.0, _scaled_player_damage(maxi(2, int(ceil(float(ultimate_damage) * 0.65)))), "dead_crown")
 	var tween := create_tween()
 	tween.tween_property(crown, "modulate:a", 0.0, 0.5)
 	tween.tween_callback(crown.queue_free)
@@ -4064,13 +4259,13 @@ func _update_shadow_spirit(delta: float) -> void:
 func _nearest_enemy_for_spirit() -> Node2D:
 	var best: Node2D = null
 	var best_distance := 420.0
-	for enemy in enemies:
-		if not is_instance_valid(enemy):
+	for target in _combat_targets():
+		if not is_instance_valid(target):
 			continue
-		var distance := player.global_position.distance_to(enemy.global_position)
+		var distance := player.global_position.distance_to(target.global_position)
 		if distance < best_distance:
 			best_distance = distance
-			best = enemy
+			best = target
 	return best
 
 func _cast_shadow_spirit(target_position: Vector2) -> void:
@@ -4110,6 +4305,7 @@ func _cast_shadow_spirit(target_position: Vector2) -> void:
 		var distance_to_beam := _distance_to_segment(enemy.global_position, start, end)
 		if distance_to_beam <= 34.0:
 			enemy.take_damage(_scaled_player_damage(shadow_spirit_damage), start, 180.0)
+	_damage_objective_on_segment(start, end, 54.0, _scaled_player_damage(shadow_spirit_damage), "shadow")
 	_start_screen_shake(0.1, 3.5)
 
 func _update_bone_spears(delta: float) -> void:
@@ -4185,6 +4381,7 @@ func _cast_single_bone_spear(origin: Vector2, direction: Vector2) -> void:
 		var distance_to_spear := _distance_to_segment(enemy.global_position, start, end)
 		if distance_to_spear <= width:
 			enemy.take_damage(_scaled_player_damage(bone_spear_damage), origin, 230.0)
+	_damage_objective_on_segment(start, end, width + 20.0, _scaled_player_damage(bone_spear_damage), "spear")
 	var tween := create_tween()
 	tween.set_parallel(true)
 	tween.tween_property(spear_root, "modulate:a", 0.0, 0.42)
@@ -4212,6 +4409,8 @@ func _cast_oblivion_bell() -> void:
 		if enemy.global_position.distance_to(origin) <= oblivion_bell_radius:
 			enemy.take_damage(_scaled_player_damage(oblivion_bell_damage), origin, 260.0)
 			hit_count += 1
+	if _damage_objective_in_radius(origin, oblivion_bell_radius + 55.0, _scaled_player_damage(oblivion_bell_damage), "bell"):
+		hit_count += 1
 	if hit_count > 0:
 		_start_screen_shake(0.08, 3.2)
 
@@ -4371,6 +4570,9 @@ func _clear_journey_markers() -> void:
 	journey_exit = null
 
 func _clear_stage_entities() -> void:
+	if is_instance_valid(journey_objective):
+		journey_objective.queue_free()
+	journey_objective = null
 	for enemy in enemies:
 		if is_instance_valid(enemy):
 			enemy.queue_free()

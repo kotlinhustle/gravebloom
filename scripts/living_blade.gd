@@ -48,7 +48,7 @@ func _process(delta: float) -> void:
 		"return":
 			_update_return(delta)
 
-func tick(delta: float, enemies: Array) -> void:
+func tick(delta: float, enemies: Array, priority_target: Node2D = null) -> void:
 	if owner_player == null or owner_player.get("is_dead"):
 		return
 	nearby_enemies = enemies
@@ -57,7 +57,7 @@ func tick(delta: float, enemies: Array) -> void:
 	timer -= delta
 	if timer > 0.0:
 		return
-	var target := _nearest_enemy(enemies)
+	var target := _choose_target(enemies, priority_target)
 	if target == null:
 		return
 	target_enemy = target
@@ -133,11 +133,15 @@ func _hit_target() -> void:
 		return
 	has_hit_target = true
 	var hit_damage: int = max(1, int(ceil(float(damage) * (1.0 + level_damage_bonus))))
-	if "enemy_kind" in target_enemy and target_enemy.enemy_kind == "grave_king":
+	var is_journey_objective := bool(target_enemy.get_meta("journey_objective", false))
+	var target_kind := "" if is_journey_objective else String(target_enemy.get("enemy_kind"))
+	if target_kind == "grave_king":
 		hit_damage = int(ceil(float(hit_damage) * grave_king_damage_multiplier))
 	var is_execution := false
-	if "health" in target_enemy and "is_miniboss" in target_enemy and "enemy_kind" in target_enemy:
-		is_execution = int(target_enemy.health) <= hit_damage and not bool(target_enemy.is_miniboss) and target_enemy.enemy_kind != "grave_king"
+	var target_health: Variant = target_enemy.get("health")
+	var target_miniboss := false if is_journey_objective else bool(target_enemy.get("is_miniboss"))
+	if target_health != null and not target_kind.is_empty():
+		is_execution = int(target_health) <= hit_damage and not target_miniboss and target_kind != "grave_king"
 	if is_execution:
 		target_enemy.set_meta("execution_death", true)
 		target_enemy.set_meta("execution_source", "blade")
@@ -163,6 +167,14 @@ func _face_position(target_position: Vector2) -> void:
 	var direction := global_position.direction_to(target_position)
 	if direction.length() > 0.0:
 		rotation = direction.angle() + PI / 2.0
+
+func _choose_target(enemies: Array, priority_target: Node2D) -> Node2D:
+	# Approaching a chapter objective is an intentional attack command.
+	if is_instance_valid(priority_target):
+		var objective_range := maxf(440.0, attack_range * 1.65)
+		if owner_player.global_position.distance_to(priority_target.global_position) <= objective_range:
+			return priority_target
+	return _nearest_enemy(enemies)
 
 func _nearest_enemy(enemies: Array) -> Node2D:
 	var best: Node2D = null
