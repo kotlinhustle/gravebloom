@@ -14,7 +14,7 @@ Core fantasy:
 Core gameplay loop:
 
 ```text
-Start journey -> destroy three Grave Hearts -> defeat Grave King -> choose a royal gift -> enter Ashen Chapel -> destroy three Cursed Bells -> defeat Ash Abbot
+Start journey -> destroy three Grave Hearts -> defeat Grave King -> choose a royal gift -> enter Ashen Chapel -> destroy three Cursed Bells -> defeat Ash Abbot -> enter Flooded Palace -> destroy three Drowned Seals -> defeat Faceless Queen
 ```
 
 ## Tech
@@ -70,7 +70,9 @@ assets/
     gravebloom_flower_hazard.png
     grave_heart_objective.png
     cursed_bell_objective.png
+    drowned_seal_objective.png
     bell_ring_hazard.png
+    faceless_queen_sheet.png
 scenes/
   main.tscn
   player.tscn
@@ -93,6 +95,7 @@ scripts/
 
 - Core sprites are generated bitmap assets with transparent backgrounds.
 - Journey objectives and major hazard markers now use dedicated generated sprites: `grave_heart_objective.png`, `cursed_bell_objective.png`, `gravebloom_flower_hazard.png`, and `bell_ring_hazard.png`.
+- `drowned_seal_objective.png` is the dedicated Flooded Palace objective sprite; `faceless_queen_sheet.png` is a real four-frame animation sheet used only by the Faceless Queen.
 - `enemy_crawler_sheet.png` is a real 6-frame limb-pose walk cycle used by crawler-based enemy roles; do not replace it with whole-sprite squash/pulse animation.
 - `enemy_brute_sheet.png`, `grave_king_sheet.png`, and `ash_abbot_sheet.png` provide real 4-frame pose cycles for heavy enemies and both journey bosses.
 - Enemy sprites stay upright on screen like the player instead of rotating with movement. They only mirror horizontally when changing left/right direction; rotating the three-quarter-view art makes vertical movement look sideways or upside down.
@@ -104,6 +107,11 @@ scripts/
 `Main`:
 
 - Runs are now short journeys through connected chapters rather than isolated timed arenas.
+- The start screen offers three lore-named difficulty oaths:
+  - `Тлеющая Клятва` keeps current balance and saves the latest reached chapter as a checkpoint. Death restarts that chapter with a fresh run build; `Сбросить путь` returns the checkpoint to the Dead Garden.
+  - `Нерушимая Клятва` keeps current balance but requires all three chapters in one life.
+  - `Последняя Клятва` requires all three chapters in one life and increases enemy health, speed, contact damage, projectiles, and boss attack damage.
+- Difficulty and the easy-mode journey checkpoint persist in `user://save.json`. Completing the journey clears the checkpoint.
 - The first journey starts in `Мертвый Сад`; kills progressively awaken three destructible `Сердца могил`. Each heart summons defenders, can be attacked by the Living Blade and auto-weapons, and grants a choice between two small temporary bonuses when destroyed. Destroying all three summons `Король-Могила`. Killing him pauses combat for one royal-gift choice, then opens one physical gate to `Пепельная Часовня` near the player's current position. The player must walk into it to continue.
 - Active journey objectives are passed to the Living Blade as an explicit priority target. When the player deliberately approaches within roughly 440px, nearby defenders must not steal blade attacks from the objective.
 - Objective defenders enter from a loose sector behind the objective at a safe distance. Never spawn them as a tight ring around the objective or player.
@@ -111,6 +119,11 @@ scripts/
 - Health, level, XP, relics, and auto-weapons persist across areas. Reset the Living Blade to its owner during transitions so it cannot remain offscreen while chasing a deleted enemy, and keep its canvas layer above rebuilt arena backgrounds.
 - Garden and Chapel boss deaths must be tracked separately even though both currently use the shared internal `grave_king` enemy slot. Killing `Король-Могила` unlocks the royal-gift choice and then the Chapel gate; killing `Игумен Пепла` opens the final passage.
 - In the Chapel, kills progressively awaken three destructible `Проклятых колокола`; each summons chapter-specific defenders and grants a small temporary reward choice. Destroying all three summons `Игумен Пепла`; after killing him, the hero must walk into the final passage to win the journey.
+- Killing `Игумен Пепла` now opens a physical gate into `Затопленный Дворец`; the Chapel is no longer the end of the journey.
+- `Затопленный Дворец` is the third real gameplay chapter: three broad palace halls are connected by dry bridges around four black-water basins. Periodic water rises clearly brighten the basins and slow the player only while standing in them.
+- Palace enemies are `Утопленники` (`drowned`, durable pressure), `Придворные Тени` (`court_shadow`, fast flankers), `Слепые Гарпунщики` (`harpooner`, ranged pressure), and `Королевские Стражи` (`royal_guard`, slow heavy pressure).
+- Palace kills awaken three destructible `Утопленные Печати`. Destroying all three summons `Безликая Королева`, whose attacks use black tides, broken-reflection lanes, summoned court shadows, and forced water rises.
+- Killing `Безликая Королева` starts the final short cutscene and opens the final physical passage behind the throne. Victory only occurs after entering it.
 - Bosses should threaten with attacks and positioning rather than simply outrunning the player. Their base chase speed and phase-two acceleration are intentionally restrained.
 - Combat areas are cleared through three sequential chapter-specific destructible objectives rather than kill quotas or a global three-minute survival timer. The HUD shows the next awakening condition or active objective.
 - Supports chapter selection infrastructure from the earlier standalone-arena format, but the main start screen now launches the connected journey.
@@ -147,6 +160,7 @@ scripts/
 - Boss attacks include `Похоронный Колокол` radial shock rings, `Королевский Приговор` lane strikes along the player's route, and phase-two `Черная корона` cross strikes.
 - Король-Могила has a dedicated top HUD boss HP bar that appears on spawn, updates with damage, flashes on phase two, and hides on boss death/result screens.
 - Keeps the player inside visible ruined arena bounds and caps live enemy pressure for early readability.
+- Player HUD bars use deliberately distinct colors: health is deep red/crimson and XP is cold cyan/teal. Preserve this separation so they cannot be confused at a glance.
 - Visible UI text is Russian-first; keep menus, HUD, result screens, upgrade choices, and combat notices localized.
 - Player-facing terms should explain themselves in-game. Keep `Справка Маски` available from menus and add short local explanations near terms like `Пепел`, `Реликвии`, `Летопись`, objectives, and HUD counters.
 - Micro-lore is embedded through the start screen, timed run notices, relic descriptions, relic-pick echo lines, boss entrance lines, and result text.
@@ -224,7 +238,7 @@ scripts/
 - Incoming damage now shows red numbers over the player, throttled for continuous contact/hazard damage so it does not spam the screen.
 - Runs now have a journey start screen, XP bar, area-clear objectives, physical chapter gates, chapter bosses, victory/death screens, and a restart button.
 - Starting a journey now shows a short Russian text prologue before controls become active. Keep it brief, phone-readable, and focused on why the Mask enters the ruins.
-- Killing `Игумен Пепла` starts a short skippable finale: combat stops, the last bell answers, and a dark passage opens behind the altar. The finale then restores player control, and victory only occurs when the hero walks into that passage. Skipping captions must skip to the interactive gate, not directly to victory.
+- Killing `Безликая Королева` starts a short skippable finale: combat stops, the throne sinks, and a dry passage opens behind it. The finale then restores player control, and victory only occurs when the hero walks into that passage. Skipping captions must skip to the interactive gate, not directly to victory.
 - Keep the start screen deliberately sparse: journey premise, Ash total, and only `Начать путешествие` and `Еще`. Goals, profile, codex, help, and run history live on separate secondary screens. Navigating menus must not reroll active run goals.
 - Result screens should summarize the run: time survived, level, kills, XP progress, and selected relic build with duplicate counts.
 - Keep the first result screen compact: outcome, chapter, time, level, kills, best streak, Ash reward, and only `Заново`, `Подробности`, `Главное меню`. Lore, goal progress, reward breakdown, codex unlocks, and relic lists belong on the separate details screen.

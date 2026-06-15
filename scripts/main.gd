@@ -12,6 +12,7 @@ const EnemyBruteSheetTexture := preload("res://assets/sprites/enemy_brute_sheet.
 const GraveWardenTexture := preload("res://assets/sprites/grave_warden.png")
 const GraveKingSheetTexture := preload("res://assets/sprites/grave_king_sheet.png")
 const AshAbbotSheetTexture := preload("res://assets/sprites/ash_abbot_sheet.png")
+const FacelessQueenSheetTexture := preload("res://assets/sprites/faceless_queen_sheet.png")
 const GravebloomFlowerHazardTexturePath := "res://assets/sprites/gravebloom_flower_hazard.png"
 const CursedBellObjectiveTexturePath := "res://assets/sprites/cursed_bell_objective.png"
 const BellRingHazardTexturePath := "res://assets/sprites/bell_ring_hazard.png"
@@ -73,12 +74,42 @@ const DREAD_BOSS_SUMMON_INTERVAL := 7.4
 const DREAD_BOSS_BELL_INTERVAL := 8.2
 const DREAD_BOSS_JUDGMENT_INTERVAL := 6.4
 const DREAD_BOSS_CROSS_INTERVAL := 10.5
+const PALACE_WATER_CYCLE := 18.0
+const PALACE_WATER_WARNING := 3.0
+const PALACE_WATER_ACTIVE := 7.0
+const PALACE_WATER_SLOW := 0.72
 const BOSS_ATTACK_ARM_TIME := 1.0
 const BOSS_ATTACK_ACTIVE_TIME := 0.45
 const SAVE_PATH := "user://save.json"
 const HISTORY_LIMIT := 8
 const PROFILE_HISTORY_VISIBLE := 3
 const CODEX_VISIBLE_ENTRIES := 4
+const DIFFICULTIES := {
+	"smoldering_oath": {
+		"name": "Тлеющая Клятва",
+		"description": "Руины помнят пройденные главы.\nСмерть возвращает в текущую область.",
+		"enemy_health": 1.0,
+		"enemy_damage": 1.0,
+		"enemy_speed": 1.0,
+		"checkpoints": true,
+	},
+	"unbroken_oath": {
+		"name": "Нерушимая Клятва",
+		"description": "Все три главы нужно пройти за одну жизнь.\nСила руин остаётся прежней.",
+		"enemy_health": 1.0,
+		"enemy_damage": 1.0,
+		"enemy_speed": 1.0,
+		"checkpoints": false,
+	},
+	"last_oath": {
+		"name": "Последняя Клятва",
+		"description": "Одна жизнь на весь путь.\nВраги крепче, быстрее и опаснее.",
+		"enemy_health": 1.45,
+		"enemy_damage": 1.32,
+		"enemy_speed": 1.08,
+		"checkpoints": false,
+	},
+}
 const META_UPGRADES := {
 	"mask": {"name": "Крепче Маска", "description": "+5 стартового HP", "base_cost": 24, "cost_step": 18, "max": 8},
 	"blade": {"name": "Острее Клинок", "description": "+1 стартовый урон клинка", "base_cost": 38, "cost_step": 28, "max": 4},
@@ -188,6 +219,48 @@ const CHAPTERS := [
 		"spitter_bonus": 0.04,
 		"runner_bonus": 0.05,
 	},
+	{
+		"id": "flooded_palace",
+		"name": "Затопленный Дворец",
+		"subtitle": "Чёрная вода хранит отражение последнего двора.",
+		"goal": "Разбей Утопленные Печати и не задерживайся в поднявшейся воде.",
+		"palette": {
+			"bg": Color(0.018, 0.03, 0.04),
+			"floor": Color(0.055, 0.075, 0.084, 0.96),
+			"stain": Color(0.015, 0.055, 0.072, 0.28),
+			"stone": Color(0.12, 0.17, 0.18, 0.94),
+			"rubble": Color(0.1, 0.16, 0.17, 0.58),
+			"glow": Color(0.38, 0.88, 0.92, 0.34),
+			"flower": Color(0.42, 0.78, 0.82, 0.45),
+			"fog": Color(0.34, 0.58, 0.64, 0.1),
+		},
+		"lore_events": [
+			{"time": 10.0, "text": "Вода помнит лица придворных"},
+			{"time": 38.0, "text": "Статуи отвернулись от трона"},
+			{"time": 76.0, "text": "Под водой кто-то идёт рядом"},
+			{"time": 118.0, "text": "Королева всё ещё ждёт поклон"},
+		],
+		"death_lines": [
+			"Чёрная вода сомкнулась над Маской.",
+			"Дворец получил ещё одно отражение.",
+			"Клинок опустился на затопленное дно.",
+			"Королева не встала с пустого трона.",
+		],
+		"victory_lines": [
+			"Королева исчезла. Вода впервые отразила небо.",
+			"Пустой дворец отпустил последний поклон.",
+			"Маска вышла из воды без отражения.",
+			"Трон затонул, и королевство перестало ждать.",
+		],
+		"boss_name": "БЕЗЛИКАЯ КОРОЛЕВА",
+		"boss_enter": "Безликая Королева вышла из воды",
+		"boss_lore": "Её лицо осталось в каждом отражении",
+		"boss_dead": "Безликая Королева утонула",
+		"enemy_speed": 1.05,
+		"enemy_health": 2,
+		"spitter_bonus": 0.05,
+		"runner_bonus": 0.07,
+	},
 ]
 const RUN_GOAL_COUNT := 3
 const RUN_GOALS := [
@@ -238,6 +311,7 @@ var stage_kill_start := 0
 var garden_boss_summoned := false
 var journey_boss_summoned := false
 var chapel_boss_killed := false
+var palace_boss_killed := false
 var king_gift_offered := false
 var king_gift_id := ""
 var king_gift_name := ""
@@ -279,6 +353,8 @@ var relic_pick_order: Array[String] = []
 var active_run_goals: Array = []
 var completed_goal_ids: Dictionary = {}
 var current_chapter_index := 0
+var difficulty_id := "smoldering_oath"
+var journey_checkpoint := 0
 var shadow_spirit_unlocked := false
 var shadow_spirit_timer := 3.0
 var shadow_spirit_cooldown := 5.5
@@ -303,6 +379,10 @@ var ambient_glows: Array[CanvasItem] = []
 var fog_wisps: Array[CanvasItem] = []
 var arena_obstacles: Array[Rect2] = []
 var garden_thickets: Array[Node2D] = []
+var palace_water_zones: Array[Node2D] = []
+var palace_water_timer := PALACE_WATER_CYCLE
+var palace_water_active_time := 0.0
+var palace_water_slow_applied := false
 var ambience_time := 0.0
 var ultimate_charge := 0.0
 var ultimate_ready := false
@@ -371,7 +451,7 @@ func _ready() -> void:
 	add_child(fx_layer)
 	_load_profile()
 	_load_generated_effect_textures()
-	current_chapter_index = 0
+	current_chapter_index = _starting_journey_stage()
 	_build_arena()
 	_build_ui()
 	_build_nova_charge_fx()
@@ -423,8 +503,27 @@ func _chapter_enemy_health_bonus() -> int:
 func _chapter_chance_bonus(bonus_id: String) -> float:
 	return float(_current_chapter().get(bonus_id, 0.0))
 
+func _difficulty() -> Dictionary:
+	var value: Variant = DIFFICULTIES.get(difficulty_id, DIFFICULTIES["smoldering_oath"])
+	return value as Dictionary
+
+func _difficulty_name() -> String:
+	return String(_difficulty().get("name", "Тлеющая Клятва"))
+
+func _difficulty_multiplier(key: String) -> float:
+	return float(_difficulty().get(key, 1.0))
+
+func _difficulty_uses_checkpoints() -> bool:
+	return bool(_difficulty().get("checkpoints", false))
+
+func _starting_journey_stage() -> int:
+	return clampi(journey_checkpoint, 0, CHAPTERS.size() - 1) if _difficulty_uses_checkpoints() else 0
+
 func _is_ashen_chapel() -> bool:
 	return String(_current_chapter().get("id", "")) == "ashen_chapel"
+
+func _is_flooded_palace() -> bool:
+	return String(_current_chapter().get("id", "")) == "flooded_palace"
 
 func _rebuild_arena() -> void:
 	for child in world.get_children():
@@ -434,6 +533,7 @@ func _rebuild_arena() -> void:
 	fog_wisps.clear()
 	arena_obstacles.clear()
 	garden_thickets.clear()
+	palace_water_zones.clear()
 	_build_arena()
 
 func _process(delta: float) -> void:
@@ -468,6 +568,7 @@ func _process(delta: float) -> void:
 	_update_bone_spears(delta)
 	_update_enemy_projectiles(delta)
 	_update_garden_thickets(delta)
+	_update_palace_water(delta)
 	_update_hazard_zones(delta)
 	_update_boss_attacks(delta)
 	_update_cluster_bloom(delta)
@@ -528,7 +629,7 @@ func _make_crack_points(length: float, point_count: int) -> PackedVector2Array:
 	return points
 
 func _build_ruins() -> void:
-	var rubble_count := 12 if _is_ashen_chapel() else 18
+	var rubble_count := 10 if _is_flooded_palace() else (12 if _is_ashen_chapel() else 18)
 	for i in range(rubble_count):
 		var rubble := ColorRect.new()
 		var rubble_color := _chapter_color("rubble", Color(0.12, 0.12, 0.135, 0.55))
@@ -537,10 +638,103 @@ func _build_ruins() -> void:
 		rubble.position = Vector2(randf_range(-1900.0, 1900.0), randf_range(-1250.0, 1250.0))
 		rubble.rotation = randf() * TAU
 		world.add_child(rubble)
-	if _is_ashen_chapel():
+	if _is_flooded_palace():
+		_build_flooded_palace()
+	elif _is_ashen_chapel():
 		_build_chapel_debris()
 	else:
 		_build_dead_garden()
+
+func _build_flooded_palace() -> void:
+	# Broad dry halls and bridges divide a few large water basins. The water
+	# reads as one calm mass and only becomes dangerous during a visible rise.
+	_add_palace_hall(Vector2(-1320.0, 0.0), Vector2(760.0, 900.0))
+	_add_palace_hall(Vector2(0.0, 0.0), Vector2(900.0, 1120.0))
+	_add_palace_hall(Vector2(1370.0, 0.0), Vector2(820.0, 960.0))
+	_add_palace_bridge(Vector2(-690.0, 0.0), Vector2(500.0, 230.0))
+	_add_palace_bridge(Vector2(700.0, 0.0), Vector2(560.0, 230.0))
+	_add_palace_bridge(Vector2(0.0, -790.0), Vector2(300.0, 450.0))
+	_add_palace_bridge(Vector2(0.0, 790.0), Vector2(300.0, 450.0))
+
+	_add_palace_water(Vector2(-720.0, -790.0), Vector2(900.0, 500.0))
+	_add_palace_water(Vector2(720.0, -790.0), Vector2(900.0, 500.0))
+	_add_palace_water(Vector2(-720.0, 790.0), Vector2(900.0, 500.0))
+	_add_palace_water(Vector2(720.0, 790.0), Vector2(900.0, 500.0))
+
+	for side in [-1.0, 1.0]:
+		_add_palace_obstacle(Vector2(-1320.0, side * 360.0), Vector2(150.0, 150.0), "statue")
+		_add_palace_obstacle(Vector2(0.0, side * 470.0), Vector2(130.0, 130.0), "statue")
+		_add_palace_obstacle(Vector2(1370.0, side * 380.0), Vector2(170.0, 170.0), "statue")
+	_add_palace_obstacle(Vector2(1660.0, 0.0), Vector2(250.0, 180.0), "throne")
+
+func _add_palace_hall(center: Vector2, size: Vector2) -> void:
+	var hall := ColorRect.new()
+	hall.z_index = 2
+	hall.color = Color(0.11, 0.15, 0.16, 0.78)
+	hall.size = size
+	hall.position = center - size * 0.5
+	world.add_child(hall)
+	var inset := ColorRect.new()
+	inset.z_index = 2
+	inset.color = Color(0.16, 0.21, 0.21, 0.32)
+	inset.size = size - Vector2(70.0, 70.0)
+	inset.position = center - inset.size * 0.5
+	world.add_child(inset)
+
+func _add_palace_bridge(center: Vector2, size: Vector2) -> void:
+	var bridge := ColorRect.new()
+	bridge.z_index = 2
+	bridge.color = Color(0.14, 0.19, 0.19, 0.92)
+	bridge.size = size
+	bridge.position = center - size * 0.5
+	world.add_child(bridge)
+
+func _add_palace_water(center: Vector2, size: Vector2) -> void:
+	var water := Node2D.new()
+	water.position = center
+	water.z_index = 1
+	water.set_meta("size", size)
+	water.set_meta("phase", randf() * TAU)
+	world.add_child(water)
+	palace_water_zones.append(water)
+	var body := ColorRect.new()
+	body.name = "Body"
+	body.color = Color(0.015, 0.12, 0.16, 0.62)
+	body.size = size
+	body.position = -size * 0.5
+	water.add_child(body)
+	for i in range(3):
+		var reflection := _make_ellipse(randf_range(32.0, 74.0), randf_range(4.0, 8.0), Color(0.36, 0.76, 0.8, 0.16), 18)
+		reflection.position = Vector2(randf_range(-size.x * 0.35, size.x * 0.35), randf_range(-size.y * 0.32, size.y * 0.32))
+		water.add_child(reflection)
+
+func _add_palace_obstacle(center: Vector2, size: Vector2, kind: String) -> void:
+	var body := StaticBody2D.new()
+	body.position = center
+	body.collision_layer = 1
+	body.collision_mask = 0
+	world.add_child(body)
+	var collision := CollisionShape2D.new()
+	var shape := RectangleShape2D.new()
+	shape.size = size
+	collision.shape = shape
+	body.add_child(collision)
+	arena_obstacles.append(Rect2(center - size * 0.5, size))
+	var shadow := ColorRect.new()
+	shadow.color = Color(0.0, 0.025, 0.035, 0.72)
+	shadow.size = size + Vector2(34.0, 34.0)
+	shadow.position = -shadow.size * 0.5 + Vector2(15.0, 20.0)
+	body.add_child(shadow)
+	var stone := ColorRect.new()
+	stone.color = Color(0.1, 0.18, 0.19, 0.98) if kind == "statue" else Color(0.13, 0.22, 0.22, 0.98)
+	stone.size = size
+	stone.position = -size * 0.5
+	body.add_child(stone)
+	var cap := ColorRect.new()
+	cap.color = Color(0.32, 0.48, 0.48, 0.52)
+	cap.size = Vector2(size.x, 16.0)
+	cap.position = Vector2(-size.x * 0.5, -size.y * 0.5)
+	body.add_child(cap)
 
 func _build_dead_garden() -> void:
 	# The garden stays open and readable. Curved paths connect broad clearings,
@@ -785,7 +979,7 @@ func _add_gravestone(base_position: Vector2, scale_value: float) -> void:
 
 func _build_graveblooms() -> void:
 	var flower_color := _chapter_color("flower", Color(0.62, 1.0, 0.72, 0.68))
-	var bloom_count := 6 if _is_ashen_chapel() else 16
+	var bloom_count := 3 if _is_flooded_palace() else (6 if _is_ashen_chapel() else 16)
 	for i in range(bloom_count):
 		var center := Vector2(randf_range(-1850.0, 1850.0), randf_range(-1200.0, 1200.0))
 		var bloom := _make_ellipse(randf_range(6.0, 10.0), randf_range(5.0, 8.0), Color(flower_color.r, flower_color.g, flower_color.b, randf_range(0.18, 0.34)), 8)
@@ -1041,12 +1235,16 @@ func _build_ui() -> void:
 	hp_bar.max_value = 100.0
 	hp_bar.value = 100.0
 	hp_bar.show_percentage = false
+	hp_bar.add_theme_stylebox_override("background", _make_bar_style(Color(0.075, 0.025, 0.035, 0.94), Color(0.32, 0.12, 0.16, 0.94)))
+	hp_bar.add_theme_stylebox_override("fill", _make_bar_style(Color(0.72, 0.12, 0.22, 0.98), Color(1.0, 0.42, 0.48, 0.94)))
 	ui_layer.add_child(hp_bar)
 	xp_bar.position = Vector2(18, 138)
 	xp_bar.size = Vector2(504, 26)
 	xp_bar.max_value = xp_to_next
 	xp_bar.value = xp
 	xp_bar.show_percentage = false
+	xp_bar.add_theme_stylebox_override("background", _make_bar_style(Color(0.025, 0.055, 0.07, 0.94), Color(0.12, 0.3, 0.34, 0.94)))
+	xp_bar.add_theme_stylebox_override("fill", _make_bar_style(Color(0.12, 0.68, 0.76, 0.98), Color(0.54, 0.96, 1.0, 0.94)))
 	ui_layer.add_child(xp_bar)
 	_build_boss_ui()
 	_build_ultimate_ui()
@@ -1121,10 +1319,43 @@ func _show_start_screen() -> void:
 	_clear_container(overlay_list)
 	_add_overlay_label("GRAVEBLOOM", 42)
 	_add_overlay_label("Путь через мертвое королевство", 24)
-	_add_overlay_label("Очисти Сад и войди в Пепельную Часовню.", 17)
-	_add_overlay_label("Пепел: %d" % profile_ash, 17)
+	_add_overlay_label("Пепел: %d   Начало: %s" % [profile_ash, String(CHAPTERS[_starting_journey_stage()]["name"])], 16)
 	_add_overlay_button("Начать путешествие", _start_run)
+	_add_overlay_button("Клятва: %s" % _difficulty_name(), _show_difficulty_screen)
+	if _difficulty_uses_checkpoints() and journey_checkpoint > 0:
+		_add_overlay_button("Сбросить путь", _reset_journey_checkpoint)
 	_add_overlay_button("Еще", _show_more_screen)
+
+func _show_difficulty_screen() -> void:
+	_clear_world_entities()
+	game_state = "difficulty"
+	get_tree().paused = true
+	_configure_overlay(Vector2(34, 100), Vector2(472, 760))
+	overlay_panel.visible = true
+	_clear_container(overlay_list)
+	_add_overlay_label("Выбери Клятву", 32)
+	for id in ["smoldering_oath", "unbroken_oath", "last_oath"]:
+		var data: Dictionary = DIFFICULTIES[id]
+		var marker := ">> " if difficulty_id == id else ""
+		_add_difficulty_button("%s%s\n%s" % [marker, String(data["name"]), String(data["description"])], _select_difficulty.bind(id))
+	_add_overlay_button("Назад", _show_start_screen)
+
+func _select_difficulty(id: String) -> void:
+	if not DIFFICULTIES.has(id):
+		return
+	difficulty_id = id
+	current_chapter_index = _starting_journey_stage()
+	_save_profile()
+	_rebuild_arena()
+	_show_start_screen()
+
+func _reset_journey_checkpoint() -> void:
+	journey_checkpoint = 0
+	current_chapter_index = 0
+	_save_profile()
+	_rebuild_arena()
+	_prepare_run_goals()
+	_show_start_screen()
 
 func _show_more_screen() -> void:
 	_clear_world_entities()
@@ -1194,7 +1425,7 @@ func _select_chapter(chapter_index: int) -> void:
 func _start_run() -> void:
 	if game_state != "start":
 		_prepare_run_goals()
-	current_chapter_index = 0
+	current_chapter_index = _starting_journey_stage()
 	_rebuild_arena()
 	_reset_run()
 	_show_intro_cutscene()
@@ -1211,10 +1442,15 @@ func _show_intro_cutscene() -> void:
 	_configure_overlay(Vector2(44, 190), Vector2(452, 580))
 	overlay_panel.visible = true
 	_clear_container(overlay_list)
-	_add_overlay_label("До Gravebloom", 30)
-	_add_overlay_label("Королевство хоронило своих королей стоя.\nОднажды из их могил вырос первый цветок.", 18)
-	_add_overlay_label("Теперь Живой Клинок ведет Маску туда,\nгде колокол всё ещё зовёт мёртвых.", 18)
-	_add_overlay_button("Войти в Мертвый Сад", _begin_journey)
+	var start_stage := _starting_journey_stage()
+	_add_overlay_label("До Gravebloom" if start_stage == 0 else "Клятва не забыла", 30)
+	if start_stage == 0:
+		_add_overlay_label("Королевство хоронило своих королей стоя.\nОднажды из их могил вырос первый цветок.", 18)
+		_add_overlay_label("Теперь Живой Клинок ведет Маску туда,\nгде колокол всё ещё зовёт мёртвых.", 18)
+	else:
+		_add_overlay_label("Маска треснула, но пройденная дорога осталась в памяти руин.", 18)
+		_add_overlay_label("Новая клятва начинается у входа в текущую главу.", 18)
+	_add_overlay_button("Войти в %s" % String(CHAPTERS[start_stage]["name"]), _begin_journey)
 
 func _begin_journey() -> void:
 	overlay_panel.visible = false
@@ -1325,11 +1561,12 @@ func _reset_run() -> void:
 	_clear_world_entities()
 	elapsed = 0.0
 	stage_elapsed = 0.0
-	journey_stage = 0
+	journey_stage = current_chapter_index
 	stage_kill_start = 0
 	garden_boss_summoned = false
 	journey_boss_summoned = false
 	chapel_boss_killed = false
+	palace_boss_killed = false
 	king_gift_offered = false
 	king_gift_id = ""
 	king_gift_name = ""
@@ -1408,6 +1645,9 @@ func _reset_run() -> void:
 	pressure_director_timer = PRESSURE_DIRECTOR_INTERVAL
 	hazard_timer = HAZARD_INTERVAL
 	cluster_bloom_timer = CLUSTER_BLOOM_INTERVAL
+	palace_water_timer = PALACE_WATER_CYCLE
+	palace_water_active_time = 0.0
+	palace_water_slow_applied = false
 	dread_boss_hazard_timer = DREAD_BOSS_HAZARD_INTERVAL
 	dread_boss_summon_timer = DREAD_BOSS_SUMMON_INTERVAL
 	dread_boss_bell_timer = DREAD_BOSS_BELL_INTERVAL
@@ -1447,8 +1687,8 @@ func _update_anti_kite_pressure(delta: float) -> void:
 		interceptors = 2
 	for i in range(min(interceptors, available_slots)):
 		var roll := randf()
-		var kind := "ash_ember" if _is_ashen_chapel() else "flanker"
-		if not _is_ashen_chapel():
+		var kind := "court_shadow" if _is_flooded_palace() else ("ash_ember" if _is_ashen_chapel() else "flanker")
+		if not _is_ashen_chapel() and not _is_flooded_palace():
 			if roll < 0.24:
 				kind = "exploder"
 			elif roll < 0.58:
@@ -1530,6 +1770,12 @@ func _get_far_recyclable_enemies() -> Array[Enemy]:
 	return far_enemies
 
 func _pick_pressure_enemy_kind(index: int) -> String:
+	if _is_flooded_palace():
+		if elapsed >= DREAD_BOSS_TIME:
+			return "court_shadow" if index == 0 else ("harpooner" if randf() < 0.5 else "royal_guard")
+		if elapsed >= 75.0 and randf() < 0.54:
+			return "court_shadow" if index % 2 == 0 else "harpooner"
+		return _pick_enemy_kind()
 	if _is_ashen_chapel():
 		if elapsed >= DREAD_BOSS_TIME:
 			return "ash_ember" if index == 0 else ("ash_bellringer" if randf() < 0.52 else "ash_acolyte")
@@ -1560,6 +1806,15 @@ func _get_pressure_spawn_position(index: int) -> Vector2:
 	return _get_offscreen_spawn_position(ENEMY_SPAWN_OFFSCREEN_MARGIN * 0.58, direction)
 
 func _pick_enemy_kind() -> String:
+	if _is_flooded_palace():
+		var palace_roll := randf()
+		if elapsed > 60.0 and palace_roll < min(0.2, 0.07 + elapsed / 880.0):
+			return "court_shadow"
+		if elapsed > 38.0 and palace_roll < min(0.43, 0.16 + elapsed / 650.0):
+			return "harpooner"
+		if palace_roll < 0.75:
+			return "drowned"
+		return "royal_guard"
 	if _is_ashen_chapel():
 		var chapel_roll := randf()
 		if elapsed > 64.0 and chapel_roll < min(0.2, 0.07 + elapsed / 900.0):
@@ -1647,9 +1902,36 @@ func _spawn_enemy(enemy_kind: String, is_miniboss: bool, spawn_position := Vecto
 		enemy.flank_side = -1.0 if randf() < 0.5 else 1.0
 		enemy.flank_distance = randf_range(70.0, 120.0)
 		enemy.flank_ahead = randf_range(155.0, 240.0)
+	elif enemy_kind == "drowned":
+		enemy.max_health += 3
+		enemy.speed *= 0.82
+		enemy.scale = Vector2.ONE * 1.12
+		enemy.contact_damage = 22.0
+	elif enemy_kind == "court_shadow":
+		enemy.max_health += 2
+		enemy.speed *= 1.55
+		enemy.scale = Vector2.ONE * 0.86
+		enemy.contact_damage = 18.0
+		enemy.flank_side = -1.0 if randf() < 0.5 else 1.0
+		enemy.flank_distance = randf_range(125.0, 190.0)
+		enemy.flank_ahead = randf_range(170.0, 245.0)
+	elif enemy_kind == "harpooner":
+		enemy.max_health += 4
+		enemy.speed *= 0.72
+		enemy.xp_value = 2
+		enemy.contact_damage = 13.0
+		enemy.preferred_range = 370.0
+		enemy.spit_cooldown = randf_range(2.5, 3.2)
+		enemy.spit_timer = randf_range(0.7, 1.5)
+	elif enemy_kind == "royal_guard":
+		enemy.max_health += 7
+		enemy.speed *= 0.62
+		enemy.scale = Vector2.ONE * 1.55
+		enemy.xp_value = 3
+		enemy.contact_damage = 30.0
 	elif enemy_kind == "grave_king":
-		enemy.max_health = 78 + int(elapsed / 6.0) + _chapter_enemy_health_bonus() * 8
-		enemy.speed = 116.0 * _chapter_enemy_speed_multiplier()
+		enemy.max_health = (104 if _is_flooded_palace() else 78) + int(elapsed / 6.0) + _chapter_enemy_health_bonus() * 8
+		enemy.speed = (92.0 if _is_flooded_palace() else 116.0) * _chapter_enemy_speed_multiplier()
 		enemy.scale = Vector2.ONE * 1.0
 		enemy.contact_damage = 52.0
 		enemy.xp_value = 24
@@ -1666,6 +1948,9 @@ func _spawn_enemy(enemy_kind: String, is_miniboss: bool, spawn_position := Vecto
 	enemy.max_health += int(floor(float(profile_power) * PROFILE_DIFFICULTY_HEALTH_STEP))
 	enemy.speed *= 1.0 + float(profile_power) * PROFILE_DIFFICULTY_SPEED_STEP
 	enemy.contact_damage *= 1.0 + float(profile_power) * PROFILE_DIFFICULTY_DAMAGE_STEP
+	enemy.max_health = maxi(1, int(ceil(float(enemy.max_health) * _difficulty_multiplier("enemy_health"))))
+	enemy.speed *= _difficulty_multiplier("enemy_speed")
+	enemy.contact_damage *= _difficulty_multiplier("enemy_damage")
 	if enemy.enemy_kind == "grave_king":
 		enemy.max_health += profile_power * 2
 	_set_enemy_art(enemy, enemy.enemy_kind, is_miniboss)
@@ -1780,9 +2065,9 @@ func _set_enemy_art(enemy: Enemy, enemy_kind: String, is_miniboss: bool) -> void
 	enemy.uses_walk_frames = false
 	enemy.animation_frame_count = 1
 	if enemy_kind == "grave_king":
-		art.texture = AshAbbotSheetTexture if _is_ashen_chapel() else GraveKingSheetTexture
-		art.scale = Vector2(0.4, 0.4) if _is_ashen_chapel() else Vector2(0.42, 0.42)
-		art.modulate = Color.WHITE if _is_ashen_chapel() else Color(0.82, 0.92, 0.86)
+		art.texture = FacelessQueenSheetTexture if _is_flooded_palace() else (AshAbbotSheetTexture if _is_ashen_chapel() else GraveKingSheetTexture)
+		art.scale = Vector2(0.39, 0.39) if _is_flooded_palace() else (Vector2(0.4, 0.4) if _is_ashen_chapel() else Vector2(0.42, 0.42))
+		art.modulate = Color.WHITE if _is_flooded_palace() or _is_ashen_chapel() else Color(0.82, 0.92, 0.86)
 		art.hframes = 4
 		art.frame = randi() % 4
 		enemy.uses_walk_frames = true
@@ -1804,6 +2089,22 @@ func _set_enemy_art(enemy: Enemy, enemy_kind: String, is_miniboss: bool) -> void
 		art.texture = EnemyCrawlerTexture
 		art.scale = Vector2(0.18, 0.18)
 		art.modulate = Color(1.0, 0.42, 0.18)
+	elif enemy_kind == "drowned":
+		art.texture = EnemyCrawlerTexture
+		art.scale = Vector2(0.3, 0.3)
+		art.modulate = Color(0.42, 0.72, 0.76)
+	elif enemy_kind == "court_shadow":
+		art.texture = GraveWardenTexture
+		art.scale = Vector2(0.09, 0.09)
+		art.modulate = Color(0.38, 0.56, 0.62, 0.9)
+	elif enemy_kind == "harpooner":
+		art.texture = GraveWardenTexture
+		art.scale = Vector2(0.12, 0.12)
+		art.modulate = Color(0.5, 0.82, 0.84)
+	elif enemy_kind == "royal_guard":
+		art.texture = EnemyBruteSheetTexture
+		art.scale = Vector2(0.16, 0.16)
+		art.modulate = Color(0.46, 0.72, 0.74)
 	elif enemy_kind == "brute":
 		art.texture = EnemyBruteSheetTexture
 		art.scale = Vector2(0.15, 0.15)
@@ -1826,13 +2127,13 @@ func _set_enemy_art(enemy: Enemy, enemy_kind: String, is_miniboss: bool) -> void
 	else:
 		art.texture = EnemyCrawlerTexture
 		art.scale = Vector2(0.28, 0.28)
-	if enemy_kind in ["crawler", "runner", "flanker", "spitter", "ash_ember"]:
+	if enemy_kind in ["crawler", "runner", "flanker", "spitter", "ash_ember", "drowned"]:
 		art.texture = EnemyCrawlerSheetTexture
 		art.hframes = 6
 		art.frame = randi() % 6
 		enemy.uses_walk_frames = true
 		enemy.animation_frame_count = 6
-	if enemy_kind in ["brute", "ash_bellringer", "exploder"]:
+	if enemy_kind in ["brute", "ash_bellringer", "exploder", "royal_guard"]:
 		art.hframes = 4
 		art.frame = randi() % 4
 		enemy.uses_walk_frames = true
@@ -1852,7 +2153,7 @@ func _add_enemy_role_markers(enemy: Enemy, enemy_kind: String) -> void:
 		"miniboss":
 			_add_enemy_ring(enemy, Color(0.72, 0.9, 0.48, 0.42), 45.0, 4.0)
 		"grave_king":
-			var boss_primary := Color(1.0, 0.55, 0.24, 0.88) if _is_ashen_chapel() else Color(0.62, 1.0, 0.58, 0.82)
+			var boss_primary := Color(0.42, 0.9, 0.94, 0.88) if _is_flooded_palace() else (Color(1.0, 0.55, 0.24, 0.88) if _is_ashen_chapel() else Color(0.62, 1.0, 0.58, 0.82))
 			_add_enemy_ring(enemy, Color(boss_primary.r, boss_primary.g, boss_primary.b, 0.56), 62.0, 5.0)
 			_add_enemy_mark(enemy, boss_primary, PackedVector2Array([
 				Vector2(0, -76),
@@ -1923,18 +2224,22 @@ func _spawn_dread_boss() -> void:
 	dread_boss_spawned = true
 	var spawn_direction := _get_player_motion_direction(Vector2.RIGHT.rotated(randf() * TAU))
 	var spawn_position := _get_offscreen_spawn_position(ENEMY_SPAWN_OFFSCREEN_MARGIN * 1.25, spawn_direction)
-	if _is_ashen_chapel():
+	if _is_flooded_palace():
+		spawn_position = Vector2(1580.0, 0.0)
+	elif _is_ashen_chapel():
 		spawn_position = Vector2(1350.0, 0.0)
 	_spawn_enemy("grave_king", true, spawn_position)
 	_show_boss_ui(_get_dread_boss())
-	CombatFxScript.ring(fx_layer, player.global_position, Color(1.0, 0.55, 0.22, 0.94) if _is_ashen_chapel() else Color(0.64, 1.0, 0.56, 0.92), 360.0, 0.9)
-	CombatFxScript.ring(fx_layer, player.global_position, Color(0.48, 0.12, 0.06, 0.8) if _is_ashen_chapel() else Color(0.28, 0.62, 0.38, 0.62), 220.0, 0.7)
+	CombatFxScript.ring(fx_layer, player.global_position, Color(0.42, 0.88, 0.94, 0.94) if _is_flooded_palace() else (Color(1.0, 0.55, 0.22, 0.94) if _is_ashen_chapel() else Color(0.64, 1.0, 0.56, 0.92)), 360.0, 0.9)
+	CombatFxScript.ring(fx_layer, player.global_position, Color(0.08, 0.34, 0.42, 0.8) if _is_flooded_palace() else (Color(0.48, 0.12, 0.06, 0.8) if _is_ashen_chapel() else Color(0.28, 0.62, 0.38, 0.62)), 220.0, 0.7)
 	_flash_overlay_text(String(_current_chapter().get("boss_enter", "Король-Могила встал")))
 	_flash_overlay_text(String(_current_chapter().get("boss_lore", "За ним не осталось живых подданных")))
 	_start_screen_shake(0.64, 12.0)
 	for i in range(3):
 		_spawn_hazard_zone(player.position + Vector2.RIGHT.rotated(TAU * float(i) / 3.0 + randf_range(-0.35, 0.35)) * randf_range(170.0, 310.0))
-	if _is_ashen_chapel():
+	if _is_flooded_palace():
+		_spawn_queen_tidal_wave(_get_dread_boss())
+	elif _is_ashen_chapel():
 		_spawn_abbot_ash_wave(_get_dread_boss())
 
 func _on_enemy_damaged(enemy_position: Vector2, amount: int) -> void:
@@ -1944,7 +2249,7 @@ func _on_enemy_spitting(enemy_position: Vector2, direction: Vector2) -> void:
 	var projectile := _make_spitter_projectile(direction)
 	projectile.position = enemy_position + direction * 32.0
 	projectile.set_meta("velocity", direction * 270.0)
-	projectile.set_meta("damage", SPITTER_PROJECTILE_DAMAGE)
+	projectile.set_meta("damage", SPITTER_PROJECTILE_DAMAGE * _difficulty_multiplier("enemy_damage"))
 	projectile.set_meta("ttl", 2.2)
 	projectile.z_index = 6
 	enemy_projectiles.append(projectile)
@@ -2019,8 +2324,11 @@ func _on_enemy_died(enemy_position: Vector2, enemy_ref: Enemy = null, xp_value: 
 		if xp_value >= 20:
 			if journey_stage == 0:
 				grave_king_killed = true
-			else:
+			elif journey_stage == 1:
 				chapel_boss_killed = true
+				finale_origin = enemy_position
+			else:
+				palace_boss_killed = true
 				finale_origin = enemy_position
 			_hide_boss_ui()
 	if king_gift_id == "royal_ash" and not was_miniboss:
@@ -2056,13 +2364,19 @@ func _check_journey_progress() -> void:
 		_flash_overlay_text("Третий колокол треснул. Игумен Пепла идет.")
 		_spawn_dread_boss()
 	elif journey_stage == 1 and chapel_boss_killed:
+		_open_palace_gate()
+	elif journey_stage == 2 and not journey_boss_summoned:
+		journey_boss_summoned = true
+		_flash_overlay_text("Третья Печать утонула. Королева поднялась.")
+		_spawn_dread_boss()
+	elif journey_stage == 2 and palace_boss_killed:
 		_start_finale_cutscene()
 
 func _spawn_journey_objective() -> void:
 	if is_instance_valid(journey_objective) or journey_objectives_destroyed >= OBJECTIVE_COUNT:
 		return
-	var kind := "cursed_bell" if journey_stage == 1 else "grave_heart"
-	var base_health := 22 if journey_stage == 0 else 28
+	var kind := "drowned_seal" if journey_stage == 2 else ("cursed_bell" if journey_stage == 1 else "grave_heart")
+	var base_health := 34 if journey_stage == 2 else (22 if journey_stage == 0 else 28)
 	var objective_health := base_health + journey_objectives_destroyed * 12 + _profile_pressure_tier() * 2
 	journey_objective = JourneyObjectiveScript.new()
 	journey_objective.setup(kind, objective_health)
@@ -2076,9 +2390,9 @@ func _spawn_journey_objective() -> void:
 	journey_objective.damaged.connect(_on_journey_objective_damaged)
 	world.add_child(journey_objective)
 	objective_guard_timer = 0.2
-	var title := "ПРОКЛЯТЫЙ КОЛОКОЛ" if journey_stage == 1 else "СЕРДЦЕ МОГИЛ"
+	var title := "УТОПЛЕННАЯ ПЕЧАТЬ" if journey_stage == 2 else ("ПРОКЛЯТЫЙ КОЛОКОЛ" if journey_stage == 1 else "СЕРДЦЕ МОГИЛ")
 	_flash_overlay_text("%s ПРОБУДИЛОСЬ" % title)
-	CombatFxScript.ring(fx_layer, journey_objective.global_position, Color(1.0, 0.62, 0.28, 0.76) if journey_stage == 1 else Color(0.48, 1.0, 0.62, 0.72), 190.0, 0.72)
+	CombatFxScript.ring(fx_layer, journey_objective.global_position, Color(0.38, 0.9, 0.94, 0.76) if journey_stage == 2 else (Color(1.0, 0.62, 0.28, 0.76) if journey_stage == 1 else Color(0.48, 1.0, 0.62, 0.72)), 190.0, 0.72)
 
 func _update_journey_objective(delta: float) -> void:
 	if not is_instance_valid(journey_objective):
@@ -2098,21 +2412,23 @@ func _update_journey_objective(delta: float) -> void:
 		var spread := (float(i) - float(guard_count - 1) * 0.5) * 0.48
 		var spawn_position: Vector2 = journey_objective.global_position + approach_direction.rotated(spread) * randf_range(340.0, 440.0)
 		_spawn_enemy(kind, false, _push_out_of_arena_obstacles(spawn_position, 48.0))
-	CombatFxScript.ring(fx_layer, journey_objective.global_position, Color(1.0, 0.58, 0.24, 0.42) if journey_stage == 1 else Color(0.42, 0.92, 0.56, 0.4), 150.0, 0.35)
+	CombatFxScript.ring(fx_layer, journey_objective.global_position, Color(0.36, 0.82, 0.9, 0.42) if journey_stage == 2 else (Color(1.0, 0.58, 0.24, 0.42) if journey_stage == 1 else Color(0.42, 0.92, 0.56, 0.4)), 150.0, 0.35)
 
 func _objective_guard_kind(index: int) -> String:
+	if journey_stage == 2:
+		return "royal_guard" if index == 0 else ("court_shadow" if index % 2 == 0 else "harpooner")
 	if journey_stage == 1:
 		return "ash_bellringer" if index == 0 else ("ash_ember" if index % 2 == 0 else "ash_acolyte")
 	return "brute" if index == 0 and journey_objectives_destroyed > 0 else ("spitter" if index % 2 == 0 else "crawler")
 
 func _on_journey_objective_damaged(objective_position: Vector2, amount: int) -> void:
-	CombatFxScript.damage_number(fx_layer, objective_position + Vector2(0.0, -70.0), amount, Color(1.0, 0.76, 0.34) if journey_stage == 1 else Color(0.62, 1.0, 0.68), 19)
+	CombatFxScript.damage_number(fx_layer, objective_position + Vector2(0.0, -70.0), amount, Color(0.48, 0.94, 1.0) if journey_stage == 2 else (Color(1.0, 0.76, 0.34) if journey_stage == 1 else Color(0.62, 1.0, 0.68)), 19)
 
 func _on_journey_objective_destroyed(objective_position: Vector2) -> void:
 	journey_objective = null
 	journey_objectives_destroyed += 1
 	pending_objective_reward = true
-	CombatFxScript.burst(fx_layer, objective_position, Color(1.0, 0.58, 0.24, 0.88) if journey_stage == 1 else Color(0.5, 1.0, 0.62, 0.88), 28)
+	CombatFxScript.burst(fx_layer, objective_position, Color(0.38, 0.86, 0.94, 0.88) if journey_stage == 2 else (Color(1.0, 0.58, 0.24, 0.88) if journey_stage == 1 else Color(0.5, 1.0, 0.62, 0.88)), 28)
 	CombatFxScript.ring(fx_layer, objective_position, Color(1.0, 0.82, 0.48, 0.78), 230.0, 0.68)
 	_start_screen_shake(0.24, 6.5)
 	call_deferred("_show_objective_reward_choice")
@@ -2212,9 +2528,9 @@ func _start_finale_cutscene() -> void:
 		player.set_physics_process(false)
 		player.global_position = finale_origin + Vector2(0.0, 150.0)
 	_reset_living_blade_position()
-	_show_finale_caption("Игумен рассыпался.\nКолокол качнулся в последний раз.")
-	CombatFxScript.burst(fx_layer, finale_origin, Color(0.82, 0.48, 0.24, 0.82), 28)
-	CombatFxScript.ring(fx_layer, finale_origin, Color(0.92, 0.66, 0.38, 0.8), 180.0, 0.8)
+	_show_finale_caption("Королева исчезла.\nЧёрная вода потеряла её лицо.")
+	CombatFxScript.burst(fx_layer, finale_origin, Color(0.38, 0.82, 0.9, 0.82), 28)
+	CombatFxScript.ring(fx_layer, finale_origin, Color(0.52, 0.9, 0.94, 0.8), 180.0, 0.8)
 	finale_tween = create_tween()
 	finale_tween.tween_interval(1.8)
 	finale_tween.tween_callback(_finale_last_bell)
@@ -2233,16 +2549,16 @@ func _show_finale_caption(text: String) -> void:
 func _finale_last_bell() -> void:
 	if finale_finished:
 		return
-	_show_finale_caption("Колокол смолк.\nНо под пеплом кто-то ответил.")
-	CombatFxScript.ring(fx_layer, finale_origin, Color(1.0, 0.72, 0.38, 0.72), 340.0, 1.1)
+	_show_finale_caption("Трон ушёл под воду.\nВпервые дворец ничего не отразил.")
+	CombatFxScript.ring(fx_layer, finale_origin, Color(0.46, 0.86, 0.92, 0.72), 340.0, 1.1)
 	_start_screen_shake(0.28, 5.5)
 
 func _finale_open_passage() -> void:
 	if finale_finished or is_instance_valid(journey_exit):
 		return
-	_show_finale_caption("За алтарём открылся путь,\nкоторого не было на картах.")
+	_show_finale_caption("За троном открылся сухой путь.\nРуины наконец отпускают Маску.")
 	var gate_position := _push_out_of_arena_obstacles(finale_origin + Vector2(0.0, -190.0), 54.0)
-	journey_exit = _make_journey_gate(gate_position, "Дальше — только пепел", "войти", Color(0.35, 0.24, 0.42), "ending", 0.82)
+	journey_exit = _make_journey_gate(gate_position, "Путь из дворца", "войти", Color(0.38, 0.72, 0.76), "ending", 0.82)
 	journey_markers.append(journey_exit)
 	CombatFxScript.burst(fx_layer, journey_exit.global_position, Color(0.48, 0.34, 0.62, 0.72), 20)
 
@@ -2266,7 +2582,7 @@ func _finish_finale_cutscene() -> void:
 	ultimate_button.visible = true
 	ultimate_bar.visible = true
 	_update_hud()
-	_flash_overlay_text("Войди в проход за алтарём")
+	_flash_overlay_text("Войди в проход за троном")
 
 func _journey_allows_regular_spawns() -> bool:
 	if not journey_transition_mode.is_empty():
@@ -2287,6 +2603,19 @@ func _open_chapel_gate() -> void:
 	journey_exit = _make_journey_gate(gate_position, "Пепельная Часовня", "войти", Color(0.92, 0.66, 0.38), "chapel", 0.78)
 	journey_markers.append(journey_exit)
 	_flash_overlay_text("Сад очищен. Ворота Часовни открылись.")
+
+func _open_palace_gate() -> void:
+	if journey_transition_mode == "palace_gate":
+		return
+	_clear_stage_entities()
+	_hide_boss_ui()
+	journey_transition_mode = "palace_gate"
+	journey_markers.clear()
+	var gate_origin := player.global_position if player != null else Vector2.ZERO
+	var gate_position := _push_out_of_arena_obstacles(gate_origin + Vector2(0.0, -155.0), 54.0)
+	journey_exit = _make_journey_gate(gate_position, "Затопленный Дворец", "войти", Color(0.42, 0.82, 0.86), "palace", 0.78)
+	journey_markers.append(journey_exit)
+	_flash_overlay_text("Под алтарём открылась дорога к Дворцу.")
 
 func _show_king_gift_choice() -> void:
 	king_gift_offered = true
@@ -2371,6 +2700,9 @@ func _update_journey_transition() -> void:
 	if journey_transition_mode == "chapel_gate" and is_instance_valid(journey_exit):
 		if player.global_position.distance_to(journey_exit.global_position) <= 92.0:
 			_enter_journey_stage(1)
+	elif journey_transition_mode == "palace_gate" and is_instance_valid(journey_exit):
+		if player.global_position.distance_to(journey_exit.global_position) <= 92.0:
+			_enter_journey_stage(2)
 	elif journey_transition_mode == "ending_gate" and is_instance_valid(journey_exit):
 		if player.global_position.distance_to(journey_exit.global_position) <= 92.0:
 			journey_transition_mode = ""
@@ -2381,6 +2713,9 @@ func _enter_journey_stage(stage_index: int) -> void:
 	_clear_journey_markers()
 	journey_stage = stage_index
 	current_chapter_index = clampi(stage_index, 0, CHAPTERS.size() - 1)
+	if _difficulty_uses_checkpoints() and current_chapter_index > journey_checkpoint:
+		journey_checkpoint = current_chapter_index
+		_save_profile()
 	journey_transition_mode = ""
 	stage_elapsed = 0.0
 	stage_kill_start = kill_count
@@ -2398,6 +2733,9 @@ func _enter_journey_stage(stage_index: int) -> void:
 	pressure_director_timer = PRESSURE_DIRECTOR_INTERVAL
 	hazard_timer = HAZARD_INTERVAL
 	cluster_bloom_timer = CLUSTER_BLOOM_INTERVAL
+	palace_water_timer = PALACE_WATER_CYCLE
+	palace_water_active_time = 0.0
+	palace_water_slow_applied = false
 	_clear_stage_entities()
 	_rebuild_arena()
 	if player != null:
@@ -2409,7 +2747,7 @@ func _enter_journey_stage(stage_index: int) -> void:
 	ultimate_bar.visible = true
 	game_state = "running"
 	get_tree().paused = false
-	_flash_overlay_text("Пепельная Часовня")
+	_flash_overlay_text(String(_current_chapter()["name"]))
 
 func _reset_living_blade_position() -> void:
 	if is_instance_valid(living_blade) and living_blade.has_method("reset_to_owner"):
@@ -2605,7 +2943,7 @@ func _update_spitter_projectile_visual(projectile: Node2D, delta: float) -> void
 		core.scale = Vector2.ONE * (1.0 + sin(age * 16.0) * 0.08)
 
 func _update_garden_thickets(delta: float) -> void:
-	if _is_ashen_chapel() or player == null:
+	if _is_ashen_chapel() or _is_flooded_palace() or player == null:
 		return
 	for thicket in garden_thickets:
 		if not is_instance_valid(thicket):
@@ -2627,8 +2965,52 @@ func _update_garden_thickets(delta: float) -> void:
 		if player.is_dead:
 			_show_game_over()
 
+func _update_palace_water(delta: float) -> void:
+	if not _is_flooded_palace() or player == null:
+		_set_palace_water_slow(false)
+		return
+	palace_water_timer -= delta
+	if palace_water_active_time > 0.0:
+		palace_water_active_time = maxf(0.0, palace_water_active_time - delta)
+	elif palace_water_timer <= 0.0:
+		_trigger_palace_water_rise()
+	elif palace_water_timer <= PALACE_WATER_WARNING and palace_water_timer + delta > PALACE_WATER_WARNING:
+		_flash_overlay_text("ВОДА ПОДНИМАЕТСЯ")
+	var in_water := false
+	for water in palace_water_zones:
+		if not is_instance_valid(water):
+			continue
+		var phase := float(water.get_meta("phase", 0.0)) + delta * 0.75
+		water.set_meta("phase", phase)
+		var active_ratio := 1.0 if palace_water_active_time > 0.0 else 0.0
+		water.modulate = Color(0.72, 0.92, 0.96, 0.76 + active_ratio * 0.24 + sin(phase) * 0.035)
+		if palace_water_active_time <= 0.0:
+			continue
+		var size := Vector2(water.get_meta("size", Vector2.ZERO))
+		var local_player := water.to_local(player.global_position)
+		if absf(local_player.x) <= size.x * 0.5 and absf(local_player.y) <= size.y * 0.5:
+			in_water = true
+	_set_palace_water_slow(in_water)
+
+func _trigger_palace_water_rise(forced := false) -> void:
+	if not _is_flooded_palace():
+		return
+	if palace_water_active_time > 0.0 and not forced:
+		return
+	palace_water_active_time = PALACE_WATER_ACTIVE + (2.0 if forced else 0.0)
+	palace_water_timer = PALACE_WATER_CYCLE
+	_flash_overlay_text("ЧЁРНАЯ ВОДА ПОДНЯЛАСЬ")
+	if player != null:
+		CombatFxScript.ring(fx_layer, player.global_position, Color(0.42, 0.86, 0.92, 0.52), 300.0, 0.8)
+
+func _set_palace_water_slow(active: bool) -> void:
+	if player == null or active == palace_water_slow_applied:
+		return
+	player.speed *= PALACE_WATER_SLOW if active else (1.0 / PALACE_WATER_SLOW)
+	palace_water_slow_applied = active
+
 func _update_hazard_zones(delta: float) -> void:
-	if elapsed >= HAZARD_START_TIME and player != null:
+	if elapsed >= HAZARD_START_TIME and player != null and not _is_flooded_palace():
 		hazard_timer -= delta
 		if hazard_timer <= 0.0:
 			hazard_timer = max(3.8, HAZARD_INTERVAL - elapsed * 0.018)
@@ -2691,6 +3073,9 @@ func _update_hazard_zones(delta: float) -> void:
 	hazard_zones = alive_hazards
 
 func _spawn_hazard_zone(zone_position: Vector2) -> void:
+	if _is_flooded_palace():
+		_trigger_palace_water_rise(true)
+		return
 	var zone := Node2D.new()
 	var bell_zone := _is_ashen_chapel()
 	zone.position = _clamp_to_arena(_keep_hazard_away_from_player(zone_position))
@@ -2792,7 +3177,7 @@ func _keep_hazard_away_from_player(zone_position: Vector2) -> Vector2:
 	return player.global_position + offset.normalized() * HAZARD_SAFE_DISTANCE
 
 func _update_cluster_bloom(delta: float) -> void:
-	if elapsed < CLUSTER_BLOOM_START_TIME:
+	if elapsed < CLUSTER_BLOOM_START_TIME or _is_flooded_palace():
 		return
 	cluster_bloom_timer -= delta
 	if cluster_bloom_timer > 0.0:
@@ -2830,11 +3215,14 @@ func _update_dread_boss_pressure(delta: float) -> void:
 		dread_boss_phase_two = true
 		boss.speed *= 1.16
 		boss.contact_damage += 10.0
-		boss.modulate = Color(1.0, 0.5, 0.28) if _is_ashen_chapel() else Color(1.0, 0.78, 0.88)
-		_flash_overlay_text("Кадило раскололось" if _is_ashen_chapel() else "Корона раскрылась")
+		boss.modulate = Color(0.48, 0.9, 1.0) if _is_flooded_palace() else (Color(1.0, 0.5, 0.28) if _is_ashen_chapel() else Color(1.0, 0.78, 0.88))
+		_flash_overlay_text("Отражения сорвали лица" if _is_flooded_palace() else ("Кадило раскололось" if _is_ashen_chapel() else "Корона раскрылась"))
 		_flash_boss_ui()
 		_start_screen_shake(0.5, 11.0)
-		if _is_ashen_chapel():
+		if _is_flooded_palace():
+			_spawn_queen_reflections(boss)
+			_trigger_palace_water_rise(true)
+		elif _is_ashen_chapel():
 			_spawn_abbot_ash_wave(boss)
 		else:
 			_spawn_boss_cross_attack(boss)
@@ -2850,9 +3238,9 @@ func _update_dread_boss_pressure(delta: float) -> void:
 		if available_slots > 0:
 			var summon_count: int = min(3 if dread_boss_phase_two else 2, available_slots)
 			for i in range(summon_count):
-				var kind := ("ash_ember" if i == 0 else "ash_bellringer") if _is_ashen_chapel() else ("flanker" if i == 0 else "spitter")
+				var kind := ("court_shadow" if i == 0 else "royal_guard") if _is_flooded_palace() else (("ash_ember" if i == 0 else "ash_bellringer") if _is_ashen_chapel() else ("flanker" if i == 0 else "spitter"))
 				_spawn_enemy(kind, false, _get_interceptor_position(i))
-		_flash_overlay_text("Игумен созывает паству" if _is_ashen_chapel() else "Король зовет мертвых")
+		_flash_overlay_text("Королева зовёт отражения" if _is_flooded_palace() else ("Игумен созывает паству" if _is_ashen_chapel() else "Король зовет мертвых"))
 	dread_boss_bell_timer -= delta
 	if dread_boss_bell_timer <= 0.0:
 		dread_boss_bell_timer = DREAD_BOSS_BELL_INTERVAL * (0.76 if dread_boss_phase_two else 1.0)
@@ -2860,14 +3248,19 @@ func _update_dread_boss_pressure(delta: float) -> void:
 	dread_boss_judgment_timer -= delta
 	if dread_boss_judgment_timer <= 0.0:
 		dread_boss_judgment_timer = DREAD_BOSS_JUDGMENT_INTERVAL * (0.78 if dread_boss_phase_two else 1.0)
-		if _is_ashen_chapel():
+		if _is_flooded_palace():
+			_spawn_queen_tidal_wave(boss)
+		elif _is_ashen_chapel():
 			_spawn_abbot_ash_wave(boss)
 		else:
 			_spawn_boss_judgment_attack(boss)
 	dread_boss_cross_timer -= delta
 	if dread_boss_phase_two and dread_boss_cross_timer <= 0.0:
 		dread_boss_cross_timer = DREAD_BOSS_CROSS_INTERVAL
-		if _is_ashen_chapel():
+		if _is_flooded_palace():
+			_spawn_queen_reflections(boss)
+			_trigger_palace_water_rise(true)
+		elif _is_ashen_chapel():
 			_spawn_boss_bell_attack(boss)
 			_spawn_hazard_zone(_get_boss_hazard_position(boss))
 		else:
@@ -2903,7 +3296,7 @@ func _spawn_boss_bell_attack(boss: Enemy) -> void:
 	ring.name = "Telegraph"
 	ring.closed = true
 	ring.width = 8.0
-	ring.default_color = Color(1.0, 0.64, 0.28, 0.86) if _is_ashen_chapel() else Color(0.9, 1.0, 0.56, 0.78)
+	ring.default_color = Color(0.46, 0.9, 0.96, 0.86) if _is_flooded_palace() else (Color(1.0, 0.64, 0.28, 0.86) if _is_ashen_chapel() else Color(0.9, 1.0, 0.56, 0.78))
 	var points := PackedVector2Array()
 	for i in range(48):
 		points.append(Vector2.RIGHT.rotated(TAU * float(i) / 48.0) * float(attack.get_meta("radius", 245.0)))
@@ -2911,7 +3304,7 @@ func _spawn_boss_bell_attack(boss: Enemy) -> void:
 	attack.add_child(ring)
 	boss_attacks.append(attack)
 	world.add_child(attack)
-	_flash_overlay_text("Последний Колокол" if _is_ashen_chapel() else "Похоронный Колокол")
+	_flash_overlay_text("Круг глубин" if _is_flooded_palace() else ("Последний Колокол" if _is_ashen_chapel() else "Похоронный Колокол"))
 
 func _spawn_abbot_ash_wave(boss: Enemy) -> void:
 	if boss == null or player == null:
@@ -2927,6 +3320,28 @@ func _spawn_abbot_ash_wave(boss: Enemy) -> void:
 		_spawn_boss_lane_attack(boss.global_position + direction * 330.0, direction, 760.0, 48.0, 28.0 if not dread_boss_phase_two else 36.0, "Пепельная волна" if i == 0 else "")
 	CombatFxScript.burst(fx_layer, boss.global_position, Color(1.0, 0.48, 0.16, 0.9), 24)
 	_start_screen_shake(0.24, 7.0)
+
+func _spawn_queen_tidal_wave(boss: Enemy) -> void:
+	if boss == null or player == null:
+		return
+	var base_direction := boss.global_position.direction_to(player.global_position)
+	if base_direction == Vector2.ZERO:
+		base_direction = Vector2.RIGHT
+	var wave_count := 5 if dread_boss_phase_two else 3
+	var spread := 0.28
+	for i in range(wave_count):
+		var offset := (float(i) - float(wave_count - 1) * 0.5) * spread
+		var direction := base_direction.rotated(offset)
+		_spawn_boss_lane_attack(boss.global_position + direction * 320.0, direction, 820.0, 58.0, 30.0 if not dread_boss_phase_two else 39.0, "Чёрный прилив" if i == 0 else "")
+	CombatFxScript.burst(fx_layer, boss.global_position, Color(0.36, 0.82, 0.9, 0.9), 22)
+	_start_screen_shake(0.22, 6.5)
+
+func _spawn_queen_reflections(_boss: Enemy) -> void:
+	if player == null:
+		return
+	var direction := _get_player_motion_direction(Vector2.RIGHT)
+	for angle in [0.0, PI / 3.0, -PI / 3.0]:
+		_spawn_boss_lane_attack(player.global_position, direction.rotated(angle), 820.0, 54.0, 34.0 if not dread_boss_phase_two else 42.0, "Ломаные отражения" if angle == 0.0 else "")
 
 func _spawn_boss_judgment_attack(boss: Enemy) -> void:
 	var direction := _get_player_motion_direction(boss.global_position.direction_to(player.global_position))
@@ -2955,8 +3370,8 @@ func _spawn_boss_lane_attack(center: Vector2, direction: Vector2, length: float,
 	attack.set_meta("hit", false)
 	var start := center - direction * (length * 0.5)
 	var end := center + direction * (length * 0.5)
-	var telegraph_color := Color(1.0, 0.46, 0.18, 0.42) if _is_ashen_chapel() else Color(0.72, 0.3, 0.78, 0.42)
-	var core_color := Color(1.0, 0.82, 0.42, 0.88) if _is_ashen_chapel() else Color(0.74, 1.0, 0.58, 0.84)
+	var telegraph_color := Color(0.18, 0.64, 0.72, 0.46) if _is_flooded_palace() else (Color(1.0, 0.46, 0.18, 0.42) if _is_ashen_chapel() else Color(0.72, 0.3, 0.78, 0.42))
+	var core_color := Color(0.62, 0.96, 1.0, 0.9) if _is_flooded_palace() else (Color(1.0, 0.82, 0.42, 0.88) if _is_ashen_chapel() else Color(0.74, 1.0, 0.58, 0.84))
 	var fracture := _make_tapered_strike(start, end, width * 0.54, telegraph_color, width * 0.09)
 	fracture.name = "Telegraph"
 	attack.add_child(fracture)
@@ -3024,7 +3439,7 @@ func _update_boss_attack_visual(attack: Node2D, age: float, arm_time: float, act
 func _damage_player_from_boss_attack(attack: Node2D) -> void:
 	if player == null or player.is_dead:
 		return
-	var damage: float = float(attack.get_meta("damage", 30.0))
+	var damage: float = float(attack.get_meta("damage", 30.0)) * _difficulty_multiplier("enemy_damage")
 	var kind := String(attack.get_meta("kind", ""))
 	var did_hit := false
 	if kind == "bell":
@@ -3040,7 +3455,7 @@ func _damage_player_from_boss_attack(attack: Node2D) -> void:
 	if did_hit:
 		_damage_player(damage, damage, true)
 		_start_screen_shake(0.24, 9.0)
-		CombatFxScript.burst(fx_layer, player.global_position, Color(1.0, 0.5, 0.18, 0.92) if _is_ashen_chapel() else Color(0.9, 1.0, 0.52, 0.9), 18)
+		CombatFxScript.burst(fx_layer, player.global_position, Color(0.38, 0.86, 0.94, 0.92) if _is_flooded_palace() else (Color(1.0, 0.5, 0.18, 0.92) if _is_ashen_chapel() else Color(0.9, 1.0, 0.52, 0.9)), 18)
 		if player.is_dead:
 			_show_game_over()
 
@@ -3453,6 +3868,7 @@ func _show_victory() -> void:
 	game_state = "victory"
 	last_run_result = "На миг Gravebloom отступил от сердца руин"
 	last_run_lore = _pick_lore_line(_chapter_victory_lines())
+	journey_checkpoint = 0
 	_finish_run(true)
 	build_label.visible = false
 	joystick_base.visible = false
@@ -3467,7 +3883,7 @@ func _show_result_screen(victory: bool) -> void:
 	overlay_panel.visible = true
 	_clear_container(overlay_list)
 	_add_overlay_label("Победа" if victory else "Забег окончен", 34)
-	_add_overlay_label("Путь Маски: %s" % _journey_progress_text(), 18)
+	_add_overlay_label("%s\nПуть Маски: %s" % [_difficulty_name(), _journey_progress_text()], 17)
 	_add_overlay_label("%s   Уровень %d\nУбийства %d   Серия x%d" % [_format_time(elapsed), level, kill_count, best_kill_streak], 19)
 	_add_overlay_label("+%d Пепла" % last_run_ash, 24)
 	_add_overlay_button("Заново", _start_run)
@@ -3494,7 +3910,7 @@ func _show_result_details(victory: bool) -> void:
 func _return_to_start_after_run() -> void:
 	active_run_goals.clear()
 	completed_goal_ids.clear()
-	current_chapter_index = 0
+	current_chapter_index = _starting_journey_stage()
 	_rebuild_arena()
 	_show_start_screen()
 
@@ -3520,7 +3936,8 @@ func _finish_run(victory: bool) -> void:
 		"codex": ", ".join(last_run_codex_unlocks),
 		"build": _format_relic_summary(),
 		"build_path": _current_build_path(true),
-		"chapter": "Мертвый Сад → Пепельная Часовня",
+		"chapter": _journey_progress_text(),
+		"difficulty": _difficulty_name(),
 		"date": Time.get_datetime_string_from_system(false, true),
 	}
 	run_history.insert(0, history_entry)
@@ -3741,7 +4158,11 @@ func _load_profile() -> void:
 		return
 	var data: Dictionary = parsed
 	profile_ash = int(data.get("ash", 0))
-	current_chapter_index = clampi(int(data.get("chapter_index", 0)), 0, CHAPTERS.size() - 1)
+	difficulty_id = String(data.get("difficulty_id", "smoldering_oath"))
+	if not DIFFICULTIES.has(difficulty_id):
+		difficulty_id = "smoldering_oath"
+	journey_checkpoint = clampi(int(data.get("journey_checkpoint", 0)), 0, CHAPTERS.size() - 1)
+	current_chapter_index = _starting_journey_stage()
 	var upgrades: Variant = data.get("upgrades", {})
 	if typeof(upgrades) == TYPE_DICTIONARY:
 		for upgrade_id in META_UPGRADES.keys():
@@ -3763,9 +4184,11 @@ func _load_profile() -> void:
 
 func _save_profile() -> void:
 	var data := {
-		"version": 2,
+		"version": 3,
 		"ash": profile_ash,
 		"chapter_index": current_chapter_index,
+		"difficulty_id": difficulty_id,
+		"journey_checkpoint": journey_checkpoint,
 		"upgrades": profile_upgrades,
 		"stats": profile_stats,
 		"codex": codex_unlocked,
@@ -3799,6 +4222,8 @@ func _reset_profile_defaults() -> void:
 	codex_unlocked.clear()
 	run_history.clear()
 	current_chapter_index = 0
+	difficulty_id = "smoldering_oath"
+	journey_checkpoint = 0
 
 func _profile_upgrade_level(upgrade_id: String) -> int:
 	return int(profile_upgrades.get(upgrade_id, 0))
@@ -3851,8 +4276,9 @@ func _format_history_entry(entry: Variant) -> String:
 		return ""
 	var title := "Победа" if bool(entry.get("victory", false)) else "Смерть"
 	var time_text := _format_time(float(entry.get("time", 0.0)))
-	return "%s  %s  %s  ур.%d  убийств:%d  серия:x%d  +%d" % [
+	return "%s · %s\n%s  %s  ур.%d  убийств:%d  серия:x%d  +%d" % [
 		title,
+		String(entry.get("difficulty", "Тлеющая Клятва")),
 		String(entry.get("chapter", "Мертвый Сад")),
 		time_text,
 		int(entry.get("level", 1)),
@@ -3882,11 +4308,13 @@ func _update_hud() -> void:
 func _journey_objective_text() -> String:
 	if journey_transition_mode == "chapel_gate":
 		return "Войди в Пепельную Часовню"
+	if journey_transition_mode == "palace_gate":
+		return "Войди в Затопленный Дворец"
 	if journey_transition_mode == "ending_gate":
-		return "Войди в проход за алтарём"
+		return "Войди в проход за троном"
 	var stage_kills: int = maxi(0, kill_count - stage_kill_start)
 	if is_instance_valid(journey_objective):
-		return "Разбей проклятый колокол" if journey_stage == 1 else "Уничтожь Сердце могил"
+		return "Разбей Утопленную Печать" if journey_stage == 2 else ("Разбей проклятый колокол" if journey_stage == 1 else "Уничтожь Сердце могил")
 	if pending_objective_reward:
 		return "Выбери эхо разрушенной цели"
 	if journey_objectives_destroyed < OBJECTIVE_COUNT:
@@ -3896,14 +4324,20 @@ func _journey_objective_text() -> String:
 		if garden_boss_summoned:
 			return "Сразить Короля-Могилу"
 		return "Сердца уничтожены: %d/%d" % [journey_objectives_destroyed, OBJECTIVE_COUNT]
-	if journey_boss_summoned:
+	if journey_stage == 1 and journey_boss_summoned:
 		return "Сразить Игумена Пепла"
-	return "Колокола разбиты: %d/%d" % [journey_objectives_destroyed, OBJECTIVE_COUNT]
+	if journey_stage == 1:
+		return "Колокола разбиты: %d/%d" % [journey_objectives_destroyed, OBJECTIVE_COUNT]
+	if journey_boss_summoned:
+		return "Сразить Безликую Королеву"
+	return "Печати разбиты: %d/%d" % [journey_objectives_destroyed, OBJECTIVE_COUNT]
 
 func _journey_progress_text() -> String:
 	if journey_stage <= 0:
 		return "Мертвый Сад"
-	return "Мертвый Сад → Пепельная Часовня"
+	if journey_stage == 1:
+		return "Мертвый Сад → Пепельная Часовня"
+	return "Сад → Часовня → Затопленный Дворец"
 
 func _format_build_hud() -> String:
 	var lines: Array[String] = []
@@ -4504,6 +4938,13 @@ func _add_overlay_button(text: String, callback: Callable) -> void:
 	button.pressed.connect(callback)
 	overlay_list.add_child(button)
 
+func _add_difficulty_button(text: String, callback: Callable) -> void:
+	var button := Button.new()
+	button.text = text
+	button.custom_minimum_size = Vector2(420, 112)
+	button.pressed.connect(callback)
+	overlay_list.add_child(button)
+
 func _configure_overlay(position: Vector2, size: Vector2) -> void:
 	overlay_panel.position = position
 	overlay_panel.size = size
@@ -4570,6 +5011,7 @@ func _clear_journey_markers() -> void:
 	journey_exit = null
 
 func _clear_stage_entities() -> void:
+	_set_palace_water_slow(false)
 	if is_instance_valid(journey_objective):
 		journey_objective.queue_free()
 	journey_objective = null

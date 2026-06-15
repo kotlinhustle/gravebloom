@@ -3,6 +3,7 @@ extends Node2D
 
 const GraveHeartTexturePath := "res://assets/sprites/grave_heart_objective.png"
 const CursedBellTexturePath := "res://assets/sprites/cursed_bell_objective.png"
+const DrownedSealTexturePath := "res://assets/sprites/drowned_seal_objective.png"
 
 signal destroyed(objective_position: Vector2)
 signal damaged(objective_position: Vector2, amount: int)
@@ -23,7 +24,7 @@ func setup(kind: String, objective_health: int) -> void:
 	health = objective_health
 	z_index = 14
 	set_meta("journey_objective", true)
-	objective_texture = _load_image_texture(CursedBellTexturePath if objective_kind == "cursed_bell" else GraveHeartTexturePath)
+	objective_texture = _load_image_texture(DrownedSealTexturePath if objective_kind == "drowned_seal" else (CursedBellTexturePath if objective_kind == "cursed_bell" else GraveHeartTexturePath))
 	_build_visual()
 
 func _process(delta: float) -> void:
@@ -34,6 +35,8 @@ func _process(delta: float) -> void:
 	body_root.scale = Vector2.ONE * pulse
 	if objective_kind == "cursed_bell":
 		body_root.rotation = sin(anim_time * 2.1) * 0.035
+	elif objective_kind == "drowned_seal":
+		body_root.rotation = sin(anim_time * 1.4) * 0.018
 
 func take_damage(amount: int, _hit_origin: Vector2 = Vector2.ZERO, _knockback_force: float = 0.0, _hit_source: String = "") -> void:
 	if is_dead:
@@ -59,6 +62,8 @@ func _build_visual() -> void:
 
 	if objective_kind == "cursed_bell":
 		_build_bell()
+	elif objective_kind == "drowned_seal":
+		_build_drowned_seal()
 	else:
 		_build_heart()
 
@@ -68,7 +73,7 @@ func _build_visual() -> void:
 	bar_back.size = Vector2(152.0, 12.0)
 	add_child(bar_back)
 	health_fill = ColorRect.new()
-	health_fill.color = Color(1.0, 0.62, 0.24) if objective_kind == "cursed_bell" else Color(0.48, 1.0, 0.62)
+	health_fill.color = Color(0.4, 0.9, 0.96) if objective_kind == "drowned_seal" else (Color(1.0, 0.62, 0.24) if objective_kind == "cursed_bell" else Color(0.48, 1.0, 0.62))
 	health_fill.position = Vector2(3.0, 3.0)
 	health_fill.size = Vector2(146.0, 6.0)
 	bar_back.add_child(health_fill)
@@ -93,6 +98,17 @@ func _build_bell() -> void:
 	body_root.add_child(sprite)
 	var glow := _ellipse(46.0, 58.0, Color(1.0, 0.62, 0.26, 0.16), 18)
 	glow.position = Vector2(0.0, 2.0)
+	body_root.add_child(glow)
+
+func _build_drowned_seal() -> void:
+	var sprite := Sprite2D.new()
+	sprite.texture = objective_texture
+	sprite.centered = true
+	sprite.position = Vector2(0.0, -5.0)
+	sprite.scale = _fit_scale(objective_texture, 198.0)
+	body_root.add_child(sprite)
+	var glow := _ellipse(50.0, 56.0, Color(0.28, 0.82, 0.9, 0.16), 20)
+	glow.position = Vector2(0.0, -2.0)
 	body_root.add_child(glow)
 
 func _update_health_bar() -> void:

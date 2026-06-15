@@ -65,9 +65,9 @@ func _physics_process(delta: float) -> void:
 func _movement_direction(direction: Vector2, delta: float) -> Vector2:
 	if obstacle_steer_timer > 0.0 and obstacle_steer_direction != Vector2.ZERO:
 		return _with_separation(obstacle_steer_direction)
-	if enemy_kind in ["flanker", "ash_ember"]:
+	if enemy_kind in ["flanker", "ash_ember", "court_shadow"]:
 		return _flanker_direction(direction)
-	if enemy_kind not in ["spitter", "ash_bellringer"]:
+	if enemy_kind not in ["spitter", "ash_bellringer", "harpooner"]:
 		return _with_separation(direction)
 	var distance := global_position.distance_to(target.global_position)
 	spit_timer -= delta
@@ -131,13 +131,13 @@ func _with_separation(base_direction: Vector2) -> Vector2:
 
 func _animation_speed(movement_ratio: float) -> float:
 	match enemy_kind:
-		"runner", "flanker", "ash_ember":
+		"runner", "flanker", "ash_ember", "court_shadow":
 			return lerpf(7.0, 14.0, minf(movement_ratio, 1.0))
-		"brute", "ash_bellringer", "miniboss":
+		"brute", "ash_bellringer", "royal_guard", "miniboss":
 			return lerpf(2.2, 5.0, minf(movement_ratio, 1.0))
 		"grave_king":
 			return lerpf(1.8, 3.8, minf(movement_ratio, 1.0))
-		"spitter":
+		"spitter", "harpooner":
 			return lerpf(3.2, 6.2, minf(movement_ratio, 1.0))
 		_:
 			return lerpf(4.0, 8.0, minf(movement_ratio, 1.0))
@@ -168,20 +168,20 @@ func _animate_art(delta: float, movement_ratio: float) -> void:
 	var shadow_alpha := 0.65
 
 	match enemy_kind:
-		"runner", "flanker", "ash_ember":
+		"runner", "flanker", "ash_ember", "court_shadow":
 			art_offset = Vector2(step * 3.8, -planted_step * 5.0)
 			art_rotation = step * 0.11
 			scale_target *= Vector2(0.92 + planted_step * 0.05, 1.08 - planted_step * 0.04)
 			shadow_scale_target *= Vector2(1.18 - planted_step * 0.16, 0.82 + planted_step * 0.08)
 			shadow_alpha = 0.5
-		"brute", "ash_bellringer":
+		"brute", "ash_bellringer", "royal_guard":
 			var stomp := pow(planted_step, 3.0)
 			art_offset = Vector2(step * 2.0, -stomp * 2.8)
 			art_rotation = step * 0.035
 			scale_target *= Vector2(1.0 + stomp * 0.045, 1.0 - stomp * 0.035)
 			shadow_scale_target *= Vector2(1.0 + stomp * 0.1, 1.0 + stomp * 0.05)
 			shadow_alpha = 0.78
-		"spitter":
+		"spitter", "harpooner":
 			var charge: float = clampf(1.0 - spit_timer / 0.7, 0.0, 1.0)
 			var recoil: float = sin((attack_recoil / 0.3) * PI) if attack_recoil > 0.0 else 0.0
 			art_offset = Vector2(step * 1.3, -charge * 3.5 + recoil * 7.0)
