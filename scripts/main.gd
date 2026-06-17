@@ -317,6 +317,7 @@ var king_gift_id := ""
 var king_gift_name := ""
 var royal_ash_kills := 0
 var journey_transition_mode := ""
+var pending_interlude_action := ""
 var journey_markers: Array[Node2D] = []
 var journey_exit: Node2D
 var journey_objective: Node2D
@@ -541,6 +542,7 @@ func _process(delta: float) -> void:
 	_update_joystick_mouse()
 	_update_arena_ambience(delta)
 	_update_nova_charge_fx(delta)
+	_update_actor_depths()
 	if game_state != "running":
 		return
 	elapsed += delta
@@ -1115,35 +1117,31 @@ func _build_nova_charge_fx() -> void:
 	nova_charge_fx.z_index = 40
 	fx_layer.add_child(nova_charge_fx)
 
-	var aura := _make_ellipse(62.0, 42.0, Color(0.42, 1.0, 0.66, 0.16), 32)
+	var aura := _make_ellipse(78.0, 58.0, Color(0.18, 0.62, 0.36, 0.18), 32)
 	aura.name = "Aura"
 	nova_charge_fx.add_child(aura)
 
-	var outer_ring := Line2D.new()
-	outer_ring.name = "OuterRing"
-	outer_ring.width = 4.0
-	outer_ring.closed = true
-	outer_ring.default_color = Color(0.62, 1.0, 0.74, 0.72)
-	outer_ring.points = _make_ring_points(72.0, 44)
-	nova_charge_fx.add_child(outer_ring)
-
-	var inner_ring := Line2D.new()
-	inner_ring.name = "InnerRing"
-	inner_ring.width = 2.0
-	inner_ring.closed = true
-	inner_ring.default_color = Color(0.9, 0.78, 1.0, 0.58)
-	inner_ring.points = _make_ring_points(46.0, 32)
-	nova_charge_fx.add_child(inner_ring)
+	var bud_shadow := _make_ellipse(34.0, 26.0, Color(0.02, 0.06, 0.04, 0.72), 20)
+	bud_shadow.name = "BudShadow"
+	bud_shadow.position = Vector2(0.0, 6.0)
+	nova_charge_fx.add_child(bud_shadow)
 
 	var petal_root := Node2D.new()
 	petal_root.name = "Petals"
 	nova_charge_fx.add_child(petal_root)
 	for i in range(10):
 		var petal := _make_ellipse(7.0, 19.0, Color(0.76, 1.0, 0.72, 0.62), 12)
+		petal.name = "Petal%d" % i
+		petal.set_meta("base_angle", TAU * float(i) / 10.0)
+		petal.set_meta("base_distance", 72.0)
 		var angle := TAU * float(i) / 10.0
 		petal.position = Vector2.RIGHT.rotated(angle) * 72.0
 		petal.rotation = angle + PI * 0.5
 		petal_root.add_child(petal)
+
+	var core := _make_ellipse(16.0, 16.0, Color(0.92, 1.0, 0.68, 0.92), 18)
+	core.name = "Core"
+	nova_charge_fx.add_child(core)
 
 func _build_nova_audio() -> void:
 	nova_wake_player.stream = _make_nova_tone([210.0, 315.0], 0.22, 0.28)
@@ -1197,7 +1195,7 @@ func _update_arena_ambience(delta: float) -> void:
 func _spawn_player() -> void:
 	player = PlayerScene.instantiate()
 	player.position = Vector2.ZERO
-	player.z_index = 10
+	player.z_index = _actor_depth_for_y(player.global_position.y)
 	player.set_arena_limits(Vector2(ARENA_LIMIT_X, ARENA_LIMIT_Y))
 	world.add_child(player)
 	living_blade = LivingBladeScene.instantiate()
@@ -1689,9 +1687,7 @@ func _update_anti_kite_pressure(delta: float) -> void:
 		var roll := randf()
 		var kind := "court_shadow" if _is_flooded_palace() else ("ash_ember" if _is_ashen_chapel() else "flanker")
 		if not _is_ashen_chapel() and not _is_flooded_palace():
-			if roll < 0.24:
-				kind = "exploder"
-			elif roll < 0.58:
+			if roll < 0.58:
 				kind = "runner"
 		_spawn_enemy(kind, false, _get_interceptor_position(i))
 
@@ -1826,8 +1822,6 @@ func _pick_enemy_kind() -> String:
 		return "brute"
 	if elapsed > 58.0 and randf() < min(0.18, 0.05 + elapsed / 760.0):
 		return "flanker"
-	if elapsed > 70.0 and randf() < 0.08:
-		return "exploder"
 	if elapsed > 46.0 and randf() < min(0.22, 0.04 + elapsed / 650.0 + _chapter_chance_bonus("spitter_bonus")):
 		return "spitter"
 	if elapsed > 28.0 and randf() < min(0.24, 0.05 + elapsed / 620.0 + _chapter_chance_bonus("runner_bonus")):
@@ -1967,6 +1961,18 @@ func _spawn_enemy(enemy_kind: String, is_miniboss: bool, spawn_position := Vecto
 	enemy.died.connect(_on_enemy_died.bind(enemy, enemy.xp_value, enemy.is_miniboss))
 	enemies.append(enemy)
 	world.add_child(enemy)
+
+func _update_actor_depths() -> void:
+	if is_instance_valid(player):
+		player.z_index = _actor_depth_for_y(player.global_position.y)
+	for enemy in enemies:
+		if is_instance_valid(enemy):
+			enemy.z_index = _actor_depth_for_y(enemy.global_position.y)
+	if is_instance_valid(living_blade) and is_instance_valid(player):
+		living_blade.z_index = player.z_index + 8
+
+func _actor_depth_for_y(y_position: float) -> int:
+	return 20 + clampi(int((y_position + ARENA_LIMIT_Y) / 12.0), 0, 260)
 
 func _get_interceptor_position(index: int) -> Vector2:
 	var forward := player.velocity.normalized()
@@ -2151,20 +2157,9 @@ func _add_enemy_role_markers(enemy: Enemy, enemy_kind: String) -> void:
 		"ash_ember":
 			pass
 		"miniboss":
-			_add_enemy_ring(enemy, Color(0.72, 0.9, 0.48, 0.42), 45.0, 4.0)
+			pass
 		"grave_king":
-			var boss_primary := Color(0.42, 0.9, 0.94, 0.88) if _is_flooded_palace() else (Color(1.0, 0.55, 0.24, 0.88) if _is_ashen_chapel() else Color(0.62, 1.0, 0.58, 0.82))
-			_add_enemy_ring(enemy, Color(boss_primary.r, boss_primary.g, boss_primary.b, 0.56), 62.0, 5.0)
-			_add_enemy_mark(enemy, boss_primary, PackedVector2Array([
-				Vector2(0, -76),
-				Vector2(18, -48),
-				Vector2(9, -52),
-				Vector2(22, -24),
-				Vector2(0, -38),
-				Vector2(-22, -24),
-				Vector2(-9, -52),
-				Vector2(-18, -48),
-			]))
+			pass
 
 func _add_enemy_ring(enemy: Enemy, color: Color, radius: float, width: float) -> void:
 	var ring := Line2D.new()
@@ -2260,30 +2255,69 @@ func _make_spitter_projectile(direction: Vector2) -> Node2D:
 	var projectile := Node2D.new()
 	projectile.rotation = direction.angle()
 	var ash_projectile := _is_ashen_chapel()
+	var palace_projectile := _is_flooded_palace()
 	projectile.set_meta("ash_projectile", ash_projectile)
+	projectile.set_meta("palace_projectile", palace_projectile)
 
 	var tail := Line2D.new()
 	tail.name = "Tail"
-	tail.width = 7.0
-	tail.default_color = Color(1.0, 0.5, 0.18, 0.58) if ash_projectile else Color(0.46, 0.95, 0.86, 0.5)
-	tail.points = PackedVector2Array([Vector2(-34.0, 0.0), Vector2(-10.0, 0.0)])
+	tail.width = 4.0 if palace_projectile else (6.0 if ash_projectile else 7.0)
+	tail.default_color = Color(0.38, 0.88, 0.95, 0.54) if palace_projectile else (Color(1.0, 0.5, 0.18, 0.58) if ash_projectile else Color(0.46, 0.95, 0.86, 0.5))
+	tail.points = PackedVector2Array([Vector2(-44.0, 0.0), Vector2(-18.0, 0.0)]) if palace_projectile else PackedVector2Array([Vector2(-34.0, 0.0), Vector2(-10.0, 0.0)])
 	projectile.add_child(tail)
 
-	var halo := _make_ellipse(15.0, 11.0, Color(1.0, 0.42, 0.16, 0.34) if ash_projectile else Color(0.48, 1.0, 0.86, 0.28), 16)
+	var halo_color := Color(0.24, 0.84, 0.92, 0.24) if palace_projectile else (Color(1.0, 0.42, 0.16, 0.34) if ash_projectile else Color(0.48, 1.0, 0.86, 0.28))
+	var halo := _make_ellipse(18.0, 8.0, halo_color, 16) if palace_projectile else _make_ellipse(15.0, 11.0, halo_color, 16)
 	halo.name = "Halo"
 	projectile.add_child(halo)
 
-	var ring := Line2D.new()
-	ring.name = "Ring"
-	ring.width = 3.0
-	ring.closed = true
-	ring.default_color = Color(1.0, 0.78, 0.38, 0.88) if ash_projectile else Color(0.88, 0.52, 1.0, 0.78)
-	ring.points = _make_ring_points(12.0, 18)
-	projectile.add_child(ring)
+	if palace_projectile:
+		var harpoon := Polygon2D.new()
+		harpoon.name = "Core"
+		harpoon.color = Color(0.68, 1.0, 0.96, 0.96)
+		harpoon.polygon = PackedVector2Array([
+			Vector2(22.0, 0.0),
+			Vector2(-10.0, -7.0),
+			Vector2(-5.0, 0.0),
+			Vector2(-10.0, 7.0),
+		])
+		projectile.add_child(harpoon)
+		var spine := Line2D.new()
+		spine.name = "Ring"
+		spine.width = 2.0
+		spine.default_color = Color(0.12, 0.52, 0.62, 0.82)
+		spine.points = PackedVector2Array([Vector2(-20.0, 0.0), Vector2(12.0, 0.0)])
+		projectile.add_child(spine)
+	elif ash_projectile:
+		var ember := Polygon2D.new()
+		ember.name = "Core"
+		ember.color = Color(1.0, 0.42, 0.12, 0.98)
+		ember.polygon = PackedVector2Array([
+			Vector2(12.0, 0.0),
+			Vector2(2.0, -10.0),
+			Vector2(-10.0, -4.0),
+			Vector2(-5.0, 8.0),
+			Vector2(5.0, 6.0),
+		])
+		projectile.add_child(ember)
+		var spark := Line2D.new()
+		spark.name = "Ring"
+		spark.width = 3.0
+		spark.default_color = Color(1.0, 0.78, 0.38, 0.88)
+		spark.points = PackedVector2Array([Vector2(-11.0, -8.0), Vector2(5.0, 0.0), Vector2(-11.0, 8.0)])
+		projectile.add_child(spark)
+	else:
+		var ring := Line2D.new()
+		ring.name = "Ring"
+		ring.width = 3.0
+		ring.closed = true
+		ring.default_color = Color(0.88, 0.52, 1.0, 0.78)
+		ring.points = _make_ring_points(12.0, 18)
+		projectile.add_child(ring)
 
-	var core := _make_ellipse(7.0, 7.0, Color(1.0, 0.42, 0.12, 0.98) if ash_projectile else Color(0.95, 0.74, 1.0, 0.96), 12)
-	core.name = "Core"
-	projectile.add_child(core)
+		var core := _make_ellipse(7.0, 7.0, Color(0.95, 0.74, 1.0, 0.96), 12)
+		core.name = "Core"
+		projectile.add_child(core)
 
 	var seed := _make_ellipse(3.0, 3.0, Color(0.18, 0.08, 0.22, 0.9), 8)
 	seed.name = "Seed"
@@ -2299,7 +2333,6 @@ func _on_enemy_died(enemy_position: Vector2, enemy_ref: Enemy = null, xp_value: 
 	_start_screen_shake(0.26 if was_execution else (0.18 if was_miniboss else 0.07), 11.0 if was_execution else (7.0 if was_miniboss else 3.0))
 	if was_execution and player != null:
 		player.heal(2.0)
-		ultimate_charge = min(ultimate_cooldown, ultimate_charge + 1.1)
 	if vampirism_unlocked and player != null and kill_count % vampirism_kills_required == 0:
 		var heal_amount: float = vampirism_heal_amount
 		if nova_damage_active:
@@ -2320,7 +2353,8 @@ func _on_enemy_died(enemy_position: Vector2, enemy_ref: Enemy = null, xp_value: 
 	shards.append(shard)
 	world.add_child(shard)
 	if was_miniboss:
-		_flash_overlay_text(String(_current_chapter().get("boss_dead", "Король-Могила пал")) if xp_value >= 20 else "Могильный Страж повержен")
+		if xp_value < 20:
+			_flash_overlay_text("Могильный Страж повержен")
 		if xp_value >= 20:
 			if journey_stage == 0:
 				grave_king_killed = true
@@ -2356,7 +2390,7 @@ func _check_journey_progress() -> void:
 		_flash_overlay_text("Три Сердца замолчали. Король-Могила встал.")
 		_spawn_dread_boss()
 	elif journey_stage == 0 and grave_king_killed and not king_gift_offered:
-		_show_king_gift_choice()
+		_show_journey_interlude("after_king")
 	elif journey_stage == 0 and grave_king_killed and not king_gift_id.is_empty():
 		_open_chapel_gate()
 	elif journey_stage == 1 and not journey_boss_summoned:
@@ -2364,7 +2398,7 @@ func _check_journey_progress() -> void:
 		_flash_overlay_text("Третий колокол треснул. Игумен Пепла идет.")
 		_spawn_dread_boss()
 	elif journey_stage == 1 and chapel_boss_killed:
-		_open_palace_gate()
+		_show_journey_interlude("after_abbot")
 	elif journey_stage == 2 and not journey_boss_summoned:
 		journey_boss_summoned = true
 		_flash_overlay_text("Третья Печать утонула. Королева поднялась.")
@@ -2584,6 +2618,102 @@ func _finish_finale_cutscene() -> void:
 	_update_hud()
 	_flash_overlay_text("Войди в проход за троном")
 
+func _show_journey_interlude(action: String) -> void:
+	if game_state == "interlude":
+		return
+	pending_interlude_action = action
+	game_state = "interlude"
+	build_label.visible = false
+	joystick_base.visible = false
+	ultimate_button.visible = false
+	ultimate_bar.visible = false
+	_reset_joystick()
+	get_tree().paused = true
+	_configure_overlay(Vector2(44, 220), Vector2(452, 520))
+	overlay_panel.visible = true
+	_clear_container(overlay_list)
+	_add_overlay_label(_interlude_title(action), 29)
+	_add_overlay_label(_interlude_text(action), 18)
+	_add_overlay_button(_interlude_continue_text(action), _complete_journey_interlude)
+	if action == "enter_chapel" or action == "enter_palace":
+		_add_overlay_button("Назад", _cancel_journey_interlude)
+
+func _interlude_title(action: String) -> String:
+	match action:
+		"after_king":
+			return "Пустой трон"
+		"enter_chapel":
+			return "Порог Часовни"
+		"after_abbot":
+			return "Под алтарём"
+		"enter_palace":
+			return "Спуск к воде"
+		_:
+			return "Путь Маски"
+
+func _interlude_text(action: String) -> String:
+	match action:
+		"after_king":
+			return "Корона лежит в траве.\nТрон больше никому не приказывает.\nЗа спиной Маски камень впервые двинулся."
+		"enter_chapel":
+			return "Из проёма тянет пеплом и старым воском.\nКолокол зовёт тех, кто давно не может ответить."
+		"after_abbot":
+			return "Игумен рассыпался у алтаря.\nПод плитами слышна вода.\nЧасовня стояла на крыше утонувшего дворца."
+		"enter_palace":
+			return "Ступени уходят ниже земли.\nТам, где должен быть пол, ждёт чёрная вода.\nВ каждом отражении не хватает лица."
+		_:
+			return "Руины помнят шаги Маски."
+
+func _interlude_continue_text(action: String) -> String:
+	match action:
+		"after_king":
+			return "Открыть путь"
+		"after_abbot":
+			return "Открыть спуск"
+		"enter_chapel":
+			return "Войти"
+		"enter_palace":
+			return "Спуститься"
+		_:
+			return "Продолжить"
+
+func _complete_journey_interlude() -> void:
+	var action := pending_interlude_action
+	pending_interlude_action = ""
+	overlay_panel.visible = false
+	game_state = "running"
+	get_tree().paused = false
+	joystick_base.visible = true
+	ultimate_button.visible = true
+	ultimate_bar.visible = true
+	build_label.visible = true
+	_update_hud()
+	match action:
+		"after_king":
+			_show_king_gift_choice()
+		"after_abbot":
+			_open_palace_gate()
+		"enter_chapel":
+			_enter_journey_stage(1)
+		"enter_palace":
+			_enter_journey_stage(2)
+
+func _cancel_journey_interlude() -> void:
+	pending_interlude_action = ""
+	overlay_panel.visible = false
+	game_state = "running"
+	get_tree().paused = false
+	joystick_base.visible = true
+	ultimate_button.visible = true
+	ultimate_bar.visible = true
+	build_label.visible = true
+	if player != null and is_instance_valid(journey_exit):
+		var direction := journey_exit.global_position.direction_to(player.global_position)
+		if direction.length() <= 0.0:
+			direction = Vector2.DOWN
+		player.global_position = _push_out_of_arena_obstacles(player.global_position + direction.normalized() * 132.0, 34.0)
+	_update_hud()
+
 func _journey_allows_regular_spawns() -> bool:
 	if not journey_transition_mode.is_empty():
 		return false
@@ -2699,10 +2829,10 @@ func _update_journey_transition() -> void:
 		return
 	if journey_transition_mode == "chapel_gate" and is_instance_valid(journey_exit):
 		if player.global_position.distance_to(journey_exit.global_position) <= 92.0:
-			_enter_journey_stage(1)
+			_show_journey_interlude("enter_chapel")
 	elif journey_transition_mode == "palace_gate" and is_instance_valid(journey_exit):
 		if player.global_position.distance_to(journey_exit.global_position) <= 92.0:
-			_enter_journey_stage(2)
+			_show_journey_interlude("enter_palace")
 	elif journey_transition_mode == "ending_gate" and is_instance_valid(journey_exit):
 		if player.global_position.distance_to(journey_exit.global_position) <= 92.0:
 			journey_transition_mode = ""
@@ -2827,7 +2957,6 @@ func _register_kill_streak(enemy_position: Vector2, was_execution: bool, was_min
 	best_kill_streak = max(best_kill_streak, kill_streak)
 	if kill_streak in [10, 25, 50, 75, 100] or (kill_streak > 0 and kill_streak % 50 == 0):
 		CombatFxScript.combat_text(fx_layer, enemy_position + Vector2(0.0, -34.0), "СЕРИЯ x%d" % kill_streak, Color(1.0, 0.88, 0.46), 30)
-		ultimate_charge = min(ultimate_cooldown, ultimate_charge + (2.0 if was_miniboss else 1.2))
 		_start_screen_shake(0.14, 5.8)
 
 func _update_kill_streak(delta: float) -> void:
@@ -2865,8 +2994,12 @@ func _add_enemy_death_fx(enemy_position: Vector2, enemy_kind: String, was_execut
 			color = Color(1.0, 0.42, 0.14, 0.98) if _is_ashen_chapel() else Color(0.9, 0.1, 0.2, 0.95)
 	CombatFxScript.burst(fx_layer, enemy_position, color, 20 if was_miniboss else (16 if was_execution else 7))
 	CombatFxScript.gore_burst(fx_layer, enemy_position, was_execution or was_miniboss)
+	CombatFxScript.splat(fx_layer, enemy_position, color, was_execution or was_miniboss)
+	if player != null:
+		var cut_direction := player.global_position.direction_to(enemy_position)
+		CombatFxScript.directional_shards(fx_layer, enemy_position, cut_direction, color, was_execution or was_miniboss)
 	if was_miniboss:
-		CombatFxScript.ring(fx_layer, enemy_position, Color(0.72, 0.92, 0.48, 0.7), 150.0, 0.38)
+		CombatFxScript.impact_flash(fx_layer, enemy_position, Vector2.RIGHT.rotated(randf() * TAU), color, true)
 	if enemy_kind == "exploder":
 		CombatFxScript.ring(fx_layer, enemy_position, Color(1.0, 0.48, 0.18, 0.64), 118.0, 0.28)
 
@@ -2912,7 +3045,7 @@ func _update_enemy_projectiles(delta: float) -> void:
 		if player != null and projectile.global_position.distance_to(player.global_position) < 28.0:
 			var damage: float = float(projectile.get_meta("damage", SPITTER_PROJECTILE_DAMAGE))
 			_damage_player(damage, damage, true)
-			var impact_color := Color(1.0, 0.5, 0.18, 0.9) if bool(projectile.get_meta("ash_projectile", false)) else Color(0.85, 0.48, 1.0, 0.84)
+			var impact_color := Color(0.38, 0.92, 0.96, 0.9) if bool(projectile.get_meta("palace_projectile", false)) else (Color(1.0, 0.5, 0.18, 0.9) if bool(projectile.get_meta("ash_projectile", false)) else Color(0.85, 0.48, 1.0, 0.84))
 			CombatFxScript.burst(fx_layer, projectile.global_position, impact_color, 8)
 			projectile.queue_free()
 			if player.is_dead:
@@ -4501,25 +4634,33 @@ func _update_nova_charge_fx(delta: float) -> void:
 	nova_charge_fx.global_position = player.global_position + Vector2(0.0, -10.0)
 	var stage_strength: float = clampf((ratio - NOVA_CUE_WAKE) / (1.0 - NOVA_CUE_WAKE), 0.0, 1.0)
 	var pulse: float = 0.5 + sin(nova_pulse_time * lerpf(5.2, 10.5, stage_strength)) * 0.5
-	nova_charge_fx.scale = Vector2.ONE * lerpf(0.82, 1.28, stage_strength) * (1.0 + pulse * lerpf(0.03, 0.1, stage_strength))
+	nova_charge_fx.scale = Vector2.ONE * lerpf(0.82, 1.28, stage_strength) * (1.0 + pulse * lerpf(0.04, 0.11, stage_strength))
 
 	var aura := nova_charge_fx.get_node_or_null("Aura") as CanvasItem
-	var outer_ring := nova_charge_fx.get_node_or_null("OuterRing") as Line2D
-	var inner_ring := nova_charge_fx.get_node_or_null("InnerRing") as Line2D
+	var bud_shadow := nova_charge_fx.get_node_or_null("BudShadow") as CanvasItem
+	var core := nova_charge_fx.get_node_or_null("Core") as CanvasItem
 	var petals := nova_charge_fx.get_node_or_null("Petals") as Node2D
 	if aura != null:
-		aura.modulate.a = lerpf(0.45, 1.0, stage_strength) * (0.74 + pulse * 0.26)
-	if outer_ring != null:
-		outer_ring.rotation += delta * lerpf(1.6, 4.8, stage_strength)
-		outer_ring.width = lerpf(3.0, 7.0, stage_strength)
-		outer_ring.default_color = Color(0.58 + stage_strength * 0.3, 1.0, 0.72 + stage_strength * 0.2, 0.58 + pulse * 0.34)
-	if inner_ring != null:
-		inner_ring.rotation -= delta * lerpf(2.4, 6.2, stage_strength)
-		inner_ring.width = lerpf(2.0, 4.0, stage_strength)
-		inner_ring.default_color = Color(0.92, 0.76 + stage_strength * 0.18, 1.0, 0.42 + pulse * 0.36)
+		aura.modulate.a = lerpf(0.28, 0.82, stage_strength) * (0.72 + pulse * 0.28)
+		aura.scale = Vector2.ONE * (0.86 + stage_strength * 0.36 + pulse * 0.08)
+	if bud_shadow != null:
+		bud_shadow.scale = Vector2.ONE * (0.9 + stage_strength * 0.18)
+		bud_shadow.modulate.a = lerpf(0.58, 0.86, stage_strength)
+	if core != null:
+		core.scale = Vector2.ONE * (0.82 + stage_strength * 0.42 + pulse * 0.18)
+		core.modulate.a = lerpf(0.7, 1.0, stage_strength)
 	if petals != null:
 		petals.rotation += delta * lerpf(2.0, 7.0, stage_strength)
 		petals.modulate.a = lerpf(0.5, 1.0, stage_strength)
+		for child in petals.get_children():
+			if child is Node2D:
+				var petal := child as Node2D
+				var angle := float(petal.get_meta("base_angle", 0.0))
+				var base_distance := float(petal.get_meta("base_distance", 30.0))
+				var open_distance := lerpf(base_distance * 0.68, base_distance, stage_strength) + pulse * 4.0
+				petal.position = Vector2.RIGHT.rotated(angle) * open_distance
+				petal.rotation = angle + PI * 0.5 + sin(nova_pulse_time * 2.4 + angle) * 0.08
+				petal.scale = Vector2(lerpf(0.72, 1.18, stage_strength), lerpf(0.78, 1.34, stage_strength))
 
 func _cast_ultimate() -> void:
 	if game_state != "running" or player == null:
@@ -4537,10 +4678,7 @@ func _cast_ultimate() -> void:
 	_flash_overlay_text("НОВА GRAVEBLOOM")
 	_play_nova_cue(nova_burst_player)
 	_start_screen_shake(0.42, 13.0)
-	CombatFxScript.ring(fx_layer, origin, Color(0.78, 1.0, 0.72, 0.95), ultimate_radius, 0.55)
-	CombatFxScript.ring(fx_layer, origin, Color(0.95, 0.78, 1.0, 0.68), ultimate_radius * 0.62, 0.42)
-	CombatFxScript.burst(fx_layer, origin, Color(0.72, 1.0, 0.78, 0.92), 42)
-	_add_ultimate_lashes(origin)
+	_add_nova_bloom_burst(origin)
 	var targets := enemies.duplicate()
 	nova_damage_active = true
 	nova_vampirism_healed = 0.0
@@ -4582,19 +4720,50 @@ func _cast_dead_crown_echo(origin: Vector2) -> void:
 	tween.tween_property(crown, "modulate:a", 0.0, 0.5)
 	tween.tween_callback(crown.queue_free)
 
-func _add_ultimate_lashes(origin: Vector2) -> void:
+func _add_nova_bloom_burst(origin: Vector2) -> void:
+	var bloom := Node2D.new()
+	bloom.global_position = origin
+	bloom.z_index = 60
+	fx_layer.add_child(bloom)
+
+	var shadow := _make_ellipse(ultimate_radius * 0.42, ultimate_radius * 0.28, Color(0.03, 0.0, 0.06, 0.52), 42)
+	shadow.name = "ShadowBloom"
+	bloom.add_child(shadow)
+
+	var core := _make_ellipse(42.0, 42.0, Color(0.96, 1.0, 0.72, 0.96), 24)
+	core.name = "Core"
+	bloom.add_child(core)
+	var dark_core := _make_ellipse(24.0, 24.0, Color(0.02, 0.08, 0.04, 0.82), 18)
+	dark_core.name = "DarkCore"
+	bloom.add_child(dark_core)
+
+	for i in range(12):
+		var angle := TAU * float(i) / 12.0
+		var direction := Vector2.RIGHT.rotated(angle)
+		var petal := _make_tapered_strike(direction * 18.0, direction * randf_range(ultimate_radius * 0.64, ultimate_radius * 0.94), 48.0, Color(0.58, 1.0, 0.72, 0.64), 5.0)
+		petal.z_index = 61
+		bloom.add_child(petal)
+		var violet_petal := _make_tapered_strike(direction.rotated(0.08) * 34.0, direction.rotated(0.08) * randf_range(ultimate_radius * 0.38, ultimate_radius * 0.7), 24.0, Color(0.86, 0.62, 1.0, 0.42), 3.0)
+		violet_petal.z_index = 62
+		bloom.add_child(violet_petal)
+
 	for i in range(18):
-		var lash := Line2D.new()
-		lash.width = randf_range(3.0, 7.0)
-		lash.default_color = Color(0.56, 1.0, 0.75, randf_range(0.5, 0.86))
-		var angle := TAU * float(i) / 18.0 + randf_range(-0.08, 0.08)
-		var start := Vector2.RIGHT.rotated(angle) * randf_range(26.0, 70.0)
-		var end := Vector2.RIGHT.rotated(angle + randf_range(-0.18, 0.18)) * randf_range(210.0, ultimate_radius)
-		lash.points = PackedVector2Array([origin + start, origin + (start + end) * 0.52, origin + end])
-		fx_layer.add_child(lash)
-		var tween := create_tween()
-		tween.tween_property(lash, "modulate:a", 0.0, 0.36)
-		tween.tween_callback(lash.queue_free)
+		var angle := TAU * float(i) / 18.0 + randf_range(-0.06, 0.06)
+		var direction := Vector2.RIGHT.rotated(angle)
+		CombatFxScript.directional_shards(fx_layer, origin + direction * randf_range(18.0, 48.0), direction, Color(0.72, 1.0, 0.76, 0.9), i % 3 == 0)
+
+	CombatFxScript.ring(fx_layer, origin, Color(0.95, 1.0, 0.7, 0.95), ultimate_radius * 0.98, 0.42)
+	CombatFxScript.ring(fx_layer, origin, Color(0.84, 0.58, 1.0, 0.7), ultimate_radius * 0.62, 0.34)
+	CombatFxScript.impact_flash(fx_layer, origin, Vector2.RIGHT.rotated(randf() * TAU), Color(0.92, 1.0, 0.74, 0.92), true)
+	CombatFxScript.burst(fx_layer, origin, Color(0.74, 1.0, 0.78, 0.92), 54)
+
+	var tween := create_tween()
+	tween.set_parallel(true)
+	bloom.scale = Vector2.ONE * 0.22
+	tween.tween_property(bloom, "scale", Vector2.ONE, 0.14).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_property(bloom, "rotation", randf_range(-0.25, 0.25), 0.42)
+	tween.tween_property(bloom, "modulate:a", 0.0, 0.62).set_delay(0.08)
+	tween.chain().tween_callback(bloom.queue_free)
 
 func _build_joystick() -> void:
 	joystick_base.position = Vector2(340, 760)

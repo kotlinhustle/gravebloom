@@ -73,6 +73,83 @@ static func gore_burst(parent: Node, position: Vector2, execution: bool = false)
 		tween.tween_property(shard, "modulate:a", 0.0, 0.42 if execution else 0.3)
 		tween.chain().tween_callback(shard.queue_free)
 
+static func directional_shards(parent: Node, position: Vector2, direction: Vector2, color: Color, heavy: bool = false) -> void:
+	if direction.length() <= 0.0:
+		direction = Vector2.RIGHT.rotated(randf() * TAU)
+	direction = direction.normalized()
+	var count := 18 if heavy else 11
+	for i in range(count):
+		var shard := Polygon2D.new()
+		var length := randf_range(24.0, 46.0) if heavy else randf_range(14.0, 30.0)
+		var width := randf_range(4.0, 9.0)
+		shard.color = Color(color.r, color.g, color.b, randf_range(0.72, 0.96))
+		shard.polygon = PackedVector2Array([
+			Vector2(length, 0.0),
+			Vector2(-length * 0.35, -width),
+			Vector2(-length * 0.12, 0.0),
+			Vector2(-length * 0.35, width),
+		])
+		var spread := randf_range(-0.72, 0.72)
+		var fly_direction := direction.rotated(spread)
+		shard.global_position = position + fly_direction * randf_range(4.0, 16.0)
+		shard.rotation = fly_direction.angle()
+		shard.z_index = 95
+		parent.add_child(shard)
+		var distance := randf_range(108.0, 210.0) if heavy else randf_range(64.0, 132.0)
+		var duration := randf_range(0.36, 0.52) if heavy else randf_range(0.26, 0.4)
+		var tween := parent.create_tween()
+		tween.set_parallel(true)
+		tween.tween_property(shard, "global_position", position + fly_direction * distance, duration)
+		tween.tween_property(shard, "rotation", shard.rotation + randf_range(-0.65, 0.65), duration)
+		tween.tween_property(shard, "scale", Vector2.ZERO, duration)
+		tween.tween_property(shard, "modulate:a", 0.0, duration)
+		tween.chain().tween_callback(shard.queue_free)
+
+static func impact_flash(parent: Node, position: Vector2, direction: Vector2, color: Color, heavy: bool = false) -> void:
+	if direction.length() <= 0.0:
+		direction = Vector2.RIGHT
+	direction = direction.normalized()
+	var side := direction.orthogonal()
+	var length := 118.0 if heavy else 76.0
+	var width := 32.0 if heavy else 20.0
+	var flash := Polygon2D.new()
+	flash.color = color
+	flash.polygon = PackedVector2Array([
+		direction * length,
+		side * width,
+		-direction * length * 0.42,
+		-side * width,
+	])
+	flash.global_position = position
+	flash.rotation = randf_range(-0.08, 0.08)
+	flash.z_index = 105
+	parent.add_child(flash)
+	var tween := parent.create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(flash, "scale", Vector2.ONE * (1.34 if heavy else 1.2), 0.1)
+	tween.tween_property(flash, "modulate:a", 0.0, 0.28 if heavy else 0.22)
+	tween.chain().tween_callback(flash.queue_free)
+
+static func splat(parent: Node, position: Vector2, color: Color, heavy: bool = false) -> void:
+	var stain := Polygon2D.new()
+	var radius := 38.0 if heavy else 24.0
+	var points := PackedVector2Array()
+	for i in range(12):
+		var angle := TAU * float(i) / 12.0
+		var local_radius := radius * randf_range(0.55, 1.12)
+		points.append(Vector2.RIGHT.rotated(angle) * local_radius)
+	stain.polygon = points
+	stain.color = Color(color.r * 0.72, color.g * 0.72, color.b * 0.72, 0.34 if heavy else 0.24)
+	stain.global_position = position + Vector2(randf_range(-3.0, 3.0), randf_range(-2.0, 5.0))
+	stain.rotation = randf() * TAU
+	stain.z_index = 4
+	parent.add_child(stain)
+	var tween := parent.create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(stain, "scale", Vector2.ONE * (1.18 if heavy else 1.08), 0.18)
+	tween.tween_property(stain, "modulate:a", 0.0, 1.05 if heavy else 0.72)
+	tween.chain().tween_callback(stain.queue_free)
+
 static func combat_text(parent: Node, position: Vector2, text: String, color: Color = Color(1.0, 0.92, 0.72), font_size: int = 28) -> void:
 	var label := Label.new()
 	label.text = text

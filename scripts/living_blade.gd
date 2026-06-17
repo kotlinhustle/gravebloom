@@ -206,22 +206,6 @@ func _leave_trail() -> void:
 func _show_impact(target_position: Vector2, is_execution: bool = false) -> void:
 	if fx_layer == null:
 		return
-	var slash := Line2D.new()
-	slash.width = 16.0 if is_execution else (10.0 if blood_evolved else 8.0)
-	slash.default_color = Color(0.96, 0.76, 0.24, 0.95) if blood_evolved else Color(0.72, 1.0, 0.83, 0.95)
-	slash.begin_cap_mode = Line2D.LINE_CAP_ROUND
-	slash.end_cap_mode = Line2D.LINE_CAP_ROUND
-	slash.joint_mode = Line2D.LINE_JOINT_ROUND
 	var slash_direction := Vector2.RIGHT.rotated(rotation)
-	var slash_side := slash_direction.orthogonal()
-	var slash_length := 58.0 if is_execution else 34.0
-	slash.points = PackedVector2Array([
-		target_position - slash_direction * slash_length - slash_side * slash_length * 0.28,
-		target_position - slash_direction * slash_length * 0.36 + slash_side * slash_length * 0.12,
-		target_position + slash_direction * slash_length * 0.36 + slash_side * slash_length * 0.24,
-		target_position + slash_direction * slash_length - slash_side * slash_length * 0.2
-	])
-	fx_layer.add_child(slash)
-	var tween := create_tween()
-	tween.tween_property(slash, "modulate:a", 0.0, 0.26 if is_execution else 0.18)
-	tween.tween_callback(slash.queue_free)
+	var flash_color := Color(1.0, 0.74, 0.28, 0.94) if blood_evolved else Color(0.72, 1.0, 0.86, 0.92)
+	CombatFx.impact_flash(fx_layer, target_position, slash_direction, flash_color, is_execution)

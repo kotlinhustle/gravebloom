@@ -19,6 +19,7 @@ var anim_time := 0.0
 var anim_offset := randf() * TAU
 var attack_recoil := 0.0
 var hit_reaction := 0.0
+var hit_reaction_duration := 0.14
 var uses_walk_frames := false
 var animation_frame_count := 1
 var facing_right := false
@@ -151,7 +152,7 @@ func _animate_art(delta: float, movement_ratio: float) -> void:
 		art.frame = int(floor(frame_progress * float(animation_frame_count))) % animation_frame_count
 		var frame_scale := base_art_scale
 		if hit_reaction > 0.0:
-			var hit_strength: float = hit_reaction / 0.14
+			var hit_strength: float = hit_reaction / hit_reaction_duration
 			frame_scale *= Vector2(1.0 + hit_strength * 0.2, 1.0 - hit_strength * 0.16)
 		art.position = art.position.lerp(base_art_position, minf(1.0, delta * 18.0))
 		art.rotation = lerp_angle(art.rotation, 0.0, minf(1.0, delta * 18.0))
@@ -217,7 +218,7 @@ func _animate_art(delta: float, movement_ratio: float) -> void:
 
 	art_offset *= lerpf(0.35, 1.0, minf(movement_ratio, 1.0))
 	if hit_reaction > 0.0:
-		var hit_strength: float = hit_reaction / 0.14
+		var hit_strength: float = hit_reaction / hit_reaction_duration
 		scale_target *= Vector2(1.0 + hit_strength * 0.2, 1.0 - hit_strength * 0.16)
 		art_offset.y += hit_strength * 4.0
 	art.position = art.position.lerp(base_art_position + art_offset, minf(1.0, delta * 18.0))
@@ -252,13 +253,14 @@ func take_damage(amount: int, hit_origin: Vector2 = Vector2.ZERO, knockback_forc
 	damaged.emit(global_position, amount)
 	if hit_origin != Vector2.ZERO:
 		knockback_velocity = hit_origin.direction_to(global_position) * knockback_force
-	hit_reaction = 0.14
-	scale = base_scale * Vector2(1.18, 0.82)
+	hit_reaction_duration = 0.2 if hit_source == "blade" else 0.14
+	hit_reaction = hit_reaction_duration
+	scale = base_scale * (Vector2(1.28, 0.74) if hit_source == "blade" else Vector2(1.18, 0.82))
 	modulate = Color(1.0, 0.95, 0.62)
 	var tween := create_tween()
 	tween.set_parallel(true)
-	tween.tween_property(self, "modulate", Color.WHITE, 0.1)
-	tween.tween_property(self, "scale", base_scale, 0.1)
+	tween.tween_property(self, "modulate", Color.WHITE, 0.12)
+	tween.tween_property(self, "scale", base_scale, 0.16 if hit_source == "blade" else 0.1)
 	if health <= 0:
 		die()
 

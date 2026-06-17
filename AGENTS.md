@@ -103,6 +103,7 @@ scripts/
 - Sprite scenes use `Sprite2D`; older polygon placeholders are hidden, not deleted yet, so we can tune scale/collisions safely.
 - Player uses a generated 6-frame idle + 6-frame run spritesheet; avoid procedural overlay limbs for hero animation.
 - Sprite juice is script-driven: player frame switching plus small bob/lean, role-specific enemy locomotion/attack cycles, hit squash, and blade pulse all preserve each sprite's base scale. Enemy animation distinguishes fast skittering, heavy stomps, ranged charge/recoil, explosive pulsing, floating acolytes, and looming bosses without requiring sprite sheets yet.
+- Actor draw order is depth-sorted by world Y in `Main`; do not return the player to a fixed high z-index because it makes the hero visually crawl over enemies when standing above them.
 
 `Main`:
 
@@ -146,6 +147,7 @@ scripts/
 - Regular enemies should spawn just outside the current camera view and walk in from the screen edge, not materialize inside the active screen.
 - Enemy waves now mix roles: crawler, brute, fast runner, flanker, ranged spitter, explosive enemy, final-minute boss, and miniboss.
 - Enemy role indicators are intentionally restrained. Ordinary enemies, spitters, bellringers, and fast embers rely on their sprite silhouette; exploders keep only a muted danger ring, and miniboss/boss rings are subdued. Avoid lighting every enemy at once.
+- Major bosses and minibosses should not have extra RoleRing/RoleMark indicators attached to their body. Use their sprite, entrance attack, and the top boss HP bar instead; floating marks around bosses add clutter and confuse dense fights.
 - Dead Garden enemies no longer use purple overhead indicators. Spitters rely on a muted toxic-green silhouette and their visible projectile.
 - Enemies use light separation so they do not collapse into one harmless blob during circular kiting.
 - Ordinary enemies deal contact damage but do not physically block the player; their collision layer is disabled while their collision mask still lets them navigate solid map geometry. Bosses and map obstacles may remain physically solid.
@@ -234,10 +236,13 @@ scripts/
 - Ordinary enemy deaths use restrained bursts without role-specific rings. Keep larger rings for minibosses, explosions, hazards, ultimates, and other signals that affect player decisions.
 - Combat rays and strikes should not look like flat rectangular debug bars. Use tapered or curved silhouettes, irregular edges, bright cores, and a few restrained fragments while preserving readable hitboxes and telegraphs.
 - Combat has a first "meaty" layer: Living Blade finishing hits create stronger bug/Gravebloom death bursts without execution text; use toxic green, amber, and dark violet rather than human-blood red. Kill streaks appear at milestones, and taking damage breaks the streak.
+- Combat readability should improve through shape and reaction, not more persistent screen noise: blade hits use a large but brief solid impact flash, deaths throw directional shards from the hit vector and may leave a short fading stain, and chapter projectiles should differ by silhouette as well as color. Avoid broken Line2D hit slashes on regular enemy impacts.
 - Living Blade executions lightly heal the player, add a little Nova charge, and have a higher chance to drop a health pack, so aggressive close-range kills feel like a resource loop.
 - Incoming damage now shows red numbers over the player, throttled for continuous contact/hazard damage so it does not spam the screen.
 - Runs now have a journey start screen, XP bar, area-clear objectives, physical chapter gates, chapter bosses, victory/death screens, and a restart button.
 - Starting a journey now shows a short Russian text prologue before controls become active. Keep it brief, phone-readable, and focused on why the Mask enters the ruins.
+- Between major chapters, short interlude scenes pause the run and add lore without granting bonuses, penalties, resources, or new build choices. Keep them sparse: a title, a few phone-readable lines, and one clear continue action. After `Король-Могила`, show the `Пустой трон` interlude before the royal-gift choice; the gift choice then opens the Chapel gate.
+- Gate-threshold interludes should appear when the player deliberately steps into the Chapel or Palace gate. They may offer `Назад`, but cancelling must simply move the player away from the threshold and restore combat controls.
 - Killing `Безликая Королева` starts a short skippable finale: combat stops, the throne sinks, and a dry passage opens behind it. The finale then restores player control, and victory only occurs when the hero walks into that passage. Skipping captions must skip to the interactive gate, not directly to victory.
 - Keep the start screen deliberately sparse: journey premise, Ash total, and only `Начать путешествие` and `Еще`. Goals, profile, codex, help, and run history live on separate secondary screens. Navigating menus must not reroll active run goals.
 - Result screens should summarize the run: time survived, level, kills, XP progress, and selected relic build with duplicate counts.
@@ -260,11 +265,14 @@ scripts/
 - Relic evolution exists in a small first form: any 2 Living Blade upgrades plus `Кровавый Цветок` evolves the blade into `Кровавый Клинок`, making it stronger, faster, red-tinted, and lightly vampiric on hits. Keep this reachable inside a normal 3-minute run.
 - `Колокол Забвения` should be guaranteed in the first relic choice until unlocked, so players discover the second auto-weapon instead of waiting for random rolls.
 - Gravebloom Nova is an automatic ultimate: it charges over time, shows a visible `NOVA` indicator with percent progress, gives peripheral visual/audio cues from 85% onward, then fires by itself and blasts nearby enemies.
+- Nova charge should be predictable from the visible meter. Do not add hidden Nova charge from ordinary kills, kill streaks, or Living Blade executions; use explicit relic/objective/profile upgrades if the charge rate needs to change.
 - Nova readiness should be readable without staring at HUD: faint aura at 85%, rotating Gravebloom ring at 90%, stronger warning at 97%, then a distinct burst cue at cast.
+- Nova charge should stay simple and readable: a rotating Gravebloom petal sign around the hero is acceptable, but avoid chaotic organic seed spirals because they looked messy. Save most of Nova's spectacle for the cast itself, with a brief petal burst, dark core, colored shock rings, and fading shards. Avoid broken Line2D lash/beam stripes for Nova because they look like debug geometry.
 - Do not spend more time trying to make laptop touchpad tap-to-click control Nova; the game should not depend on that input path.
 - Small health potions can drop from enemies, pulse on the ground, heal a little on pickup, and expire after a short time. They use a dark glass bottle with crimson liquid and mint healing sparks instead of a modern red-cross icon.
 - Run reset must restore temporary upgrade state such as XP magnet range; upgrades should not leak into the next run after death/restart.
 - XP pacing is intentionally slower after the ultimate was added: higher XP thresholds keep Nova kills from over-leveling too quickly.
+- Dead Garden should not spawn `exploder` enemies as ordinary pressure for now. Their small brute silhouette plus danger ring confused players as unexplained new enemies.
 
 ## Near-Term Roadmap
 
